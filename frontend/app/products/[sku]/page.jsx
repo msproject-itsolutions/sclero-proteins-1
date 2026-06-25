@@ -147,6 +147,12 @@ export default function ProductDetailPage() {
   const discount = promoVal && priceVal ? Math.round(((priceVal - promoVal) / priceVal) * 100) : 0;
   const stock = product?.stock_available || 0;
   const nutrition = product?.nutrition_facts || {};
+  // Only render primitive, non-private entries. The nutrition_facts JSON can
+  // carry stray nested objects / metadata (e.g. an "_seo" key) that must not be
+  // dumped into the table — rendering an object as a React child crashes the page.
+  const nutritionRows = Object.entries(nutrition).filter(
+    ([k, v]) => !k.startsWith('_') && (typeof v === 'string' || typeof v === 'number')
+  );
   const faqList = product?.faq || [];
   
   const rawReviews = product?.reviews || [];
@@ -485,14 +491,14 @@ export default function ProductDetailPage() {
                     <h3 className="text-sm font-bold text-brand-navy uppercase tracking-wider">Product Summary</h3>
                     <p className="text-xs md:text-sm leading-relaxed text-brand-muted">{product.description}</p>
                     <div className="pt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {Object.keys(nutrition).length > 0 && (
+                      {nutritionRows.length > 0 && (
                         <div>
                           <h4 className="text-xs font-bold text-brand-navy mb-2">Supplement Facts</h4>
                           <div className="overflow-hidden rounded-xl border border-slate-200">
-                            {Object.entries(nutrition).map(([k, v], idx) => (
+                            {nutritionRows.map(([k, v], idx) => (
                               <div key={idx} className="flex justify-between px-3.5 py-2 text-xs border-b border-slate-100 last:border-b-0">
                                 <span className="text-brand-muted">{k}</span>
-                                <span className="font-bold text-brand-navy">{v}</span>
+                                <span className="font-bold text-brand-navy">{String(v)}</span>
                               </div>
                             ))}
                           </div>
