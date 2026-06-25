@@ -1,0 +1,93 @@
+# Sclero Proteins — production stack for a single VPS.
+#
+#   nginx (TLS, reverse proxy) ─┬─ /api,/admin,/static,/media → backend (Django/gunicorn)
+#                               └─ everything else            → frontend (Next.js)
+#   backend  → Postgres
+#   certbot  → renews Let's Encrypt certs shared with nginx
+#
+# Copy .env.production.example to .env and fill it in before `docker compose up`.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sclero_db}
+      POSTGRES_USER: ${POSTGRES_USER:-sclero}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sclero} -d ${POSTGRES_DB:-sclero_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+    volumes:
+      - media:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # EMPTY on purpose -> browser calls the API same-origin via nginx.
+        NEXT_PUBLIC_API_URL: ""
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://scleroproteins.co.uk}
+        NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY:-}
+        NEXT_PUBLIC_GA4_ID: ${NEXT_PUBLIC_GA4_ID:-}
+        NEXT_PUBLIC_META_PIXEL_ID: ${NEXT_PUBLIC_META_PIXEL_ID:-}
+        NEXT_PUBLIC_TIKTOK_PIXEL_ID: ${NEXT_PUBLIC_TIKTOK_PIXEL_ID:-}
+    restart: unless-stopped
+    environment:
+      # Server-side rendering reaches Django over the internal Docker network.
+      API_INTERNAL_URL: http://backend:8000
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://scleroproteins.co.uk}
+    depends_on:
+      - backend
+    expose:
+      - "3000"
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - certbot-conf:/etc/letsencrypt:ro
+      - certbot-www:/var/www/certbot:ro
+      - media:/var/www/media:ro
+    # Reload every 6h to pick up certs renewed by the certbot container.
+    command: /bin/sh -c "while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g 'daemon off;'"
+    depends_on:
+      - frontend
+      - backend
+
+  certbot:
+    image: certbot/certbot:latest
+    restart: unless-stopped
+    volumes:
+      - certbot-conf:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+    # Try to renew twice a day; nginx picks up new certs on its periodic reload.
+    entrypoint: /bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done'
+
+volumes:
+  pgdata:
+  media:
+  certbot-conf:
+  certbot-www:
