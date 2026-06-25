@@ -1,0 +1,146 @@
+import os
+from django.test import TestCase
+from django.urls import reverse
+from django.contrib.auth import get_user_model
+from django.conf import settings
+from rest_framework import status
+from rest_framework.test import APITestCase
+from apps.regions.models import Region, Warehouse
+from apps.products.models import Product, ProductRegionConfig
+from apps.inventory.models import StockLevel
+from apps.orders.models import Cart, CartItem, Order, Invoice
+
+User = get_user_model()
+
+class ScleroProteinsTests(APITestCase):
+
+    def setUp(self):
+        # 1. Setup Regions
+        self.region_in = Region.objects.create(
+            code='IN', name='India', domain='scleroproteins.in',
+            currency_code='INR', currency_symbol='₹', tax_name='GST', tax_rate=18.00
+        )
+        self.region_uk = Region.objects.create(
+            code='UK', name='United Kingdom', domain='scleroproteins.co.uk',
+            currency_code='GBP', currency_symbol='£', tax_name='VAT', tax_rate=20.00
+        )
+
+        # 2. Setup Warehouses
+        self.wh_in = Warehouse.objects.create(name='IN Warehouse', region=self.region_in)
+        self.wh_uk = Warehouse.objects.create(name='UK Warehouse', region=self.region_uk)
+
+        # 3. Setup Products
+        # Whey is available in both IN and UK
+        self.prod_whey = Product.objects.create(sku='WHEY-TEST', name='Test Whey', hsn_code='35022000')
+        ProductRegionConfig.objects.create(product=self.prod_whey, region=self.region_in, price=3000.00)
+        ProductRegionConfig.objects.create(product=self.prod_whey, region=self.region_uk, price=40.00)
+        StockLevel.objects.create(warehouse=self.wh_in, product=self.prod_whey, available=50)
+        StockLevel.objects.create(warehouse=self.wh_uk, product=self.prod_whey, available=30)
+
+        # Glutamine is available ONLY in India
+        self.prod_glut = Product.objects.create(sku='GLUT-TEST', name='Test Glutamine', hsn_code='29224990')
+        ProductRegionConfig.objects.create(product=self.prod_glut, region=self.region_in, price=1500.00)
+        StockLevel.objects.create(warehouse=self.wh_in, product=self.prod_glut, available=20)
+
+        # 4. Setup Payment Gateways
+        from apps.admin_dashboard.models import PaymentGateway
+        PaymentGateway.objects.create(
+            code='RAZORPAY', display_name='Razorpay', region=self.region_in, is_enabled=True, secret_key='test_secret'
+        )
+
+
+    def test_region_detection_override(self):
+        """Verify region detection works with parameter override."""
+        url = reverse('detect_region')
+        response = self.client.get(f"{url}?country=IN")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['region']['code'], 'IN')
+
+        response = self.client.get(f"{url}?country=UK")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['region']['code'], 'UK')
+
+        response = self.client.get(f"{url}?country=US")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['region']['code'], 'UK') # US redirects to UK
+
+    def test_product_catalog_filtering(self):
+        """Verify product visibility is constrained by region configs."""
+        url = reverse('product-list')
+        
+        # Query India catalog
+        response = self.client.get(f"{url}?region=IN")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 2) # Both Whey and Glutamine visible
+
+        # Query UK catalog
+        response = self.client.get(f"{url}?region=UK")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1) # Only Whey visible
+        self.assertEqual(response.data[0]['sku'], 'WHEY-TEST')
+
+    def test_regional_cart_clearing(self):
+        """Verify switching cart region clears items."""
+        # 1. Retrieve cart for India
+        url_retrieve = reverse('cart_retrieve')
+        url_add = reverse('cart_add')
+        
+        # Add to India cart
+        self.client.post(url_add, {
+            'session_id': 'test-session-123',
+            'region': 'IN',
+            'product_id': self.prod_whey.id,
+            'quantity': 2
+        })
+
+        # Fetch India cart and check item count
+        res_in = self.client.get(f"{url_retrieve}?session_id=test-session-123&region=IN")
+        self.assertEqual(len(res_in.data['items']), 1)
+
+        # Switch region to UK (retrieve for UK)
+        res_uk = self.client.get(f"{url_retrieve}?session_id=test-session-123&region=UK")
+        # Cart should clear out items
+        self.assertEqual(len(res_uk.data['items']), 0)
+        self.assertEqual(res_uk.data['region_code'], 'UK')
+
+    def test_checkout_and_invoice_pdf_generation(self):
+        """Verify full checkout flow deducts stock and generates PDF invoice."""
+        # Add item to cart
+        url_add = reverse('cart_add')
+        self.client.post(url_add, {
+            'session_id': 'checkout-session-456',
+            'region': 'IN',
+            'product_id': self.prod_whey.id,
+            'quantity': 2
+        })
+
+        # Process checkout
+        url_checkout = reverse('checkout')
+        checkout_data = {
+            'session_id': 'checkout-session-456',
+            'region': 'IN',
+            'email': 'buyer@gmail.com',
+            'shipping_name': 'Buyer Name',
+            'shipping_phone': '+919999999999',
+            'shipping_address_line1': '123 Test St',
+            'shipping_city': 'Ahmedabad',
+            'shipping_state': 'Gujarat',
+            'shipping_postal_code': '380015',
+            'shipping_country': 'IN',
+            'payment_method': 'Razorpay',
+            'payment_id': 'pay_test_transaction'
+        }
+
+        response = self.client.post(url_checkout, checkout_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIn("invoice", response.data['order'])
+        
+        # Verify inventory was deducted (50 - 2 = 48)
+        stock = StockLevel.objects.get(product=self.prod_whey, warehouse=self.wh_in)
+        self.assertEqual(stock.available, 48)
+
+        # Verify PDF invoice was generated on disk
+        invoice = Invoice.objects.get(order_id=response.data['order']['id'])
+        pdf_path = os.path.join(settings.MEDIA_ROOT, invoice.pdf_file.name)
+        self.assertTrue(os.path.exists(pdf_path))
+        self.assertTrue(pdf_path.endswith('.pdf'))
