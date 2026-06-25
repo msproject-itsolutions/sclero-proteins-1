@@ -15,8 +15,14 @@ function resolveBase() {
   const explicit = typeof process !== 'undefined' ? process.env.NEXT_PUBLIC_API_URL : '';
   if (explicit) return explicit.replace(/\/$/, '');
 
-  // Browser, no explicit URL -> same-origin relative.
-  if (typeof window !== 'undefined') return '';
+  // No explicit URL set.
+  if (typeof window !== 'undefined') {
+    // Browser. In development talk to the local Django server directly; in a
+    // production build use RELATIVE same-origin paths (nginx proxies /api per
+    // ccTLD). NODE_ENV is inlined by Next at build time.
+    const isDev = typeof process !== 'undefined' && process.env.NODE_ENV === 'development';
+    return isDev ? DEFAULT_API_URL : '';
+  }
 
   // SSR / build time -> internal service URL, else localhost.
   const internal = typeof process !== 'undefined' ? process.env.API_INTERNAL_URL : '';
