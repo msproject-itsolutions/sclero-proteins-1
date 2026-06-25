@@ -41,6 +41,11 @@ function CheckoutModalInner({ onClose }) {
   const [completedOrder, setCompletedOrder] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
 
+  // Shipping address lookup + live fee calculation
+  const [pinLookup, setPinLookup] = useState({ status: 'idle', msg: '' });
+  const [calcShipping, setCalcShipping] = useState(null);
+  const destCountry = currentRegion === 'IN' ? 'IN' : 'GB';
+
   useEffect(() => {
     let active = true;
     fetch(getApiUrl(`/api/admin/payment-gateways/available/?region=${currentRegion}`))
@@ -107,16 +112,56 @@ function CheckoutModalInner({ onClose }) {
     ? taxableSubtotal - (rateFactor ? taxableSubtotal / (1 + rateFactor) : taxableSubtotal)
     : taxableSubtotal * rateFactor;
 
-  // Shipping cost logic
-  let shippingCost = 0;
+  // Shipping cost: prefer the server-calculated fee (admin zones), fall back to
+  // the regional default rule until the calculation resolves.
+  let fallbackShipping = 0;
   if (currentRegion === 'IN') {
-    shippingCost = taxableSubtotal >= 3000 ? 0 : 150;
+    fallbackShipping = taxableSubtotal >= 3000 ? 0 : 150;
   } else {
-    shippingCost = taxableSubtotal >= 50 ? 0 : 5;
+    fallbackShipping = taxableSubtotal >= 50 ? 0 : 5;
   }
+  const shippingCost = calcShipping != null ? calcShipping : fallbackShipping;
 
   // Inclusive: tax is already inside taxableSubtotal, so don't add it again.
   const grandTotal = (taxInclusive ? taxableSubtotal : taxableSubtotal + taxAmount) + shippingCost;
+
+  // Postcode/PIN -> auto-fill city + state (debounced).
+  useEffect(() => {
+    const code = zip.replace(/\s/g, '');
+    const minLen = currentRegion === 'IN' ? 6 : 5;
+    if (code.length < minLen) { setPinLookup({ status: 'idle', msg: '' }); return; }
+    setPinLookup({ status: 'loading', msg: 'Looking up…' });
+    const t = setTimeout(() => {
+      fetch(getApiUrl(`/api/shipping/lookup/?country=${destCountry}&code=${encodeURIComponent(zip.trim())}`))
+        .then((r) => (r.ok ? r.json() : {}))
+        .then((d) => {
+          if (d && d.state) {
+            if (d.city) setCity(d.city);
+            setStateVal(d.state);
+            setPinLookup({ status: 'ok', msg: `✓ ${d.city ? d.city + ', ' : ''}${d.state}` });
+          } else {
+            setPinLookup({ status: 'miss', msg: 'Not found — enter city & state manually' });
+          }
+        })
+        .catch(() => setPinLookup({ status: 'idle', msg: '' }));
+    }, 500);
+    return () => clearTimeout(t);
+  }, [zip, currentRegion, destCountry]);
+
+  // Live shipping fee from the server (admin zones) whenever destination/value changes.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      fetch(getApiUrl('/api/shipping/calculate/'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ region: currentRegion, country: destCountry, state: stateVal, postcode: zip, subtotal: taxableSubtotal }),
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => { if (d && d.shipping_cost != null) setCalcShipping(parseFloat(d.shipping_cost)); })
+        .catch(() => {});
+    }, 400);
+    return () => clearTimeout(t);
+  }, [zip, stateVal, currentRegion, destCountry, taxableSubtotal]);
 
   const submitCheckout = async ({ paymentMethodCode, paymentId } = {}) => {
     // Apple Pay / Google Pay tokens flow through the existing Stripe path —
@@ -351,17 +396,28 @@ function CheckoutModalInner({ onClose }) {
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-[9px] uppercase font-bold text-brand-muted">Postal Code</label>
+                <label className="text-[9px] uppercase font-bold text-brand-muted">
+                  {currentRegion === 'IN' ? 'PIN Code' : 'Postal Code'}
+                </label>
                 <input
                   type="text"
                   autoComplete="postal-code"
                   value={zip}
                   onChange={(e) => setZip(e.target.value)}
+                  placeholder={currentRegion === 'IN' ? '560001' : 'SW1A 1AA'}
                   className="bg-white border border-slate-200 rounded-xl p-2.5 text-xs text-brand-text focus:outline-none focus:border-brand-purple"
                   required
                 />
               </div>
             </div>
+            {pinLookup.status !== 'idle' && (
+              <p className={`text-[10px] font-semibold ${
+                pinLookup.status === 'ok' ? 'text-brand-success'
+                : pinLookup.status === 'miss' ? 'text-amber-600' : 'text-brand-muted'
+              }`}>
+                {pinLookup.msg}
+              </p>
+            )}
           </div>
 
           {/* Apple Pay / Google Pay (UK only, requires Stripe gateway enabled + browser support) */}

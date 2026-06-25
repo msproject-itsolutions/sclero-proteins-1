@@ -8,7 +8,8 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from apps.regions.views import (
     RegionViewSet, detect_region, geo_detect,
     RegionAdminViewSet, WarehouseAdminViewSet,
-    ShippingZoneAdminViewSet, ShippingRateAdminViewSet
+    ShippingZoneAdminViewSet, ShippingRateAdminViewSet,
+    PostcodeLookupView, ShippingCalculateView,
 )
 from apps.products.views import (
     ProductViewSet, ProductReviewAdminViewSet,
@@ -98,6 +99,8 @@ urlpatterns = [
     path('api/detect-region/', detect_region, name='detect_region'),
     path('api/geo/', geo_detect, name='geo_detect'),
     path('api/store-config/', StoreConfigView.as_view(), name='store_config'),
+    path('api/shipping/lookup/', PostcodeLookupView.as_view(), name='shipping_lookup'),
+    path('api/shipping/calculate/', ShippingCalculateView.as_view(), name='shipping_calculate'),
     path('api/admin/tax-settings/', TaxSettingsAdminView.as_view(), name='admin_tax_settings'),
     path('api/newsletter/subscribe/', NewsletterSubscribeView.as_view(), name='newsletter_subscribe'),
     path('api/wishlists/shared/<str:share_token>/', PublicWishlistView.as_view(), name='shared-wishlist'),

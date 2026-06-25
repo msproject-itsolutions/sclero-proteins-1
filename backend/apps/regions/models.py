@@ -36,6 +36,7 @@ class ShippingZone(models.Model):
     region = models.ForeignKey(Region, on_delete=models.CASCADE, related_name="shipping_zones")
     name = models.CharField(max_length=100)
     countries = models.JSONField(default=list, help_text="List of ISO country codes in this zone")
+    states = models.JSONField(default=list, blank=True, help_text="Optional state/region names this zone covers. Empty = whole country. Used for state-specific rates (e.g. remote-area surcharge).")
     is_active = models.BooleanField(default=True, db_index=True)
 
     class Meta:
