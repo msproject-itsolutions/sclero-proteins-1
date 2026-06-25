@@ -38,7 +38,7 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
 
   /* ── Shipping & extras ── */
   const [shipping, setShipping] = useState({
-    name: '', address_line1: '', address_line2: '', city: '', state: '', postal_code: '', country: 'GB',
+    name: '', phone: '', address_line1: '', address_line2: '', city: '', state: '', postal_code: '', country: 'GB',
   });
   const [shippingCost, setShippingCost] = useState('0');
   const [discountCode, setDiscountCode] = useState('');
@@ -128,6 +128,7 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
       setShipping(s => ({
         ...s,
         name: `${selectedCustomer.first_name || ''} ${selectedCustomer.last_name || ''}`.trim(),
+        phone: s.phone || selectedCustomer.phone_number || '',
       }));
     }
   }, [selectedCustomer]);
@@ -151,6 +152,7 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
         email: selectedCustomer?.email || newCustomer.email,
         items: lineItems.map(l => ({ product_sku: l.sku, quantity: l.quantity, price: l.price })),
         shipping_name: shipping.name,
+        shipping_phone: shipping.phone || selectedCustomer?.phone_number || newCustomer.phone_number || '',
         shipping_address_line1: shipping.address_line1,
         shipping_address_line2: shipping.address_line2,
         shipping_city: shipping.city,
@@ -419,9 +421,15 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
               {/* Shipping address */}
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
                 <p className="text-sm font-bold text-slate-800">Shipping Address</p>
-                <div>
-                  <label className={LABEL_CLS}>Full Name</label>
-                  <input value={shipping.name} onChange={e => setShipping({ ...shipping, name: e.target.value })} className={INPUT_CLS} placeholder="John Smith" />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={LABEL_CLS}>Full Name</label>
+                    <input value={shipping.name} onChange={e => setShipping({ ...shipping, name: e.target.value })} className={INPUT_CLS} placeholder="John Smith" />
+                  </div>
+                  <div>
+                    <label className={LABEL_CLS}>Phone</label>
+                    <input value={shipping.phone} onChange={e => setShipping({ ...shipping, phone: e.target.value })} className={INPUT_CLS} placeholder="+44 7700 900000" />
+                  </div>
                 </div>
                 <div>
                   <label className={LABEL_CLS}>Address Line 1</label>
