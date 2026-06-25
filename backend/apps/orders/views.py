@@ -302,17 +302,29 @@ class CheckoutView(views.APIView):
                     coupon.usage_count += 1
                     coupon.save(update_fields=['usage_count'])
 
-        # 3. Calculate Tax & Shipping
+        # 3. Calculate Tax & Shipping (honouring the store-wide tax mode)
+        from apps.admin_dashboard.store_config import get_store_tax_mode
+        tax_mode = get_store_tax_mode()
         tax_rate = Decimal(str(region.tax_rate))
         taxable_amount = max(subtotal - discount_amount, Decimal('0.00'))
-        tax_amount = taxable_amount * (tax_rate / Decimal('100.00'))
-        
+        rate_factor = tax_rate / Decimal('100.00')
+
+        if tax_mode == 'inclusive':
+            # Displayed prices already include tax: extract the embedded portion,
+            # don't add it on top of the goods total.
+            net = (taxable_amount / (Decimal('1') + rate_factor)) if rate_factor else taxable_amount
+            tax_amount = (taxable_amount - net).quantize(Decimal('0.01'))
+            goods_total = taxable_amount
+        else:
+            tax_amount = (taxable_amount * rate_factor).quantize(Decimal('0.01'))
+            goods_total = taxable_amount + tax_amount
+
         if region_code == 'IN':
             shipping_cost = Decimal('0.00') if taxable_amount >= 3000 else Decimal('150.00')
         else:
             shipping_cost = Decimal('0.00') if taxable_amount >= 50 else Decimal('5.00')
-            
-        total = taxable_amount + tax_amount + shipping_cost
+
+        total = goods_total + shipping_cost
 
         # 4. Create Order
         user = request.user if request.user.is_authenticated else None
@@ -343,8 +355,13 @@ class CheckoutView(views.APIView):
 
         # 5. Create Order Items
         for product, qty, price in order_items_to_create:
-            # Calculate item specific tax portion
-            item_tax = (price * qty) * (tax_rate / 100)
+            # Per-line tax portion, consistent with the store tax mode.
+            line_gross = price * qty
+            if tax_mode == 'inclusive':
+                line_net = (line_gross / (Decimal('1') + rate_factor)) if rate_factor else line_gross
+                item_tax = (line_gross - line_net).quantize(Decimal('0.01'))
+            else:
+                item_tax = (line_gross * rate_factor).quantize(Decimal('0.01'))
             OrderItem.objects.create(
                 order=order,
                 product=product,

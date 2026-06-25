@@ -15,7 +15,7 @@ const stripePromise = STRIPE_PK ? loadStripe(STRIPE_PK) : null;
 
 function CheckoutModalInner({ onClose }) {
   const dispatch = useDispatch();
-  const { currentRegion, currencySymbol, taxName, taxRate, session_id } = useSelector((state) => state.region);
+  const { currentRegion, currencySymbol, taxName, taxRate, taxMode, session_id } = useSelector((state) => state.region);
   const cartItems = useSelector((state) => state.cart.items);
 
   // Form Fields
@@ -98,8 +98,15 @@ function CheckoutModalInner({ onClose }) {
 
   const discountAmount = activeCoupon ? parseFloat(activeCoupon.discount_amount) : 0;
   const taxableSubtotal = Math.max(subtotal - discountAmount, 0);
-  const taxAmount = taxableSubtotal * (taxRate / 100);
-  
+  const rateFactor = (taxRate || 0) / 100;
+
+  // Tax mode: 'inclusive' extracts the tax already inside the price; 'exclusive'
+  // adds it on top. Mirrors the backend CheckoutView math.
+  const taxInclusive = taxMode !== 'exclusive';
+  const taxAmount = taxInclusive
+    ? taxableSubtotal - (rateFactor ? taxableSubtotal / (1 + rateFactor) : taxableSubtotal)
+    : taxableSubtotal * rateFactor;
+
   // Shipping cost logic
   let shippingCost = 0;
   if (currentRegion === 'IN') {
@@ -108,7 +115,8 @@ function CheckoutModalInner({ onClose }) {
     shippingCost = taxableSubtotal >= 50 ? 0 : 5;
   }
 
-  const grandTotal = taxableSubtotal + taxAmount + shippingCost;
+  // Inclusive: tax is already inside taxableSubtotal, so don't add it again.
+  const grandTotal = (taxInclusive ? taxableSubtotal : taxableSubtotal + taxAmount) + shippingCost;
 
   const submitCheckout = async ({ paymentMethodCode, paymentId } = {}) => {
     // Apple Pay / Google Pay tokens flow through the existing Stripe path —
@@ -478,7 +486,7 @@ function CheckoutModalInner({ onClose }) {
               </div>
             )}
             <div className="flex justify-between">
-              <span>{taxName} ({taxRate}%)</span>
+              <span>{taxInclusive ? `Includes ${taxName} (${taxRate}%)` : `${taxName} (${taxRate}%)`}</span>
               <span className="text-brand-text">{currencySymbol}{taxAmount.toFixed(2)}</span>
             </div>
             <div className="flex justify-between">

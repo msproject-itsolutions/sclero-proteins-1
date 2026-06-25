@@ -63,9 +63,10 @@ export default function ProductCard({
   onViewDetails,
   variant = 'standard', // 'standard' | 'compact' | 'featured'
 }) {
-  const { currencySymbol, currentRegion } = useSelector((state) => state.region);
+  const { currencySymbol, currentRegion, taxMode } = useSelector((state) => state.region);
   const [isWishlisted, setIsWishlisted] = React.useState(false);
-  const taxNote = currentRegion === 'IN' ? 'inc. GST' : 'inc. VAT';
+  const taxLabel = currentRegion === 'IN' ? 'GST' : 'VAT';
+  const taxNote = taxMode === 'exclusive' ? `+ ${taxLabel} at checkout` : `inc. ${taxLabel}`;
 
   const priceVal = product.price ? parseFloat(product.price) : 0;
   const promoPriceVal = product.promotional_price

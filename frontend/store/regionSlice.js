@@ -10,6 +10,9 @@ const initialState = {
   domain: 'scleroproteins.co.uk',
   apiUrl: getApiUrl(),
   session_id: '',
+  // Store-wide tax display mode: 'inclusive' (price includes tax) or
+  // 'exclusive' (tax added at checkout). Loaded from /api/store-config/.
+  taxMode: 'inclusive',
 };
 
 const regionSlice = createSlice({
@@ -27,9 +30,12 @@ const regionSlice = createSlice({
     },
     setSessionId: (state, action) => {
       state.session_id = action.payload;
+    },
+    setTaxMode: (state, action) => {
+      state.taxMode = action.payload === 'exclusive' ? 'exclusive' : 'inclusive';
     }
   }
 });
 
-export const { setRegion, setSessionId } = regionSlice.actions;
+export const { setRegion, setSessionId, setTaxMode } = regionSlice.actions;
 export default regionSlice.reducer;

@@ -36,6 +36,7 @@ from apps.admin_dashboard.views import (
     FeatureToggleViewSet, SystemSettingViewSet, HeroBannerSlideViewSet, PaymentGatewayViewSet, EmailTemplateViewSet,
     MarketingIntegrationViewSet, ContentPageViewSet, BlogPostViewSet, ReportAnalyticsView,
     ApprovalRequestViewSet, PublishedContentPageListView, PublishedContentPageDetailView,
+    StoreConfigView, TaxSettingsAdminView,
 )
 from apps.audit.views import AuditLogViewSet
 from apps.enquiries.views import BulkEnquiryCreateView, BulkEnquiryAdminViewSet, NewsletterSubscribeView
@@ -96,6 +97,8 @@ urlpatterns = [
     path('api/', include('apps.analytics.urls')),
     path('api/detect-region/', detect_region, name='detect_region'),
     path('api/geo/', geo_detect, name='geo_detect'),
+    path('api/store-config/', StoreConfigView.as_view(), name='store_config'),
+    path('api/admin/tax-settings/', TaxSettingsAdminView.as_view(), name='admin_tax_settings'),
     path('api/newsletter/subscribe/', NewsletterSubscribeView.as_view(), name='newsletter_subscribe'),
     path('api/wishlists/shared/<str:share_token>/', PublicWishlistView.as_view(), name='shared-wishlist'),
     
