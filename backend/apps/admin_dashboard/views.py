@@ -9,6 +9,7 @@ from rest_framework.views import APIView
 from apps.users.permissions import require_permission
 from apps.regions.models import Region
 from .models import FeatureToggle, SystemSetting, HeroBannerSlide, PaymentGateway, EmailTemplate, MarketingIntegration, ContentPage, BlogPost, ApprovalRequest
+from .store_config import get_store_tax_mode, set_store_tax_mode, VALID_TAX_MODES
 from .serializers import (
     FeatureToggleSerializer,
     SystemSettingSerializer,
@@ -21,6 +22,27 @@ from .serializers import (
     BlogPostSerializer,
     ApprovalRequestSerializer,
 )
+
+
+class StoreConfigView(APIView):
+    """Public storefront config (no auth). Exposes only non-sensitive settings
+    the frontend needs to render correctly, e.g. the tax display mode."""
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        return Response({'tax_mode': get_store_tax_mode()})
+
+
+class TaxSettingsAdminView(APIView):
+    """Admin read/write of the store-wide tax mode (inclusive | exclusive)."""
+    permission_classes = [require_permission('settings.manage')]
+
+    def get(self, request):
+        return Response({'tax_mode': get_store_tax_mode(), 'options': list(VALID_TAX_MODES)})
+
+    def put(self, request):
+        mode = set_store_tax_mode(request.data.get('tax_mode'))
+        return Response({'tax_mode': mode})
 
 
 class EmailTemplateViewSet(viewsets.ModelViewSet):

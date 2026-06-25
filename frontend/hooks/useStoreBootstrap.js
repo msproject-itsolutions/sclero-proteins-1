@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { setRegion, setSessionId } from '../store/regionSlice';
+import { setRegion, setSessionId, setTaxMode } from '../store/regionSlice';
 import { fetchCart } from '../store/cartSlice';
 import { getApiUrl } from '../lib/api';
 import { regionFromHost } from '../lib/region';
@@ -40,6 +40,12 @@ export default function useStoreBootstrap() {
 
     const consent = readCookieConsent();
     if (consent) initTrackingScripts(trackingSettings, consent);
+
+    // Load store-wide config (tax display mode) once on boot.
+    fetch(getApiUrl('/api/store-config/'))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((cfg) => { if (cfg && cfg.tax_mode) dispatch(setTaxMode(cfg.tax_mode)); })
+      .catch(() => {});
 
     const onConsentUpdated = (event) => {
       initTrackingScripts(trackingSettings, event.detail || {});

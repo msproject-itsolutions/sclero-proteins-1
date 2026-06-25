@@ -3347,13 +3347,73 @@ function SettingsTab({ authFetch }) {
     { name: 'Facebook Graph API Token', key: 'fb_api_token_eaag_8472910481029' }
   ]);
 
+  // Real, wired tax-mode setting (inclusive | exclusive).
+  const [taxMode, setTaxMode] = useState('inclusive');
+  const [taxSaving, setTaxSaving] = useState(false);
+  const [taxSaved, setTaxSaved] = useState(false);
+
+  useEffect(() => {
+    authFetch('/api/admin/tax-settings/')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d && d.tax_mode) setTaxMode(d.tax_mode); })
+      .catch(() => {});
+  }, [authFetch]);
+
+  const saveTaxMode = (mode) => {
+    setTaxMode(mode);
+    setTaxSaving(true);
+    setTaxSaved(false);
+    authFetch('/api/admin/tax-settings/', { method: 'PUT', body: JSON.stringify({ tax_mode: mode }) })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d && d.tax_mode) setTaxMode(d.tax_mode); setTaxSaved(true); })
+      .catch(() => {})
+      .finally(() => setTaxSaving(false));
+  };
+
   const save = () => {
     alert("Store settings and API keys updated successfully!");
   };
 
+  const TAX_OPTIONS = [
+    { v: 'inclusive', title: 'Tax inclusive', desc: 'Displayed prices already include VAT/GST. Checkout shows tax as "included" and does not add it on top.' },
+    { v: 'exclusive', title: 'Tax exclusive', desc: 'Displayed prices are net. VAT/GST is added as a separate line at checkout.' },
+  ];
+
   return (
     <div className="space-y-6 text-xs bg-white rounded-2xl border border-slate-200 p-5">
+      {/* Tax & pricing — wired to the live store config */}
       <div>
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-bold text-brand-navy mb-1 uppercase">Tax &amp; pricing</h3>
+            <p className="text-brand-muted mb-3">Choose how product prices display and how tax is charged at checkout.</p>
+          </div>
+          {taxSaved && <span className="text-[11px] font-bold text-brand-success">✓ Saved</span>}
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {TAX_OPTIONS.map((o) => (
+            <button
+              key={o.v}
+              type="button"
+              disabled={taxSaving}
+              onClick={() => saveTaxMode(o.v)}
+              className={`text-left rounded-xl border p-3.5 transition disabled:opacity-60 ${
+                taxMode === o.v ? 'border-brand-purple bg-brand-purple/5 ring-1 ring-brand-purple/30' : 'border-slate-200 hover:border-brand-purple/40'
+              }`}
+            >
+              <div className="flex items-center gap-2 font-bold text-brand-navy">
+                <span className={`flex h-4 w-4 items-center justify-center rounded-full border ${taxMode === o.v ? 'border-brand-purple' : 'border-slate-300'}`}>
+                  {taxMode === o.v && <span className="h-2 w-2 rounded-full bg-brand-purple" />}
+                </span>
+                {o.title}
+              </div>
+              <p className="mt-1.5 text-[11px] leading-relaxed text-brand-muted">{o.desc}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="border-t border-slate-100 pt-4">
         <h3 className="text-sm font-bold text-brand-navy mb-1 uppercase">General Configurations</h3>
         <p className="text-brand-muted mb-3">Adjust store details, currency, and VAT rates.</p>
         <div className="grid gap-3 sm:grid-cols-2">
