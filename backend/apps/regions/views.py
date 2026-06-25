@@ -1,8 +1,12 @@
+from decimal import Decimal
+import requests
 from rest_framework import viewsets, status
 from rest_framework.decorators import api_view, action, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.views import APIView
 from .geo import detect_country_with_source, map_country_to_region_code
+from .shipping import calculate_shipping
 from .models import Region, Warehouse, ShippingZone, ShippingRate
 from .serializers import (
     RegionSerializer, ShippingZoneSerializer,
@@ -99,6 +103,76 @@ def geo_detect(request):
         "region_code": region_code,
         "source": source,
     })
+
+
+class PostcodeLookupView(APIView):
+    """
+    Resolve a postcode/PIN to city/district/state so the checkout can auto-fill
+    the address. India -> postalpincode.in, UK/other -> postcodes.io. Both are
+    free. Returns {} on any miss so the UI simply falls back to manual entry.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        country = (request.query_params.get('country') or '').upper().strip()
+        code = (request.query_params.get('code') or '').strip()
+        if not code:
+            return Response({})
+        # Some postal APIs reject the default python-requests UA, so send a browser-like one.
+        headers = {'User-Agent': 'Mozilla/5.0 (compatible; ScleroProteins/1.0)', 'Accept': 'application/json'}
+        try:
+            if country == 'IN':
+                resp = requests.get(f'https://api.postalpincode.in/pincode/{code}', timeout=8, headers=headers)
+                data = resp.json()
+                if isinstance(data, list) and data and data[0].get('Status') == 'Success':
+                    offices = data[0].get('PostOffice') or []
+                    if offices:
+                        first = offices[0]
+                        return Response({
+                            'postcode': code,
+                            'city': first.get('District') or first.get('Block') or '',
+                            'district': first.get('District') or '',
+                            'state': first.get('State') or '',
+                            'localities': [o.get('Name') for o in offices if o.get('Name')][:25],
+                        })
+            else:
+                resp = requests.get(f'https://api.postcodes.io/postcodes/{code}', timeout=8, headers=headers)
+                data = resp.json()
+                if data.get('status') == 200 and data.get('result'):
+                    res = data['result']
+                    return Response({
+                        'postcode': res.get('postcode') or code,
+                        'city': res.get('admin_district') or res.get('parish') or '',
+                        'district': res.get('admin_district') or '',
+                        'state': res.get('region') or res.get('country') or '',
+                    })
+        except Exception:
+            pass
+        return Response({})
+
+
+class ShippingCalculateView(APIView):
+    """Return the shipping fee for a destination + order value (admin zones, else
+    the regional default)."""
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        region_code = (request.data.get('region') or '').upper().strip()
+        region = Region.objects.filter(code=region_code, is_active=True).first()
+        if not region:
+            return Response({'error': 'Unknown region'}, status=status.HTTP_400_BAD_REQUEST)
+        cost = calculate_shipping(
+            region,
+            country=request.data.get('country', ''),
+            state=request.data.get('state', ''),
+            postcode=request.data.get('postcode', ''),
+            subtotal=request.data.get('subtotal', 0),
+        )
+        return Response({
+            'shipping_cost': str(cost),
+            'currency_code': region.currency_code,
+            'free': cost == Decimal('0.00'),
+        })
 
 
 # --- Admin ViewSets for Regional CRUD Operations --- #

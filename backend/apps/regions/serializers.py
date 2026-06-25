@@ -74,7 +74,7 @@ class ShippingZoneAdminSerializer(serializers.ModelSerializer):
         model = ShippingZone
         fields = [
             'id', 'region', 'region_code', 'region_name', 'name',
-            'countries', 'is_active', 'rate_count', 'rates'
+            'countries', 'states', 'is_active', 'rate_count', 'rates'
         ]
         read_only_fields = ['id']
 

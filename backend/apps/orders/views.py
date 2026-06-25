@@ -319,10 +319,10 @@ class CheckoutView(views.APIView):
             tax_amount = (taxable_amount * rate_factor).quantize(Decimal('0.01'))
             goods_total = taxable_amount + tax_amount
 
-        if region_code == 'IN':
-            shipping_cost = Decimal('0.00') if taxable_amount >= 3000 else Decimal('150.00')
-        else:
-            shipping_cost = Decimal('0.00') if taxable_amount >= 50 else Decimal('5.00')
+        from apps.regions.shipping import calculate_shipping
+        shipping_cost = calculate_shipping(
+            region, country=country, state=state, postcode=postal_code, subtotal=taxable_amount,
+        )
 
         total = goods_total + shipping_cost
 
