@@ -88,6 +88,12 @@ export default function useStoreBootstrap() {
           .then((r) => (r.ok ? r.json() : null))
           .then((geo) => {
             if (!geo || !geo.region_code) return;
+            // Only let a CONFIDENT geo signal (Cloudflare/Vercel/MaxMind) refine
+            // the region. A 'fallback' source means no edge header was present
+            // (localhost, or any non-Cloudflare deploy) and must NOT override the
+            // timezone/locale detection — otherwise Indian visitors get forced to
+            // the UK default and see £ instead of ₹.
+            if (geo.source === 'fallback') return;
             if (geo.region_code === data.region.code) return;
             // Fetch the full Region object so the slice gets currency/tax/domain.
             return fetch(getApiUrl(`/api/detect-region/?country=${encodeURIComponent(geo.region_code === 'IN' ? 'IN' : 'GB')}`))

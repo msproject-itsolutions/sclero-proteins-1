@@ -76,6 +76,24 @@ export const login = createAsyncThunk(
   }
 );
 
+// Google sign-in. Takes the decoded Google profile (email + sub id) and
+// exchanges it with the backend for our own JWT pair. Only ever called by the
+// env-gated GoogleSignInButton, so it's inert unless Google is configured.
+export const googleLogin = createAsyncThunk(
+  'auth/googleLogin',
+  async ({ email, googleId, firstName, lastName }, { rejectWithValue }) => {
+    const res = await fetch(getApiUrl('/api/auth/google/'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, googleId, firstName, lastName }),
+    });
+    const data = await res.json();
+    if (!res.ok) return rejectWithValue(data.error || 'Google sign-in failed');
+    persistTokens(data.tokens.access, data.tokens.refresh);
+    return data; // { user, tokens }
+  }
+);
+
 // Resubmit login with the TOTP code stashed from the first leg.
 export const completeLogin = createAsyncThunk(
   'auth/completeLogin',
@@ -291,6 +309,15 @@ const authSlice = createSlice({
         }
       })
       .addCase(login.rejected, rejected)
+
+      .addCase(googleLogin.pending, pending)
+      .addCase(googleLogin.fulfilled, (state, action) => {
+        state.status = 'succeeded';
+        state.user = action.payload.user;
+        state.access = action.payload.tokens.access;
+        state.refresh = action.payload.tokens.refresh;
+      })
+      .addCase(googleLogin.rejected, rejected)
 
       .addCase(completeLogin.pending, pending)
       .addCase(completeLogin.fulfilled, (state, action) => {

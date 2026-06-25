@@ -1,6 +1,11 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import GoogleSignInButton from '../../components/GoogleSignInButton';
+
+// Social providers only appear when actually configured, so the UI never shows
+// an unavailable login method.
+const GOOGLE_ENABLED = !!process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 import { useSelector, useDispatch } from 'react-redux';
 import Link from 'next/link';
 import {
@@ -247,6 +252,18 @@ function AuthForms() {
           {status === 'loading' ? 'Please wait…' : mode === 'login' ? 'Log in' : 'Create account'}
         </button>
       </form>
+
+      {GOOGLE_ENABLED && (
+        <div className="mt-6">
+          <div className="relative mb-4 text-center">
+            <span className="relative z-10 bg-white px-3 text-[11px] font-semibold uppercase tracking-wide text-brand-muted">
+              or continue with
+            </span>
+            <span className="absolute left-0 top-1/2 h-px w-full bg-slate-200" />
+          </div>
+          <GoogleSignInButton />
+        </div>
+      )}
 
       {mode === 'login' && (
         <div className="mt-6">
