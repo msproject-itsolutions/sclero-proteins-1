@@ -640,6 +640,95 @@ class OrderAdminViewSet(viewsets.ModelViewSet):
             return OrderAdminUpdateSerializer
         return OrderAdminSerializer
 
+    # ISO country / legacy aliases -> our Region.code values (UK, IN, ...).
+    REGION_ALIASES = {'GB': 'UK', 'UK': 'UK', 'IN': 'IN'}
+
+    def create(self, request, *args, **kwargs):
+        """
+        Create an order from the admin "Create Order" wizard.
+
+        The wizard posts a flat payload (region_code, items[{product_sku,
+        quantity, price}], shipping_* fields, totals). The default ModelSerializer
+        can't accept that (region is a FK PK, items is read-only), so we build the
+        order explicitly here.
+        """
+        from django.contrib.auth import get_user_model
+        data = request.data
+
+        def dec(value, default='0'):
+            try:
+                return Decimal(str(value if value not in (None, '') else default))
+            except (InvalidOperation, TypeError, ValueError):
+                return Decimal(default)
+
+        # Resolve region from region_code (accepts legacy 'GB' for the UK store).
+        raw_region = str(data.get('region_code') or data.get('region') or '').upper().strip()
+        region_code = self.REGION_ALIASES.get(raw_region, raw_region)
+        region = Region.objects.filter(code=region_code, is_active=True).first()
+        if not region:
+            return Response(
+                {'region': [f'No active region for code "{raw_region or "(empty)"}".']},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        items = data.get('items') or []
+        if not items:
+            return Response({'items': ['At least one item is required.']}, status=status.HTTP_400_BAD_REQUEST)
+
+        resolved = []
+        for it in items:
+            sku = it.get('product_sku') or it.get('sku')
+            product = Product.objects.filter(sku=sku).first()
+            if not product:
+                return Response({'items': [f'Unknown product SKU "{sku}".']}, status=status.HTTP_400_BAD_REQUEST)
+            resolved.append((product, max(1, int(it.get('quantity') or 1)), dec(it.get('price'))))
+
+        # Optional linked customer.
+        user = None
+        customer_id = data.get('customer') or data.get('user')
+        if customer_id:
+            user = get_user_model().objects.filter(pk=customer_id).first()
+
+        email = (data.get('email') or (user.email if user else '') or '').strip()
+        # Phone is mandatory on the model; fall back to the customer's phone.
+        phone = (data.get('shipping_phone') or (getattr(user, 'phone_number', '') if user else '') or '').strip()
+
+        with transaction.atomic():
+            order = Order.objects.create(
+                user=user,
+                region=region,
+                status=(data.get('status') or 'PENDING').upper(),
+                email=email,
+                shipping_name=(data.get('shipping_name') or '').strip(),
+                shipping_phone=phone,
+                shipping_address_line1=(data.get('shipping_address_line1') or '').strip(),
+                shipping_address_line2=(data.get('shipping_address_line2') or '').strip(),
+                shipping_city=(data.get('shipping_city') or '').strip(),
+                shipping_state=(data.get('shipping_state') or '').strip(),
+                shipping_postal_code=(data.get('shipping_postal_code') or '').strip(),
+                shipping_country=(data.get('shipping_country') or '').strip(),
+                # Currency is authoritative from the region, not the client.
+                currency_code=region.currency_code,
+                subtotal=dec(data.get('subtotal')),
+                tax_rate=dec(data.get('tax_rate')),
+                tax_amount=dec(data.get('tax_amount')),
+                shipping_cost=dec(data.get('shipping_cost')),
+                coupon_code=(data.get('discount_code') or None),
+                discount_amount=dec(data.get('discount_amount')),
+                total=dec(data.get('total')),
+                payment_method=(data.get('payment_method') or 'COD'),
+                payment_status='PENDING',
+            )
+            for product, qty, price in resolved:
+                OrderItem.objects.create(
+                    order=order, product=product, quantity=qty, price=price, tax_amount=Decimal('0'),
+                )
+
+        return Response(
+            OrderAdminSerializer(order, context={'request': request}).data,
+            status=status.HTTP_201_CREATED,
+        )
+
     @action(detail=True, methods=['post'])
     def update_status(self, request, pk=None):
         """Update order status."""
