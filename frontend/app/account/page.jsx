@@ -245,8 +245,9 @@ function AuthForms() {
 
   return (
     <div className="mx-auto max-w-md">
+      <div className="rounded-3xl border border-edge bg-white p-6 shadow-card sm:p-8">
       <div className="mb-8 text-center">
-        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-brand-purple/10">
+        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-purple/10">
           <UserIcon className="h-6 w-6 text-brand-purple" />
         </div>
         <h1 className="text-2xl font-black text-brand-navy">
@@ -339,6 +340,7 @@ function AuthForms() {
           </div>
         </>
       )}
+      </div>
     </div>
   );
 }
