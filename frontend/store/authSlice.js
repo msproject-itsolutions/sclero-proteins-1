@@ -4,24 +4,39 @@ import { getApiUrl } from '../lib/api';
 const ACCESS_KEY = 'sclero_access';
 const REFRESH_KEY = 'sclero_refresh';
 
+// All localStorage access is wrapped: some browsers/privacy modes (e.g. Edge
+// "Tracking prevention", Safari private mode) throw when storage is blocked.
+// A blocked store must never crash login — the session still works in-memory.
 function loadTokens() {
   if (typeof window === 'undefined') return { access: null, refresh: null };
-  return {
-    access: window.localStorage.getItem(ACCESS_KEY),
-    refresh: window.localStorage.getItem(REFRESH_KEY),
-  };
+  try {
+    return {
+      access: window.localStorage.getItem(ACCESS_KEY),
+      refresh: window.localStorage.getItem(REFRESH_KEY),
+    };
+  } catch {
+    return { access: null, refresh: null };
+  }
 }
 
 function persistTokens(access, refresh) {
   if (typeof window === 'undefined') return;
-  if (access) window.localStorage.setItem(ACCESS_KEY, access);
-  if (refresh) window.localStorage.setItem(REFRESH_KEY, refresh);
+  try {
+    if (access) window.localStorage.setItem(ACCESS_KEY, access);
+    if (refresh) window.localStorage.setItem(REFRESH_KEY, refresh);
+  } catch {
+    /* storage blocked — session stays in Redux for this tab */
+  }
 }
 
 function clearTokens() {
   if (typeof window === 'undefined') return;
-  window.localStorage.removeItem(ACCESS_KEY);
-  window.localStorage.removeItem(REFRESH_KEY);
+  try {
+    window.localStorage.removeItem(ACCESS_KEY);
+    window.localStorage.removeItem(REFRESH_KEY);
+  } catch {
+    /* ignore */
+  }
 }
 
 // Register a new customer. Backend returns { user, tokens }.
@@ -71,7 +86,7 @@ export const login = createAsyncThunk(
     if (data.access) {
       persistTokens(data.access, data.refresh);
     }
-    const profile = await dispatch(fetchProfile()).unwrap().catch(() => null);
+    const profile = await dispatch(fetchProfile(data.access)).unwrap().catch(() => null);
     return { tokens: data, user: profile };
   }
 );
@@ -119,7 +134,7 @@ export const completeLogin = createAsyncThunk(
       return rejectWithValue('Authenticator code required.');
     }
     persistTokens(data.access, data.refresh);
-    const profile = await dispatch(fetchProfile()).unwrap().catch(() => null);
+    const profile = await dispatch(fetchProfile(data.access)).unwrap().catch(() => null);
     return { tokens: data, user: profile };
   }
 );
@@ -251,8 +266,11 @@ export const verifyOtp = createAsyncThunk(
 // Fetch the authenticated user's profile using the stored access token.
 export const fetchProfile = createAsyncThunk(
   'auth/fetchProfile',
-  async (_, { getState, rejectWithValue }) => {
-    const access = getState().auth.access || loadTokens().access;
+  async (tokenArg, { getState, rejectWithValue }) => {
+    // Accept an explicit token (used right after login, before state/storage are
+    // updated and so it works even if localStorage is blocked).
+    const access = (typeof tokenArg === 'string' && tokenArg)
+      || getState().auth.access || loadTokens().access;
     if (!access) return rejectWithValue('Not authenticated');
     const res = await fetch(getApiUrl('/api/auth/profile/'), {
       headers: { Authorization: `Bearer ${access}` },
