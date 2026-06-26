@@ -5,7 +5,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { setRegion, setSessionId, setTaxMode, setGuestCheckoutEnabled } from '../store/regionSlice';
 import { fetchCart } from '../store/cartSlice';
 import { getApiUrl } from '../lib/api';
-import { regionFromHost } from '../lib/region';
+import { regionFromHost, normalizeHost, hostForRegion, COM_HOST } from '../lib/region';
 import { initTrackingScripts } from '../utils/analytics';
 
 const trackingSettings = {
@@ -31,6 +31,23 @@ export default function useStoreBootstrap() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    // .com geo-router fallback: if the edge didn't already redirect us (no
+    // Cloudflare/Vercel country header), resolve the country server-side via
+    // /api/geo/ (IP / MaxMind) and forward to the matching ccTLD.
+    if (typeof window !== 'undefined' && normalizeHost(window.location.hostname) === COM_HOST) {
+      fetch(getApiUrl('/api/geo/'))
+        .then((r) => (r.ok ? r.json() : null))
+        .then((geo) => {
+          const target = hostForRegion(geo && geo.region_code === 'IN' ? 'IN' : 'UK');
+          const { pathname, search } = window.location;
+          window.location.replace(`https://${target}${pathname}${search}`);
+        })
+        .catch(() => {
+          window.location.replace(`https://${hostForRegion('UK')}${window.location.pathname}`);
+        });
+      return; // we're navigating away; skip the rest of bootstrap
+    }
+
     let sid = localStorage.getItem('sclero_session_id');
     if (!sid) {
       sid = `session_${Math.random().toString(36).substring(2, 15)}`;
