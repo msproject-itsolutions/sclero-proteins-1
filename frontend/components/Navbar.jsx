@@ -72,6 +72,7 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
       .catch(() => setCategories([]));
   }, [currentRegion]);
 
+  // Only live regions are shown — no "coming soon" placeholders.
   const countries = [
     {
       code: 'UK',
@@ -92,36 +93,6 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
       tax_rate: 18.0,
       domain: 'scleroproteins.in',
       active: true,
-    },
-    {
-      code: 'US',
-      name: 'United States',
-      currency_code: 'USD',
-      currency_symbol: '$',
-      tax_name: 'Sales Tax',
-      tax_rate: 0.0,
-      domain: 'scleroproteins.us',
-      active: false,
-    },
-    {
-      code: 'EU',
-      name: 'Europe (EU)',
-      currency_code: 'EUR',
-      currency_symbol: '€',
-      tax_name: 'VAT',
-      tax_rate: 20.0,
-      domain: 'scleroproteins.eu',
-      active: false,
-    },
-    {
-      code: 'AE',
-      name: 'United Arab Emirates',
-      currency_code: 'AED',
-      currency_symbol: 'د.إ',
-      tax_name: 'VAT',
-      tax_rate: 5.0,
-      domain: 'scleroproteins.ae',
-      active: false,
     },
   ];
 
