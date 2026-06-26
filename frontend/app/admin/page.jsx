@@ -2866,6 +2866,14 @@ function IntegrationsTab({ authFetch }) {
     });
   };
 
+  const syncCatalog = (integration) => {
+    if (!integration?.id) return;
+    authFetch(`/api/admin/marketing-integrations/${integration.id}/sync/`, { method: 'POST', body: JSON.stringify({}) })
+      .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
+      .then(({ ok, d }) => { alert(ok ? (d.message || 'Catalog sync completed.') : (d.message || 'Sync failed.')); load(); })
+      .catch(() => alert('Sync failed — please try again.'));
+  };
+
   const saveConnectors = () => {
     authFetch('/api/admin/settings/SYSTEM_CONNECTORS/', {
       method: 'PUT',
@@ -2932,7 +2940,7 @@ function IntegrationsTab({ authFetch }) {
                     {active ? 'Disconnect' : 'Connect Account'}
                   </button>
                   {active && (
-                    <button onClick={() => alert("Product feed catalog manual sync triggered. Checking updates...")} className="text-xs px-3 py-1.5 border border-slate-100 text-brand-navy font-bold rounded-lg uppercase flex items-center gap-1"><RefreshCw className="h-3 w-3" /> Sync catalog</button>
+                    <button onClick={() => syncCatalog(active)} className="text-xs px-3 py-1.5 border border-slate-100 text-brand-navy font-bold rounded-lg uppercase flex items-center gap-1"><RefreshCw className="h-3 w-3" /> Sync catalog</button>
                   )}
                 </div>
               </div>
@@ -3306,6 +3314,7 @@ function AnalyticsOverview({ authFetch }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [scheduler, setScheduler] = useState({ frequency: 'weekly', email: 'admin@scleroproteins.com' });
+  const [schedSaved, setSchedSaved] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -3314,6 +3323,11 @@ function AnalyticsOverview({ authFetch }) {
       .then(setData)
       .catch(() => setData(null))
       .finally(() => setLoading(false));
+    // Load the persisted report schedule.
+    authFetch('/api/admin/settings/REPORT_SCHEDULE/')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d && d.value && typeof d.value === 'object') setScheduler((s) => ({ ...s, ...d.value })); })
+      .catch(() => {});
   }, [authFetch]);
 
   const triggerPDFDownload = () => {
@@ -3325,7 +3339,14 @@ function AnalyticsOverview({ authFetch }) {
   };
 
   const saveScheduler = () => {
-    alert(`Automated performance report generation configured successfully! Scheduled ${scheduler.frequency} delivery to ${scheduler.email}`);
+    setSchedSaved(false);
+    const payload = { key: 'REPORT_SCHEDULE', value: scheduler, description: 'Automated analytics report delivery schedule' };
+    authFetch('/api/admin/settings/REPORT_SCHEDULE/', { method: 'PUT', body: JSON.stringify(payload) })
+      .then((r) => (r.status === 404
+        ? authFetch('/api/admin/settings/', { method: 'POST', body: JSON.stringify(payload) })
+        : r))
+      .then(() => setSchedSaved(true))
+      .catch(() => {});
   };
 
   if (loading) return <p className="text-sm text-brand-muted">Gathering report analytics...</p>;
@@ -3389,6 +3410,7 @@ function AnalyticsOverview({ authFetch }) {
           </div>
           <div className="flex items-end">
             <button onClick={saveScheduler} className="btn-primary w-full py-2 bg-brand-purple text-white font-bold rounded-lg uppercase">Schedule Delivery</button>
+            {schedSaved && <p className="text-[11px] font-bold text-brand-success text-center">✓ Schedule saved</p>}
           </div>
         </div>
       </div>
