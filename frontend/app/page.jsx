@@ -3,8 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
-  Check, Send, ShieldCheck, Award, HeartPulse, Sparkles, Star, ArrowRight,
-  Shield, Brain, Zap, Activity, Users, Smile, Truck
+  Check, Send, Sparkles, Star, ArrowRight,
+  Shield, Brain, Zap, Activity, Users
 } from 'lucide-react';
 import StoreShell from '../components/StoreShell';
 import HeroSection from '../components/HeroSection';
@@ -30,13 +30,6 @@ const HEALTH_GOALS = [
   { name: 'Women\'s Health', slug: 'women', icon: Users, desc: 'Bone density & balance', color: 'bg-pink-50 text-pink-600' },
   { name: 'Skin & Hair', slug: 'collagen', icon: Sparkles, desc: 'Dermatological synthesis', color: 'bg-purple-50 text-brand-purple' },
   { name: 'Fitness & Muscle', slug: 'fitness', icon: Activity, desc: 'Muscle synthesis & repair', color: 'bg-teal-50 text-teal-600' },
-];
-
-const CATEGORIES = [
-  { name: 'Vitamins & Cofactors', slug: 'vitamins-cofactors', image: 'https://images.unsplash.com/photo-1616671285420-a61678f56475?w=500&auto=format&fit=crop&q=60' },
-  { name: 'Active Protein', slug: 'active-protein', image: 'https://images.unsplash.com/photo-1579758629938-03607ccdbaba?w=500&auto=format&fit=crop&q=60' },
-  { name: 'Minerals & Actives', slug: 'minerals-actives', image: 'https://images.unsplash.com/photo-1607619056574-7b8f30413636?w=500&auto=format&fit=crop&q=60' },
-  { name: 'Wellness Bundles', slug: 'wellness-bundles', image: 'https://images.unsplash.com/photo-1611070973770-b1a6726b0c6e?w=500&auto=format&fit=crop&q=60' },
 ];
 
 const TESTIMONIALS = [
@@ -115,32 +108,8 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Global Trust Badges Section directly below fold */}
-      <section className="border-y border-slate-200 bg-slate-50 py-8">
-        <div className="container-page">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-6 text-center">
-            {[
-              { label: 'GMP Certified Facilities', desc: 'Pharmaceutical Grade Control', icon: ShieldCheck },
-              { label: 'Independent Lab Verified', desc: '100% Label Accuracy', icon: Award },
-              { label: 'Clinically Backed Actives', desc: 'Dosages Supported by Science', icon: HeartPulse },
-              { label: 'Fast Domestic Shipping', desc: 'UK & India Local Warehouse Fulfillment', icon: Truck },
-              { label: '30-Day Refund Guarantee', desc: 'Risk-Free Purchase Coverage', icon: Smile },
-            ].map((badge, idx) => {
-              const Icon = badge.icon;
-              return (
-                <div key={idx} className="flex flex-col items-center space-y-1">
-                  <Icon className="h-6 w-6 text-brand-purple" />
-                  <h4 className="text-xs font-bold text-brand-navy leading-tight">{badge.label}</h4>
-                  <p className="text-[9px] text-brand-muted leading-tight">{badge.desc}</p>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
       {/* Shop by Goal Section */}
-      <section className="py-16 bg-white">
+      <section className="section bg-white">
         <div className="container-page">
           <div className="mb-10 text-center">
             <span className="text-[10px] font-black uppercase tracking-widest text-brand-purple">Targeted Actives</span>
@@ -173,44 +142,8 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Shop by Category Section */}
-      <section className="py-16 bg-slate-50/50 border-y border-slate-200/60">
-        <div className="container-page">
-          <div className="mb-10 text-center">
-            <span className="text-[10px] font-black uppercase tracking-widest text-brand-purple">Product Ranges</span>
-            <h2 className="text-3xl font-black text-brand-navy tracking-tight mt-1">Shop by Category</h2>
-            <p className="text-sm text-brand-muted mt-2">Explore our premium selection of science-backed matrices</p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-6">
-            {CATEGORIES.map((cat, idx) => (
-              <Link
-                key={idx}
-                href={`/products?category=${cat.slug}`}
-                className="overflow-hidden rounded-3xl border border-slate-200 bg-white group shadow-xs transition-all hover:shadow-md flex flex-col h-72"
-              >
-                <div className="h-44 overflow-hidden relative">
-                  <img
-                    src={cat.image}
-                    alt={cat.name}
-                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
-                </div>
-                <div className="p-5 flex-1 flex flex-col justify-between">
-                  <h3 className="text-sm font-black text-brand-navy tracking-tight">{cat.name}</h3>
-                  <span className="text-xs font-bold text-brand-purple flex items-center gap-1 mt-2">
-                    Explore Range <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-                  </span>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* Quiz Section */}
-      <section className="bg-white py-16">
+      <section className="section bg-slate-50/50 border-y border-slate-200/60">
         <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
           <div className="mb-8 text-center">
             <span className="text-[10px] font-black uppercase tracking-widest text-brand-purple">Personalized Wellness</span>
