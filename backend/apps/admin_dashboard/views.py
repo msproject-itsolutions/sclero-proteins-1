@@ -9,7 +9,12 @@ from rest_framework.views import APIView
 from apps.users.permissions import require_permission
 from apps.regions.models import Region
 from .models import FeatureToggle, SystemSetting, HeroBannerSlide, PaymentGateway, EmailTemplate, MarketingIntegration, ContentPage, BlogPost, ApprovalRequest
-from .store_config import get_store_tax_mode, set_store_tax_mode, VALID_TAX_MODES
+from .store_config import (
+    get_store_tax_mode,
+    set_store_tax_mode,
+    VALID_TAX_MODES,
+    get_guest_checkout_enabled,
+)
 from .serializers import (
     FeatureToggleSerializer,
     SystemSettingSerializer,
@@ -30,7 +35,10 @@ class StoreConfigView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        return Response({'tax_mode': get_store_tax_mode()})
+        return Response({
+            'tax_mode': get_store_tax_mode(),
+            'guest_checkout_enabled': get_guest_checkout_enabled(),
+        })
 
 
 class TaxSettingsAdminView(APIView):

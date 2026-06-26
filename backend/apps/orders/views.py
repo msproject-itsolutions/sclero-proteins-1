@@ -240,6 +240,14 @@ class CheckoutView(views.APIView):
         if not all([session_id, email, shipping_name, address_line1, city, state, postal_code, country, payment_method]):
             return Response({"error": "Missing required checkout parameters."}, status=status.HTTP_400_BAD_REQUEST)
 
+        from apps.admin_dashboard.store_config import get_store_tax_mode, get_guest_checkout_enabled
+
+        if not request.user.is_authenticated and not get_guest_checkout_enabled():
+            return Response(
+                {"error": "Guest checkout is currently disabled. Please sign in to continue."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         # 1. Fetch Region & Cart
         region = get_object_or_404(Region, code=region_code, is_active=True)
         cart = Cart.objects.filter(session_id=session_id, region=region).first()
@@ -303,7 +311,6 @@ class CheckoutView(views.APIView):
                     coupon.save(update_fields=['usage_count'])
 
         # 3. Calculate Tax & Shipping (honouring the store-wide tax mode)
-        from apps.admin_dashboard.store_config import get_store_tax_mode
         tax_mode = get_store_tax_mode()
         tax_rate = Decimal(str(region.tax_rate))
         taxable_amount = max(subtotal - discount_amount, Decimal('0.00'))
