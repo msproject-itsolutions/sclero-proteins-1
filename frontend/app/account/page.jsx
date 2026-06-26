@@ -15,7 +15,7 @@ import {
 import StoreShell from '../../components/StoreShell';
 import {
   login, register, fetchProfile, logout, clearAuthError, sendOtp, verifyOtp,
-  completeLogin, fetch2faStatus, setup2fa, verify2fa, disable2fa,
+  completeLogin, fetch2faStatus, setup2fa, verify2fa, disable2fa, requestMagicLink,
 } from '../../store/authSlice';
 import { getApiUrl } from '../../lib/api';
 import { addToCart } from '../../store/cartSlice';
@@ -76,6 +76,58 @@ function OtpLogin() {
       <button type="button" onClick={() => setStage('request')}
         className="w-full text-xs font-semibold text-brand-muted hover:text-brand-navy">
         Use a different email
+      </button>
+    </form>
+  );
+}
+
+function MagicLinkLogin() {
+  const dispatch = useDispatch();
+  const { status } = useSelector((s) => s.auth);
+  const [email, setEmail] = useState('');
+  const [sent, setSent] = useState(false);
+  const [sandboxLink, setSandboxLink] = useState('');
+  const [err, setErr] = useState('');
+
+  const send = (e) => {
+    e.preventDefault();
+    setErr('');
+    dispatch(requestMagicLink({ email })).unwrap().then((d) => {
+      setSent(true);
+      if (d.magic_link_for_sandbox) setSandboxLink(d.magic_link_for_sandbox);
+    }).catch((m) => setErr(typeof m === 'string' ? m : 'Could not send the link'));
+  };
+
+  if (sent) {
+    return (
+      <div className="rounded-xl border border-brand-success/20 bg-brand-success/5 p-4 text-center">
+        <p className="text-xs font-semibold text-brand-navy">
+          Check <span className="font-bold">{email}</span> for your sign-in link.
+        </p>
+        {sandboxLink && (
+          <a href={sandboxLink} className="mt-2 block break-all text-[11px] font-bold text-brand-purple underline">
+            Sandbox: open magic link
+          </a>
+        )}
+        <button type="button" onClick={() => { setSent(false); setSandboxLink(''); }}
+          className="mt-2 text-[11px] font-semibold text-brand-muted hover:text-brand-navy">
+          Use a different email
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={send} className="space-y-3">
+      <input
+        type="email" required placeholder="Email" autoComplete="email" value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        className="w-full rounded-lg border border-slate-200 p-3 text-sm focus:border-brand-purple focus:outline-none"
+      />
+      {err && <p className="rounded-lg bg-brand-danger/10 px-3 py-2 text-xs font-semibold text-brand-danger">{err}</p>}
+      <button type="submit" disabled={status === 'loading'}
+        className="btn-primary w-full py-3 text-sm uppercase tracking-wider disabled:opacity-60">
+        {status === 'loading' ? 'Sending…' : 'Email me a magic link'}
       </button>
     </form>
   );
@@ -266,15 +318,26 @@ function AuthForms() {
       )}
 
       {mode === 'login' && (
-        <div className="mt-6">
-          <div className="relative mb-4 text-center">
-            <span className="relative z-10 bg-white px-3 text-[11px] font-semibold uppercase tracking-wide text-brand-muted">
-              or log in with a code
-            </span>
-            <span className="absolute left-0 top-1/2 h-px w-full bg-slate-200" />
+        <>
+          <div className="mt-6">
+            <div className="relative mb-4 text-center">
+              <span className="relative z-10 bg-white px-3 text-[11px] font-semibold uppercase tracking-wide text-brand-muted">
+                or get a magic link
+              </span>
+              <span className="absolute left-0 top-1/2 h-px w-full bg-slate-200" />
+            </div>
+            <MagicLinkLogin />
           </div>
-          <OtpLogin />
-        </div>
+          <div className="mt-6">
+            <div className="relative mb-4 text-center">
+              <span className="relative z-10 bg-white px-3 text-[11px] font-semibold uppercase tracking-wide text-brand-muted">
+                or log in with a code
+              </span>
+              <span className="absolute left-0 top-1/2 h-px w-full bg-slate-200" />
+            </div>
+            <OtpLogin />
+          </div>
+        </>
       )}
     </div>
   );

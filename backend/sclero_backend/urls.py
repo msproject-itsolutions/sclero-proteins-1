@@ -19,6 +19,7 @@ from apps.products.views import (
 from apps.users.views import (
     RegisterView, UserProfileView, UserAddressViewSet, UserErasureRequestView,
     SendOTPView, VerifyOTPView, GoogleLoginView,
+    MagicLinkRequestView, MagicLinkVerifyView,
     RoleViewSet, StaffUserViewSet, WishlistViewSet, WishlistGroupViewSet, PublicWishlistView, AuditedLoginView,
     CustomerProfileViewSet, CustomerSegmentViewSet, CustomerActivityViewSet, SupportTicketViewSet,
     TerminateDevicesView, DataExportView, AccountDeleteView,
@@ -119,6 +120,8 @@ urlpatterns = [
     path('api/auth/profile/terminate-devices/', TerminateDevicesView.as_view(), name='auth_terminate_devices'),
     path('api/auth/otp/send/', SendOTPView.as_view(), name='auth_otp_send'),
     path('api/auth/otp/verify/', VerifyOTPView.as_view(), name='auth_otp_verify'),
+    path('api/auth/magic-link/request/', MagicLinkRequestView.as_view(), name='auth_magic_request'),
+    path('api/auth/magic-link/verify/', MagicLinkVerifyView.as_view(), name='auth_magic_verify'),
     # TOTP (authenticator-app) 2FA
     path('api/auth/2fa/setup/', TOTPSetupView.as_view(), name='auth_2fa_setup'),
     path('api/auth/2fa/verify/', TOTPVerifyView.as_view(), name='auth_2fa_verify'),

@@ -198,6 +198,40 @@ export const sendOtp = createAsyncThunk(
   }
 );
 
+// Request a magic sign-in link by email. Sandbox returns the link for testing.
+export const requestMagicLink = createAsyncThunk(
+  'auth/requestMagicLink',
+  async ({ email }, { rejectWithValue }) => {
+    const res = await fetch(getApiUrl('/api/auth/magic-link/request/'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email,
+        origin: typeof window !== 'undefined' ? window.location.origin : '',
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) return rejectWithValue(data.error || 'Could not send the link');
+    return data; // { message, magic_link_for_sandbox }
+  }
+);
+
+// Exchange a magic-link token for JWT → { user, tokens }.
+export const verifyMagicLink = createAsyncThunk(
+  'auth/verifyMagicLink',
+  async ({ token }, { rejectWithValue }) => {
+    const res = await fetch(getApiUrl('/api/auth/magic-link/verify/'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    const data = await res.json();
+    if (!res.ok) return rejectWithValue(data.error || 'Invalid sign-in link');
+    persistTokens(data.tokens.access, data.tokens.refresh);
+    return data;
+  }
+);
+
 // Verify the OTP → returns { user, tokens }.
 export const verifyOtp = createAsyncThunk(
   'auth/verifyOtp',
@@ -342,6 +376,15 @@ const authSlice = createSlice({
         state.sandboxOtp = '';
       })
       .addCase(verifyOtp.rejected, rejected)
+
+      .addCase(verifyMagicLink.pending, pending)
+      .addCase(verifyMagicLink.fulfilled, (state, action) => {
+        state.status = 'succeeded';
+        state.user = action.payload.user;
+        state.access = action.payload.tokens.access;
+        state.refresh = action.payload.tokens.refresh;
+      })
+      .addCase(verifyMagicLink.rejected, rejected)
 
       .addCase(fetchProfile.fulfilled, (state, action) => {
         state.user = action.payload;
