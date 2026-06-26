@@ -72,14 +72,46 @@ class EmailTemplateViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def send_test(self, request, pk=None):
+        """Send a real test email through the configured email backend (console in
+        dev, SMTP in production) using the template's event + region."""
+        from apps.orders.email_service import send_templated_email
         template = self.get_object()
-        target_email = request.data.get('email', 'test@example.com')
-        # Mock sending email (log it or print to console)
-        print(f"Mock sending email '{template.subject}' to {target_email}")
+        target_email = (
+            request.data.get('email')
+            or getattr(request.user, 'email', '')
+            or 'test@example.com'
+        )
+        sample_context = {
+            'customer_name': 'Test Customer',
+            'first_name': 'Test',
+            'last_name': 'Customer',
+            'order_number': 'TEST-1001',
+            'order_id': 'TEST-1001',
+            'total': '0.00',
+            'currency': (template.region.currency_code if template.region else ''),
+            'tracking_number': 'TRACK-TEST-1001',
+            'store_name': 'Sclero Proteins',
+        }
+        ok = send_templated_email(
+            template.event, template.region, target_email, sample_context,
+            audit_target_type='EmailTemplate', audit_target_id=str(template.id),
+        )
+        if ok:
+            return Response({
+                "status": "success",
+                "message": (
+                    f"Test email sent to {target_email} (event '{template.event}'). "
+                    "In development it's printed to the server console; in production "
+                    "it's delivered via SMTP."
+                ),
+            })
         return Response({
-            "status": "success",
-            "message": f"Test email sent successfully to {target_email} using template '{template.event}'."
-        })
+            "status": "error",
+            "message": (
+                "Could not send the test email. Ensure the template is active and "
+                "that SMTP is configured for production."
+            ),
+        }, status=status.HTTP_400_BAD_REQUEST)
 
 class FeatureToggleViewSet(viewsets.ModelViewSet):
     queryset = FeatureToggle.objects.all()
