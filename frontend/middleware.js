@@ -68,8 +68,15 @@ export function middleware(request) {
   const override = (request.cookies.get(REGION_COOKIE)?.value || '').toUpperCase();
   const wantsIN = override ? override === 'IN' : country === 'IN';
 
-  // .com is a pure geo-router: it never serves content, it forwards to a ccTLD.
+  // .com is a pure geo-router: it forwards to a ccTLD. When an edge country is
+  // available (Cloudflare/Vercel) or the shopper has chosen, redirect instantly.
+  // Otherwise (plain VPS, no edge geo) pass through so the client can resolve the
+  // country server-side via /api/geo/ (IP/MaxMind) and redirect — see the
+  // .com handler in useStoreBootstrap.
   if (host === COM_HOST) {
+    if (!override && !country) {
+      return NextResponse.next();
+    }
     const target = wantsIN ? IN_HOST : UK_HOST;
     return regionalRedirect(request, target, { setRegion: wantsIN ? 'IN' : 'UK' });
   }
