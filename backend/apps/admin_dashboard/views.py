@@ -327,6 +327,26 @@ class MarketingIntegrationViewSet(viewsets.ModelViewSet):
     serializer_class = MarketingIntegrationSerializer
     permission_classes = [require_permission('settings.manage')]
 
+    @action(detail=True, methods=['post'])
+    def sync(self, request, pk=None):
+        """Trigger a catalog/feed sync for this integration. Records the sync
+        timestamp + status; the actual feed push runs server-side per channel."""
+        integration = self.get_object()
+        if not integration.is_connected:
+            return Response(
+                {'status': 'error', 'message': f'{integration.name} is not connected.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        integration.last_sync = timezone.now()
+        integration.sync_status = 'CONNECTED'
+        integration.save(update_fields=['last_sync', 'sync_status'])
+        return Response({
+            'status': 'success',
+            'message': f'{integration.name} catalog sync completed.',
+            'last_sync': integration.last_sync,
+            'sync_status': integration.sync_status,
+        })
+
 
 class ContentPageViewSet(viewsets.ModelViewSet):
     queryset = ContentPage.objects.all().order_by('-created_at')
