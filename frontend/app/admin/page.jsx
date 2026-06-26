@@ -312,6 +312,63 @@ function GeographicMap({ rows }) {
   );
 }
 
+// Geographic sales view: fetches sales-by-country and renders the map + a ranked
+// country table (the data the report already exposes).
+function GeoMapView({ authFetch }) {
+  const [rows, setRows] = useState(null);
+
+  useEffect(() => {
+    authFetch('/api/admin/reports/sales-by-country/?days=365')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const list = Array.isArray(d) ? d : (d && Array.isArray(d.results) ? d.results : (d && Array.isArray(d.rows) ? d.rows : []));
+        setRows(list);
+      })
+      .catch(() => setRows([]));
+  }, [authFetch]);
+
+  if (rows === null) return <p className="text-sm text-brand-muted">Loading geographic sales…</p>;
+  if (rows.length === 0) {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center">
+        <p className="text-sm font-semibold text-brand-navy">No country sales yet</p>
+        <p className="mt-1 text-xs text-brand-muted">Once orders come in, revenue by country will appear here.</p>
+      </div>
+    );
+  }
+
+  const sorted = [...rows].sort((a, b) => Number(b.revenue || 0) - Number(a.revenue || 0));
+  return (
+    <div className="space-y-4">
+      <GeographicMap rows={rows} />
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        <table className="w-full text-xs">
+          <thead className="bg-slate-50 text-left text-[10px] uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="px-3 py-2">Country</th>
+              <th className="px-3 py-2">Orders</th>
+              <th className="px-3 py-2 text-right">Revenue</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {sorted.map((r, i) => (
+              <tr key={(r.country || '') + (r.currency || '') + i}>
+                <td className="px-3 py-2 font-semibold text-brand-navy">
+                  {(COUNTRY_COORDS[r.country]?.name) || r.country || '—'}
+                </td>
+                <td className="px-3 py-2 text-brand-muted">{r.orders ?? r.order_count ?? '—'}</td>
+                <td className="px-3 py-2 text-right font-bold text-brand-navy">
+                  {r.currency ? `${r.currency} ` : ''}{Number(r.revenue || 0).toLocaleString()}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function ReportsTab({ authFetch, initialTab }) {
   const [tab, setTab] = useState(initialTab || 'sales');
   useEffect(() => { if (initialTab) setTab(initialTab); }, [initialTab]);
@@ -2749,14 +2806,15 @@ function IntegrationsTab({ authFetch }) {
   const [loading, setLoading] = useState(true);
   const [selectedChannel, setSelectedChannel] = useState(null);
   
-  // system connectors
+  // System connectors — loaded from the SYSTEM_CONNECTORS setting. Start empty;
+  // never hardcode credentials in the frontend.
   const [connectors, setConnectors] = useState({
-    delhivery_api_key: 'DELH_xxxxxx_923',
-    cloudflare_zone_id: 'cf_zone_881290',
-    klaviyo_private_key: 'pk_klaviyo_912',
-    ga4_measurement_id: 'G-SCLERO99',
-    razorpay_key_id: 'rzp_test_xxxx',
-    stripe_webhook_secret: 'whsec_stripe_xxx'
+    delhivery_api_key: '',
+    cloudflare_zone_id: '',
+    klaviyo_private_key: '',
+    ga4_measurement_id: '',
+    razorpay_key_id: '',
+    stripe_webhook_secret: ''
   });
   const [webhookLogs, setWebhookLogs] = useState([]);
   const [selectedLog, setSelectedLog] = useState(null);
@@ -2773,12 +2831,8 @@ function IntegrationsTab({ authFetch }) {
         .catch(() => null)
     ]).then(([mktData, sysData, logsData]) => {
       setIntegrations(Array.isArray(mktData) ? mktData : mktData.results || []);
-      if (sysData) setConnectors(sysData);
-      setWebhookLogs(logsData || [
-        { id: 'wh_1', event: 'order.created', gateway: 'Razorpay', status: 200, ts: new Date(Date.now() - 3600000).toISOString(), payload: { order_id: 42, total: 59.99, email: 'buyer@example.com' } },
-        { id: 'wh_2', event: 'checkout.completed', gateway: 'Stripe', status: 200, ts: new Date(Date.now() - 7200000).toISOString(), payload: { checkout_id: 'chk_9281', customer_name: 'John Doe' } },
-        { id: 'wh_3', event: 'shipment.updated', gateway: 'Delhivery', status: 200, ts: new Date(Date.now() - 10800000).toISOString(), payload: { tracking_number: 'DEL_9921', status: 'IN_TRANSIT' } }
-      ]);
+      if (sysData && typeof sysData === 'object') setConnectors((prev) => ({ ...prev, ...sysData }));
+      setWebhookLogs(Array.isArray(logsData) ? logsData : []);
     }).finally(() => setLoading(false));
   }, [authFetch]);
 
@@ -2824,29 +2878,23 @@ function IntegrationsTab({ authFetch }) {
       .then(() => alert("System API connector keys saved successfully!"));
   };
 
+  // Honest configuration check (not a fake random ping). A real live ping to the
+  // third-party API would run server-side once the integration is enabled.
+  const CONNECTOR_KEYS = {
+    'Delhivery': 'delhivery_api_key',
+    'Cloudflare': 'cloudflare_zone_id',
+    'Klaviyo': 'klaviyo_private_key',
+    'Google Analytics': 'ga4_measurement_id',
+    'Stripe/Razorpay': 'stripe_webhook_secret',
+  };
   const testHealth = (systemName) => {
-    alert(`Triggering health connection ping to ${systemName} API endpoints...`);
-    setTimeout(() => {
-      const isSuccess = Math.random() > 0.05;
-      if (isSuccess) {
-        alert(`${systemName} API Connection Health Status: SUCCESS (Latency: 142ms)`);
-        // Append a success log
-        const nextLogs = [
-          { id: `wh_${Date.now()}`, event: 'health.ping', gateway: systemName, status: 200, ts: new Date().toISOString(), payload: { ping_response: 'pong', status: 'OK' } },
-          ...webhookLogs
-        ];
-        setWebhookLogs(nextLogs);
-        authFetch('/api/admin/settings/WEBHOOK_LOGS/', {
-          method: 'PUT',
-          body: JSON.stringify({ key: 'WEBHOOK_LOGS', value: nextLogs, description: 'Webhook receiver incoming event logs history' })
-        }).then(r => r.status === 404 ? authFetch('/api/admin/settings/', {
-          method: 'POST',
-          body: JSON.stringify({ key: 'WEBHOOK_LOGS', value: nextLogs, description: 'Webhook receiver incoming event logs history' })
-        }) : r);
-      } else {
-        alert(`${systemName} API Connection Health Status: FAILED (Timeout / Credentials rejected)`);
-      }
-    }, 500);
+    const key = CONNECTOR_KEYS[systemName];
+    const configured = key ? Boolean((connectors[key] || '').trim()) : false;
+    if (configured) {
+      alert(`${systemName}: credentials are configured. Save them, then enable the integration — a live connection test runs server-side.`);
+    } else {
+      alert(`${systemName}: no credentials entered yet. Add the key above and click "Save Connector Credentials".`);
+    }
   };
 
   if (loading) return <p className="text-sm text-brand-muted">Loading active channels and connectors...</p>;
@@ -3249,12 +3297,7 @@ function AnalyticsAndReportsTab({ authFetch }) {
       </div>
       {view === 'overview' && <AnalyticsOverview authFetch={authFetch} />}
       {view !== 'overview' && view !== 'geo' && <ReportsTab authFetch={authFetch} initialTab={view} />}
-      {view === 'geo' && (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
-          <p className="text-sm font-semibold text-brand-navy">Geographic map (coming soon)</p>
-          <p className="mt-1 text-xs text-brand-muted">A revenue heat-map of orders by country will live here. The underlying data is already exposed by the sales-by-country report.</p>
-        </div>
-      )}
+      {view === 'geo' && <GeoMapView authFetch={authFetch} />}
     </div>
   );
 }
