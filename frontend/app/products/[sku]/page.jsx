@@ -80,7 +80,8 @@ export default function ProductDetailPage() {
 
   const handleAddToCart = async (openCheckout = false) => {
     if (!product) return;
-    
+    if (product.price === null || product.price === undefined) return; // not sold in this region
+
     const basePrice = promoVal || priceVal;
     const finalPrice = basePrice;
 
@@ -138,6 +139,9 @@ export default function ProductDetailPage() {
 
   const images = (product?.media || []).filter((m) => m.media_type === 'IMAGE');
   const videos = (product?.media || []).filter((m) => m.media_type === 'VIDEO');
+  // A product with no regional price config returns price === null for this
+  // region — it can't be sold here, so we block purchase rather than show ₹0.00.
+  const unavailable = !!product && (product.price === null || product.price === undefined);
   const priceVal = product?.price ? parseFloat(product.price) : 0;
   const promoVal = product?.promotional_price ? parseFloat(product.promotional_price) : null;
   const basePrice = promoVal || priceVal;
@@ -364,7 +368,9 @@ export default function ProductDetailPage() {
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-brand-muted uppercase tracking-wider">Price</span>
                     <div className="text-right">
-                      {promoVal ? (
+                      {unavailable ? (
+                        <span className="text-sm font-bold text-amber-600">Not available in your region</span>
+                      ) : promoVal ? (
                         <>
                           <span className="text-2xl font-black text-brand-navy mr-2">
                             {currencySymbol}{promoVal.toFixed(2)}
@@ -410,15 +416,15 @@ export default function ProductDetailPage() {
                   <div className="flex flex-col sm:flex-row gap-2.5">
                     <button
                       onClick={() => handleAddToCart(false)}
-                      disabled={stock === 0}
+                      disabled={stock === 0 || unavailable}
                       className="flex-1 btn-primary py-3.5 text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 disabled:opacity-50"
                     >
                       <ShoppingCart className="h-4.5 w-4.5" />
-                      Add to Cart
+                      {unavailable ? 'Not available in your region' : 'Add to Cart'}
                     </button>
                     <button
                       onClick={handleBuyNow}
-                      disabled={stock === 0}
+                      disabled={stock === 0 || unavailable}
                       className="flex-1 rounded-2xl border border-slate-200 bg-white text-brand-navy py-3.5 text-xs font-bold uppercase tracking-wider hover:border-brand-purple hover:bg-brand-purple/5 transition-all disabled:opacity-50"
                     >
                       Buy It Now

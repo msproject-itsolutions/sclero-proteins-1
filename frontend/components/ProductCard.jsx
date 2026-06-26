@@ -68,6 +68,8 @@ export default function ProductCard({
   const taxLabel = currentRegion === 'IN' ? 'GST' : 'VAT';
   const taxNote = taxMode === 'exclusive' ? `+ ${taxLabel} at checkout` : `inc. ${taxLabel}`;
 
+  // No regional price config for this region -> not sellable here.
+  const unavailable = product.price === null || product.price === undefined;
   const priceVal = product.price ? parseFloat(product.price) : 0;
   const promoPriceVal = product.promotional_price
     ? parseFloat(product.promotional_price)
@@ -156,10 +158,10 @@ export default function ProductCard({
         <div className="mt-3 flex gap-2">
           <button
             onClick={() => onAddToCart(product)}
-            disabled={stock === 0}
+            disabled={stock === 0 || unavailable}
             className="flex-1 btn-primary py-2 text-xs uppercase font-bold disabled:opacity-50"
           >
-            Add to cart
+            {unavailable ? 'Unavailable here' : 'Add to cart'}
           </button>
           <button
             onClick={() => setIsWishlisted(!isWishlisted)}
@@ -292,10 +294,10 @@ export default function ProductCard({
         <button
           type="button"
           onClick={() => onAddToCart(product)}
-          disabled={stock === 0}
+          disabled={stock === 0 || unavailable}
           className="btn-primary w-full py-2.5 text-xs uppercase tracking-wider disabled:opacity-50"
         >
-          {stock === 0 ? 'Out of stock' : 'Add to cart'}
+          {unavailable ? 'Not available in your region' : stock === 0 ? 'Out of stock' : 'Add to cart'}
         </button>
         <button
           type="button"
