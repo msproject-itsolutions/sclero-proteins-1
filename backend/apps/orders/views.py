@@ -69,7 +69,7 @@ class CartViewSet(viewsets.ViewSet):
             return Response({"error": "session_id query param is required"}, status=status.HTTP_400_BAD_REQUEST)
             
         cart = self.get_cart(session_id, region_code)
-        serializer = CartSerializer(cart)
+        serializer = CartSerializer(cart, context={'region': cart.region})
         return Response(serializer.data)
 
     def add_item(self, request):
@@ -108,7 +108,7 @@ class CartViewSet(viewsets.ViewSet):
             cart_item.quantity = quantity
         cart_item.save()
 
-        return Response(CartSerializer(cart).data)
+        return Response(CartSerializer(cart, context={'region': cart.region}).data)
 
     def update_item(self, request):
         session_id = request.data.get('session_id')
@@ -136,7 +136,7 @@ class CartViewSet(viewsets.ViewSet):
             cart_item.quantity = quantity
             cart_item.save()
 
-        return Response(CartSerializer(cart).data)
+        return Response(CartSerializer(cart, context={'region': cart.region}).data)
 
     def remove_item(self, request):
         session_id = request.data.get('session_id')
@@ -151,7 +151,7 @@ class CartViewSet(viewsets.ViewSet):
         if cart_item:
             cart_item.delete()
 
-        return Response(CartSerializer(cart).data)
+        return Response(CartSerializer(cart, context={'region': cart.region}).data)
 
 
 class ApplyCouponView(views.APIView):
