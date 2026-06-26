@@ -3420,22 +3420,10 @@ function AnalyticsOverview({ authFetch }) {
 
 /* ------------------------------------------------------------- Settings */
 function SettingsTab({ authFetch }) {
-  const [settings, setSettings] = useState({
-    store_name: 'Sclero Proteins Ltd',
-    store_email: 'office@scleroproteins.com',
-    support_phone: '+44 20 7946 0912',
-    currency: 'GBP',
-    tax_rate: 20.0,
-    enable_notifications: true
-  });
   const [checkoutSettings, setCheckoutSettings] = useState({ allow_guest_checkout: true });
   const [checkoutSaving, setCheckoutSaving] = useState(false);
   const [checkoutSaved, setCheckoutSaved] = useState(false);
   const [checkoutError, setCheckoutError] = useState('');
-  const [keys, setKeys] = useState([
-    { name: 'Google Merchant Feed Key', key: 'gmc_feed_key_sec_84920492810' },
-    { name: 'Facebook Graph API Token', key: 'fb_api_token_eaag_8472910481029' }
-  ]);
 
   // Real, wired tax-mode setting (inclusive | exclusive).
   const [taxMode, setTaxMode] = useState('inclusive');
@@ -3515,10 +3503,6 @@ function SettingsTab({ authFetch }) {
     }
   };
 
-  const save = () => {
-    alert("Store settings and API keys updated successfully!");
-  };
-
   const TAX_OPTIONS = [
     { v: 'inclusive', title: 'Tax inclusive', desc: 'Displayed prices already include VAT/GST. Checkout shows tax as "included" and does not add it on top.' },
     { v: 'exclusive', title: 'Tax exclusive', desc: 'Displayed prices are net. VAT/GST is added as a separate line at checkout.' },
@@ -3555,24 +3539,6 @@ function SettingsTab({ authFetch }) {
               <p className="mt-1.5 text-[11px] leading-relaxed text-brand-muted">{o.desc}</p>
             </button>
           ))}
-        </div>
-      </div>
-
-      <div className="border-t border-slate-100 pt-4">
-        <h3 className="text-sm font-bold text-brand-navy mb-1 uppercase">General Configurations</h3>
-        <p className="text-brand-muted mb-3">Adjust store details, currency, and VAT rates.</p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <input placeholder="Store name" value={settings.store_name} onChange={(e) => setSettings({ ...settings, store_name: e.target.value })} className="rounded-lg border border-slate-200 p-2 text-xs" />
-          <input placeholder="Store email" value={settings.store_email} onChange={(e) => setSettings({ ...settings, store_email: e.target.value })} className="rounded-lg border border-slate-200 p-2 text-xs" />
-          <input placeholder="Support phone" value={settings.support_phone} onChange={(e) => setSettings({ ...settings, support_phone: e.target.value })} className="rounded-lg border border-slate-200 p-2 text-xs" />
-          <div className="grid grid-cols-2 gap-2">
-            <select value={settings.currency} onChange={(e) => setSettings({ ...settings, currency: e.target.value })} className="rounded-lg border border-slate-200 p-2 text-xs bg-white">
-              <option value="GBP">GBP (£)</option>
-              <option value="USD">USD ($)</option>
-              <option value="EUR">EUR (€)</option>
-            </select>
-            <input placeholder="VAT %" type="number" value={settings.tax_rate} onChange={(e) => setSettings({ ...settings, tax_rate: Number(e.target.value) })} className="rounded-lg border border-slate-200 p-2 text-xs" />
-          </div>
         </div>
       </div>
 
@@ -3614,23 +3580,11 @@ function SettingsTab({ authFetch }) {
         </button>
       </div>
 
-      <div className="border-t border-slate-100 pt-4">
-        <h3 className="text-xs font-bold text-brand-navy mb-1 uppercase">API Integration &amp; Webhook Keys</h3>
-        <p className="text-brand-muted mb-3">Access tokens generated for Google, Meta, and Omnisend webhooks.</p>
-        <div className="space-y-2">
-          {keys.map((k, i) => (
-            <div key={i} className="flex justify-between items-center p-2 rounded bg-slate-50 font-mono text-[10px]">
-              <span>{k.name}</span>
-              <span className="font-bold">{k.key}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="border-t border-slate-100 pt-4 flex items-center justify-between">
-        <label className="flex items-center gap-2 cursor-pointer font-bold text-brand-navy"><input type="checkbox" checked={settings.enable_notifications} onChange={(e) => setSettings({ ...settings, enable_notifications: e.target.checked })} className="accent-brand-purple" /> Enable email notifications for support tickets</label>
-        <button onClick={save} className="btn-primary px-5 py-2.5 bg-brand-purple text-white font-bold rounded-lg uppercase">Save Preferences</button>
-      </div>
+      <p className="border-t border-slate-100 pt-4 text-[11px] text-brand-muted">
+        Payment keys, email/SMTP, shipping rates, theme and cookie settings live in their own
+        sections in the sidebar. API keys for marketing integrations are managed under
+        <span className="font-semibold text-brand-navy"> Marketing → Integrations</span>.
+      </p>
     </div>
   );
 }
