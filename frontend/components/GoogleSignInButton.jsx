@@ -31,6 +31,9 @@ function decodeJwt(token) {
 export default function GoogleSignInButton({ onError }) {
   const dispatch = useDispatch();
   const containerRef = useRef(null);
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError; // always use the latest callback without re-running the effect
+  const initedRef = useRef(false);
 
   useEffect(() => {
     if (!CLIENT_ID || typeof window === 'undefined') return;
@@ -38,7 +41,7 @@ export default function GoogleSignInButton({ onError }) {
     const handleCredential = (response) => {
       const profile = decodeJwt(response?.credential);
       if (!profile?.email) {
-        onError?.('Could not read your Google account.');
+        onErrorRef.current?.('Could not read your Google account.');
         return;
       }
       dispatch(
@@ -50,11 +53,14 @@ export default function GoogleSignInButton({ onError }) {
         })
       )
         .unwrap()
-        .catch((e) => onError?.(typeof e === 'string' ? e : 'Google sign-in failed'));
+        .catch((e) => onErrorRef.current?.(typeof e === 'string' ? e : 'Google sign-in failed'));
     };
 
+    // Initialise Google Identity Services exactly once (guards React StrictMode
+    // double-mount and any re-render so initialize() isn't called repeatedly).
     const init = () => {
-      if (!window.google?.accounts?.id || !containerRef.current) return;
+      if (initedRef.current || !window.google?.accounts?.id || !containerRef.current) return;
+      initedRef.current = true;
       window.google.accounts.id.initialize({
         client_id: CLIENT_ID,
         callback: handleCredential,
@@ -68,9 +74,8 @@ export default function GoogleSignInButton({ onError }) {
       });
     };
 
-    // Load the Google Identity Services script once.
     const existing = document.querySelector(`script[src="${GIS_SRC}"]`);
-    if (existing && window.google?.accounts?.id) {
+    if (window.google?.accounts?.id) {
       init();
     } else if (existing) {
       existing.addEventListener('load', init, { once: true });
@@ -82,7 +87,8 @@ export default function GoogleSignInButton({ onError }) {
       script.addEventListener('load', init, { once: true });
       document.body.appendChild(script);
     }
-  }, [dispatch, onError]);
+    // dispatch is stable (react-redux); onError is read via ref — so this runs once.
+  }, [dispatch]);
 
   if (!CLIENT_ID) return null;
 
