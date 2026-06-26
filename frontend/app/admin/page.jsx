@@ -5367,11 +5367,11 @@ function DiscountsTab({ authFetch, regions }) {
 
 
 /* ------------------------------------------------------------------ Page */
+// Clean, Shopify-style grouping: plain section names, "Home" first, Settings last.
 const NAV_GROUPS = [
   { title: null, items: [
-    // Per spec 2026-06-24: "Home" + "Reports" merged into a single
-    // "Analytics & Reports" entry (with Overview tab inside).
-    { key: 'analytics', label: 'Analytics & Reports', icon: BarChart3 },
+    { key: 'home', label: 'Home', icon: Home },
+    { key: 'analytics', label: 'Analytics', icon: BarChart3 },
   ] },
   { title: 'Sales', items: [
     { key: 'orders', label: 'Orders', icon: ShoppingCart },
@@ -5379,42 +5379,38 @@ const NAV_GROUPS = [
     { key: 'abandoned', label: 'Abandoned checkouts', icon: ShoppingBag },
     { key: 'discounts', label: 'Discounts', icon: Banknote },
   ] },
-  { title: 'CRM & Support', items: [
+  { title: 'Customers', items: [
     { key: 'customers', label: 'Customers', icon: UserRound },
-    { key: 'segments', label: 'Customer Segments', icon: UsersIcon },
-    // { key: 'support', label: 'Support tickets', icon: MessageSquare },  // hidden per spec 2026-06-24
-    { key: 'reviews', label: 'Reviews moderation', icon: Star },
+    { key: 'segments', label: 'Segments', icon: UsersIcon },
+    { key: 'reviews', label: 'Reviews', icon: Star },
   ] },
-  { title: 'Catalog & Channels', items: [
+  { title: 'Catalog', items: [
     { key: 'products', label: 'Products', icon: Package },
     { key: 'collections', label: 'Collections', icon: Layers },
-    // 'bundles' removed per spec 2026-06-24 — replaced by Collections on the storefront.
-    { key: 'landing-pages', label: 'Open Pages (Landing)', icon: Globe },
+    { key: 'landing-pages', label: 'Landing pages', icon: Globe },
   ] },
-  { title: 'Marketing Hub', items: [
-    { key: 'integrations', label: 'Integrations', icon: Settings },
-    { key: 'newsletter', label: 'Newsletters', icon: Megaphone },
+  { title: 'Marketing', items: [
+    { key: 'integrations', label: 'Integrations', icon: Megaphone },
+    { key: 'newsletter', label: 'Newsletters', icon: Mail },
   ] },
-  { title: 'Content Engine', items: [
-    // Hero banners merged into Pages screen per spec 2026-06-24.
-    { key: 'pages', label: 'Pages & Banners', icon: FileText },
-    { key: 'blogs', label: 'Blog Posts', icon: Film },
-    { key: 'navigation', label: 'Menus & Navigation', icon: MenuIcon },
-    { key: 'media', label: 'Media Library', icon: ImageIcon },
+  { title: 'Content', items: [
+    { key: 'pages', label: 'Pages & banners', icon: FileText },
+    { key: 'blogs', label: 'Blog', icon: Film },
+    { key: 'navigation', label: 'Menus', icon: MenuIcon },
+    { key: 'media', label: 'Media', icon: ImageIcon },
   ] },
-  { title: 'Enterprise & Security', items: [
-    { key: 'staff', label: 'Staff & Permissions', icon: UserRound },
-    { key: 'approvals', label: 'Approval Queue', icon: CheckCircle2 },
-    // { key: 'audit', label: 'Audit Trail', icon: Activity },  // hidden per spec 2026-06-24
-    { key: 'security', label: 'Security Center', icon: ShieldAlert },
+  { title: 'Staff', items: [
+    { key: 'staff', label: 'Staff & permissions', icon: UserRound },
+    { key: 'approvals', label: 'Approvals', icon: CheckCircle2 },
+    { key: 'security', label: 'Security', icon: ShieldAlert },
   ] },
   { title: 'Settings', items: [
-    { key: 'settings', label: 'System settings', icon: Sliders },
+    { key: 'settings', label: 'General', icon: Sliders },
     { key: 'payments', label: 'Payments', icon: CreditCard },
-    { key: 'emails', label: 'Email templates', icon: Mail },
+    { key: 'emails', label: 'Emails', icon: Mail },
     { key: 'shipping', label: 'Shipping', icon: Truck },
-    { key: 'theme', label: 'Theme settings', icon: Palette },
-    { key: 'cookie-consent', label: 'Cookie consent config', icon: Cookie },
+    { key: 'theme', label: 'Theme', icon: Palette },
+    { key: 'cookie-consent', label: 'Cookie consent', icon: Cookie },
   ] },
 ];
 const NAV = NAV_GROUPS.flatMap((g) => g.items);
@@ -6107,7 +6103,7 @@ export default function AdminPage() {
   const dispatch = useDispatch();
   const { user, access } = useSelector((s) => s.auth);
   const authFetch = useAuthFetch();
-  const [section, setSection] = useState('analytics');
+  const [section, setSection] = useState('home');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [regions, setRegions] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -6255,6 +6251,7 @@ export default function AdminPage() {
           {/* hero-banners merged into 'pages' (Pages & Banners) per spec 2026-06-24. */}
           {section === 'pages' && <PagesAndBannersTab authFetch={authFetch} />}
           {section === 'blogs' && <BlogsTab authFetch={authFetch} />}
+          {section === 'home' && <HomeTab authFetch={authFetch} go={setSection} />}
           {section === 'analytics' && <AnalyticsAndReportsTab authFetch={authFetch} />}
           {section === 'settings' && <SettingsTab authFetch={authFetch} />}
 
