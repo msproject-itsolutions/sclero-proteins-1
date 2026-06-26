@@ -17,6 +17,8 @@ function CheckoutModalInner({ onClose }) {
   const dispatch = useDispatch();
   const { currentRegion, currencySymbol, taxName, taxRate, taxMode, session_id } = useSelector((state) => state.region);
   const cartItems = useSelector((state) => state.cart.items);
+  const authUser = useSelector((state) => state.auth?.user);
+  const guestCheckoutEnabled = useSelector((state) => state.region.guestCheckoutEnabled);
 
   // Form Fields
   const [email, setEmail] = useState('');
@@ -70,11 +72,12 @@ function CheckoutModalInner({ onClose }) {
     return CreditCard;
   };
 
-  const subtotal = cartItems.reduce((acc, item) => {
-    const p = item.product;
-    const price = p.promotional_price ? parseFloat(p.promotional_price) : parseFloat(p.price);
-    return acc + price * item.quantity;
-  }, 0);
+  // NaN-safe unit price (a product without a regional price returns null).
+  const unitPrice = (p) => {
+    const v = p.promotional_price ? parseFloat(p.promotional_price) : parseFloat(p.price);
+    return Number.isFinite(v) ? v : 0;
+  };
+  const subtotal = cartItems.reduce((acc, item) => acc + unitPrice(item.product) * item.quantity, 0);
 
   const handleApplyCoupon = async () => {
     setCouponError('');
@@ -124,6 +127,7 @@ function CheckoutModalInner({ onClose }) {
 
   // Inclusive: tax is already inside taxableSubtotal, so don't add it again.
   const grandTotal = (taxInclusive ? taxableSubtotal : taxableSubtotal + taxAmount) + shippingCost;
+  const guestCheckoutBlocked = !authUser && !guestCheckoutEnabled;
 
   // Postcode/PIN -> auto-fill city + state (debounced).
   useEffect(() => {
@@ -218,6 +222,10 @@ function CheckoutModalInner({ onClose }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (guestCheckoutBlocked) {
+      setErrorMsg('Guest checkout is currently disabled. Please sign in to continue.');
+      return;
+    }
     setLoading(true);
     setErrorMsg('');
 
@@ -320,6 +328,11 @@ function CheckoutModalInner({ onClose }) {
         <form onSubmit={handleSubmit} className="w-full md:w-3/5 p-6 space-y-4">
           <h2 className="text-lg font-black text-brand-navy border-b border-slate-100 pb-2">Delivery & Shipping Address</h2>
           {errorMsg && <p className="text-xs text-brand-danger font-semibold bg-brand-danger/10 border border-brand-danger/20 p-2.5 rounded-lg">{errorMsg}</p>}
+          {guestCheckoutBlocked && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] font-semibold text-amber-800">
+              Guest checkout is currently disabled. Please sign in to continue with your order.
+            </div>
+          )}
 
           <div className="space-y-3.5">
             <div className="grid grid-cols-2 gap-3">
@@ -472,7 +485,7 @@ function CheckoutModalInner({ onClose }) {
 
           <button
             type="submit"
-            disabled={loading || !paymentMethod}
+            disabled={loading || !paymentMethod || guestCheckoutBlocked}
             className="btn-primary w-full py-3.5 text-xs uppercase tracking-wider disabled:opacity-60"
           >
             {loading ? 'Processing Order...' : `Pay & Finalize Order (${currencySymbol}${grandTotal.toFixed(2)})`}
@@ -486,7 +499,7 @@ function CheckoutModalInner({ onClose }) {
             <div className="space-y-3.5 max-h-64 overflow-y-auto pr-2 mb-4">
               {cartItems.map((item) => {
                 const p = item.product;
-                const price = p.promotional_price ? parseFloat(p.promotional_price) : parseFloat(p.price);
+                const price = unitPrice(p);
                 return (
                   <div key={item.id} className="flex justify-between items-center text-xs">
                     <div>

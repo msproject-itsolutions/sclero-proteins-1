@@ -9,7 +9,7 @@ import {
   Home, ChevronRight, TrendingUp, Users as UsersIcon, Search,
   Banknote, ReceiptText, MessageSquare, Activity, CheckCircle2, UserRound,
   Globe, FileText, BarChart3, HelpCircle, RefreshCw, Sliders, UserPlus, Eye, Settings,
-  Star, Palette, Cookie, Megaphone, Menu as MenuIcon, Upload, Undo, Link as LinkIcon, Loader2, AlertCircle
+  Star, Palette, Cookie, Megaphone, Menu as MenuIcon, Upload, Undo, Link as LinkIcon, Loader2, AlertCircle, ToggleLeft, ToggleRight
 } from 'lucide-react';
 import StoreShell from '../../components/StoreShell';
 import { fetchProfile } from '../../store/authSlice';
@@ -2520,24 +2520,45 @@ function SupportTab({ authFetch }) {
       </div>
 
       {/* Wholesale B2B Enquiries */}
-      <div>
-        <h3 className="text-sm font-bold text-brand-navy mb-3">B2B &amp; Bulk Wholesaler Enquiries ({enquiries.length})</h3>
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 text-brand-muted font-bold">
-              <tr><th className="px-3 py-2 font-bold">Name / Company</th><th className="px-3 py-2 font-bold">Email</th><th className="px-3 py-2 font-bold">Interest</th><th className="px-3 py-2 font-bold">Type</th><th className="px-3 py-2 font-bold">Status</th></tr>
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-bold text-brand-navy uppercase">B2B &amp; Bulk Wholesaler Enquiries</h3>
+            <p className="text-xs text-brand-muted mt-1">Wholesale and distributor leads submitted through the public inquiry form.</p>
+          </div>
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-bold uppercase text-brand-muted">
+            {enquiries.length} open
+          </span>
+        </div>
+        <div className="overflow-x-auto rounded-xl border border-slate-200">
+          <table className="min-w-full text-left text-xs">
+            <thead className="bg-slate-50/80 text-brand-muted font-bold">
+              <tr>
+                <th className="px-4 py-3 font-bold">Name / Company</th>
+                <th className="px-4 py-3 font-bold">Email</th>
+                <th className="px-4 py-3 font-bold">Interest</th>
+                <th className="px-4 py-3 font-bold">Type</th>
+                <th className="px-4 py-3 font-bold">Status</th>
+              </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-slate-100 bg-white">
               {enquiries.map((e) => (
-                <tr key={e.id} className="border-t border-slate-100">
-                  <td className="px-3 py-2 font-semibold text-brand-navy">{e.name}<p className="text-[10px] text-brand-muted">{e.company || 'Personal'}</p></td>
-                  <td className="px-3 py-2">{e.email}</td>
-                  <td className="px-3 py-2">{e.product_interest} · {e.quantity}</td>
-                  <td className="px-3 py-2 text-brand-muted">{e.enquiry_type}</td>
-                  <td className="px-3 py-2"><span className="rounded bg-slate-100 text-slate-600 px-2 py-0.5 text-[10px] font-bold">{e.status}</span></td>
+                <tr key={e.id} className="hover:bg-slate-50/60">
+                  <td className="px-4 py-3 align-top font-semibold text-brand-navy">
+                    {e.name}
+                    <p className="mt-0.5 text-[10px] text-brand-muted">{e.company || 'Personal'}</p>
+                  </td>
+                  <td className="px-4 py-3 align-top text-slate-700">{e.email}</td>
+                  <td className="px-4 py-3 align-top text-slate-700">{e.product_interest} · {e.quantity}</td>
+                  <td className="px-4 py-3 align-top text-brand-muted">{e.enquiry_type}</td>
+                  <td className="px-4 py-3 align-top">
+                    <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-600">
+                      {e.status}
+                    </span>
+                  </td>
                 </tr>
               ))}
-              {!enquiries.length && <tr><td colSpan={5} className="px-3 py-4 text-center text-brand-muted text-xs">No B2B wholesale enquiries submitted.</td></tr>}
+              {!enquiries.length && <tr><td colSpan={5} className="px-4 py-5 text-center text-brand-muted text-xs">No B2B wholesale enquiries submitted.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -3342,6 +3363,10 @@ function SettingsTab({ authFetch }) {
     tax_rate: 20.0,
     enable_notifications: true
   });
+  const [checkoutSettings, setCheckoutSettings] = useState({ allow_guest_checkout: true });
+  const [checkoutSaving, setCheckoutSaving] = useState(false);
+  const [checkoutSaved, setCheckoutSaved] = useState(false);
+  const [checkoutError, setCheckoutError] = useState('');
   const [keys, setKeys] = useState([
     { name: 'Google Merchant Feed Key', key: 'gmc_feed_key_sec_84920492810' },
     { name: 'Facebook Graph API Token', key: 'fb_api_token_eaag_8472910481029' }
@@ -3359,6 +3384,24 @@ function SettingsTab({ authFetch }) {
       .catch(() => {});
   }, [authFetch]);
 
+  useEffect(() => {
+    authFetch('/api/admin/settings/CHECKOUT_SETTINGS/')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const value = d?.value && typeof d.value === 'object' ? d.value : {};
+        const enabled = value.allow_guest_checkout;
+        const legacyEnabled = value.guest_checkout_enabled;
+        setCheckoutSettings({
+          allow_guest_checkout: typeof enabled !== 'undefined'
+            ? Boolean(enabled)
+            : typeof legacyEnabled !== 'undefined'
+              ? Boolean(legacyEnabled)
+              : true,
+        });
+      })
+      .catch(() => {});
+  }, [authFetch]);
+
   const saveTaxMode = (mode) => {
     setTaxMode(mode);
     setTaxSaving(true);
@@ -3368,6 +3411,43 @@ function SettingsTab({ authFetch }) {
       .then((d) => { if (d && d.tax_mode) setTaxMode(d.tax_mode); setTaxSaved(true); })
       .catch(() => {})
       .finally(() => setTaxSaving(false));
+  };
+
+  const saveCheckoutSettings = async (nextValue) => {
+    const value = { allow_guest_checkout: Boolean(nextValue), guest_checkout_enabled: Boolean(nextValue) };
+    setCheckoutSettings(value);
+    setCheckoutSaving(true);
+    setCheckoutError('');
+    setCheckoutSaved(false);
+    try {
+      let response = await authFetch('/api/admin/settings/CHECKOUT_SETTINGS/', {
+        method: 'PUT',
+        body: JSON.stringify({
+          key: 'CHECKOUT_SETTINGS',
+          value,
+          description: 'Guest checkout availability for the storefront',
+        })
+      });
+      if (response.status === 404) {
+        response = await authFetch('/api/admin/settings/', {
+          method: 'POST',
+          body: JSON.stringify({
+            key: 'CHECKOUT_SETTINGS',
+            value,
+            description: 'Guest checkout availability for the storefront',
+          })
+        });
+      }
+      if (!response.ok) {
+        throw new Error('Unable to update guest checkout setting right now.');
+      }
+      setCheckoutSaved(true);
+      setTimeout(() => setCheckoutSaved(false), 1800);
+    } catch (err) {
+      setCheckoutError(err.message || 'Unable to update guest checkout setting right now.');
+    } finally {
+      setCheckoutSaving(false);
+    }
   };
 
   const save = () => {
@@ -3429,6 +3509,44 @@ function SettingsTab({ authFetch }) {
             <input placeholder="VAT %" type="number" value={settings.tax_rate} onChange={(e) => setSettings({ ...settings, tax_rate: Number(e.target.value) })} className="rounded-lg border border-slate-200 p-2 text-xs" />
           </div>
         </div>
+      </div>
+
+      <div className="border-t border-slate-100 pt-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-bold text-brand-navy mb-1 uppercase">Checkout access</h3>
+            <p className="text-brand-muted mb-0">Control whether shoppers can place orders without signing in.</p>
+          </div>
+          {checkoutSaved && <span className="text-[11px] font-bold text-brand-success">✓ Saved</span>}
+        </div>
+        {checkoutError && <p className="mt-2 text-[11px] font-semibold text-brand-danger">{checkoutError}</p>}
+        <button
+          type="button"
+          onClick={() => saveCheckoutSettings(!checkoutSettings.allow_guest_checkout)}
+          disabled={checkoutSaving}
+          className={`mt-3 flex w-full items-center justify-between rounded-xl border p-3 text-left transition disabled:opacity-60 ${
+            checkoutSettings.allow_guest_checkout
+              ? 'border-brand-purple bg-brand-purple/5 ring-1 ring-brand-purple/20'
+              : 'border-slate-200 hover:border-brand-purple/40'
+          }`}
+        >
+          <div>
+            <div className="flex items-center gap-2 font-bold text-brand-navy">
+              {checkoutSettings.allow_guest_checkout ? (
+                <ToggleRight className="h-4 w-4 text-brand-purple" />
+              ) : (
+                <ToggleLeft className="h-4 w-4 text-slate-400" />
+              )}
+              Guest checkout {checkoutSettings.allow_guest_checkout ? 'enabled' : 'disabled'}
+            </div>
+            <p className="mt-1 text-[11px] leading-relaxed text-brand-muted">
+              When enabled, shoppers can complete checkout as guests. When disabled, login is required before payment.
+            </p>
+          </div>
+          <span className="text-[10px] font-bold uppercase text-brand-muted">
+            {checkoutSettings.allow_guest_checkout ? 'On' : 'Off'}
+          </span>
+        </button>
       </div>
 
       <div className="border-t border-slate-100 pt-4">
@@ -4349,26 +4467,40 @@ function NewsletterTab({ authFetch }) {
       </div>
 
       {activeSubTab === 'subscribers' && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h4 className="text-sm font-bold text-brand-navy">{subscribers.length} Marketing Opt-in Subscribers</h4>
-            <div className="flex gap-2">
-              <input placeholder="Enter email to subscribe" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs" />
-              <button onClick={addManualSub} className="px-3 py-1.5 bg-brand-purple text-white font-bold rounded-lg uppercase text-xs">Opt-in Email</button>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 space-y-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <h4 className="text-sm font-bold text-brand-navy uppercase">Marketing Opt-in Subscribers</h4>
+              <p className="mt-1 text-xs text-brand-muted">{subscribers.length} customers and manual opt-ins are in this list.</p>
+            </div>
+            <div className="flex w-full gap-2 lg:max-w-lg">
+              <input
+                placeholder="Enter email to subscribe"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-xs"
+              />
+              <button onClick={addManualSub} className="shrink-0 rounded-lg bg-brand-purple px-3 py-2 text-xs font-bold uppercase text-white">
+                Opt-in Email
+              </button>
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-xl border border-slate-150">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 text-brand-muted">
-                <tr><th className="px-3 py-3 font-bold">Email</th><th className="px-3 py-3 font-bold">Name</th><th className="px-3 py-3 font-bold">Opt-in Type / Source</th></tr>
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="min-w-full text-left text-xs">
+              <thead className="bg-slate-50/80 text-brand-muted">
+                <tr>
+                  <th className="px-4 py-3 font-bold">Email</th>
+                  <th className="px-4 py-3 font-bold">Name</th>
+                  <th className="px-4 py-3 font-bold">Opt-in Type / Source</th>
+                </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 bg-white">
                 {subscribers.map((sub, i) => (
-                  <tr key={i} className="hover:bg-slate-50">
-                    <td className="px-3 py-2.5 font-bold text-brand-navy">{sub.email}</td>
-                    <td className="px-3 py-2.5 font-semibold text-slate-700">{sub.first_name} {sub.last_name || ''}</td>
-                    <td className="px-3 py-2.5 text-brand-muted"><span className="rounded bg-slate-100 px-2 py-0.5 text-[9px] font-bold">{sub.source}</span></td>
+                  <tr key={i} className="hover:bg-slate-50/60">
+                    <td className="px-4 py-3 font-bold text-brand-navy">{sub.email}</td>
+                    <td className="px-4 py-3 font-semibold text-slate-700">{sub.first_name} {sub.last_name || ''}</td>
+                    <td className="px-4 py-3 text-brand-muted"><span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide">{sub.source}</span></td>
                   </tr>
                 ))}
               </tbody>
@@ -5212,6 +5344,7 @@ const NAV_GROUPS = [
     { key: 'security', label: 'Security Center', icon: ShieldAlert },
   ] },
   { title: 'Settings', items: [
+    { key: 'settings', label: 'System settings', icon: Sliders },
     { key: 'payments', label: 'Payments', icon: CreditCard },
     { key: 'emails', label: 'Email templates', icon: Mail },
     { key: 'shipping', label: 'Shipping', icon: Truck },
@@ -6027,19 +6160,6 @@ export default function AdminPage() {
             <span className="sr-only sm:not-sr-only">Menu</span>
           </button>
           <span className="flex-1 truncate text-center text-sm font-bold text-brand-navy capitalize">{active?.label}</span>
-          <button
-            type="button"
-            onClick={() => setSection('settings')}
-            aria-label="Open general settings"
-            title="General Settings"
-            className={`inline-flex h-11 min-w-11 items-center justify-center rounded-lg border px-3 text-xs font-semibold transition-colors ${
-              section === 'settings'
-                ? 'border-brand-purple bg-brand-purple/10 text-brand-purple'
-                : 'border-slate-200 bg-white text-brand-navy hover:border-brand-purple/30'
-            }`}
-          >
-            <Settings className="h-5 w-5" />
-          </button>
         </div>
 
           <div className="mb-6 hidden md:flex items-start justify-between gap-3">
@@ -6047,20 +6167,6 @@ export default function AdminPage() {
               <p className="text-xs font-bold uppercase tracking-widest text-brand-purple font-mono">Admin Console</p>
               <h1 className="mt-1 text-2xl font-black text-brand-navy">{active?.label}</h1>
             </div>
-            <button
-              type="button"
-              onClick={() => setSection('settings')}
-              aria-label="Open general settings"
-              title="General Settings"
-              className={`hidden md:inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
-                section === 'settings'
-                  ? 'border-brand-purple bg-brand-purple/10 text-brand-purple'
-                  : 'border-slate-200 bg-white text-brand-navy hover:border-brand-purple/30'
-              }`}
-            >
-              <Settings className="h-4 w-4" />
-              <span>Settings</span>
-            </button>
           </div>
 
           {/* 'home' + 'reports' folded into 'analytics' per spec 2026-06-24. */}

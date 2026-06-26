@@ -13,6 +13,7 @@ const initialState = {
   // Store-wide tax display mode: 'inclusive' (price includes tax) or
   // 'exclusive' (tax added at checkout). Loaded from /api/store-config/.
   taxMode: 'inclusive',
+  guestCheckoutEnabled: true,
 };
 
 const regionSlice = createSlice({
@@ -33,9 +34,12 @@ const regionSlice = createSlice({
     },
     setTaxMode: (state, action) => {
       state.taxMode = action.payload === 'exclusive' ? 'exclusive' : 'inclusive';
+    },
+    setGuestCheckoutEnabled: (state, action) => {
+      state.guestCheckoutEnabled = Boolean(action.payload);
     }
   }
 });
 
-export const { setRegion, setSessionId, setTaxMode } = regionSlice.actions;
+export const { setRegion, setSessionId, setTaxMode, setGuestCheckoutEnabled } = regionSlice.actions;
 export default regionSlice.reducer;

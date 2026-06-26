@@ -6,7 +6,7 @@ import { getApiUrl } from '../lib/api';
 
 export default function CartDrawer({ onClose, onOpenCheckout }) {
   const dispatch = useDispatch();
-  const { currentRegion, currencySymbol, taxName, taxRate, session_id } = useSelector((state) => state.region);
+  const { currentRegion, currencySymbol, taxName, taxRate, taxMode, session_id } = useSelector((state) => state.region);
   const { items, isLoading } = useSelector((state) => state.cart);
   const cartError = useSelector((state) => state.cart.error);
 
@@ -35,22 +35,31 @@ export default function CartDrawer({ onClose, onOpenCheckout }) {
       .catch(() => {});
   }, [currentRegion, items]);
 
-  const subtotal = items.reduce((acc, item) => {
-    const p = item.product;
-    const price = p.promotional_price ? parseFloat(p.promotional_price) : parseFloat(p.price);
-    return acc + price * item.quantity;
-  }, 0);
+  // NaN-safe unit price (a product with no price for the region returns null).
+  const unitPrice = (p) => {
+    const v = p.promotional_price ? parseFloat(p.promotional_price) : parseFloat(p.price);
+    return Number.isFinite(v) ? v : 0;
+  };
+
+  const subtotal = items.reduce((acc, item) => acc + unitPrice(item.product) * item.quantity, 0);
 
   // Regional shipping thresholds
   const shippingThreshold = currentRegion === 'IN' ? 3000 : 50;
-  const progressPercent = Math.min(100, Math.round((subtotal / shippingThreshold) * 100));
-  const diffToFree = shippingThreshold - subtotal;
+  const progressPercent = subtotal > 0 ? Math.min(100, Math.round((subtotal / shippingThreshold) * 100)) : 0;
+  const diffToFree = Math.max(0, shippingThreshold - subtotal);
 
   // Apply discount
   const discountAmount = subtotal * (discountPercent / 100);
-  const subtotalAfterDiscount = subtotal - discountAmount;
-  const taxAmount = subtotalAfterDiscount * (taxRate / 100);
-  const total = subtotalAfterDiscount + taxAmount;
+  const subtotalAfterDiscount = Math.max(0, subtotal - discountAmount);
+
+  // Tax respects the store mode: inclusive => already inside the price (don't add
+  // it to the total); exclusive => add it on top. Mirrors checkout.
+  const rateFactor = (taxRate || 0) / 100;
+  const taxInclusive = taxMode !== 'exclusive';
+  const taxAmount = taxInclusive
+    ? subtotalAfterDiscount - (rateFactor ? subtotalAfterDiscount / (1 + rateFactor) : subtotalAfterDiscount)
+    : subtotalAfterDiscount * rateFactor;
+  const total = taxInclusive ? subtotalAfterDiscount : subtotalAfterDiscount + taxAmount;
 
   const handleQtyChange = (product_id, newQty) => {
     if (newQty < 1) return;
@@ -151,7 +160,7 @@ export default function CartDrawer({ onClose, onOpenCheckout }) {
             <div className="space-y-3">
               {items.map((item) => {
                 const p = item.product;
-                const price = p.promotional_price ? parseFloat(p.promotional_price) : parseFloat(p.price);
+                const price = unitPrice(p);
                 return (
                   <div key={item.id} className="flex gap-4 bg-white border border-slate-200/60 p-3 rounded-2xl items-center shadow-xs">
                     <div className="h-16 w-16 bg-slate-50 rounded-xl overflow-hidden flex items-center justify-center shrink-0 border border-slate-200">
@@ -207,7 +216,7 @@ export default function CartDrawer({ onClose, onOpenCheckout }) {
               </h3>
               <div className="space-y-2">
                 {crossSells.map((p) => {
-                  const price = p.promotional_price ? parseFloat(p.promotional_price) : parseFloat(p.price);
+                  const price = unitPrice(p);
                   return (
                     <div key={p.id} className="flex items-center justify-between gap-3 bg-slate-50 border border-slate-200/50 p-2.5 rounded-xl text-xs">
                       <div className="flex items-center gap-2.5">
@@ -283,13 +292,14 @@ export default function CartDrawer({ onClose, onOpenCheckout }) {
                 </div>
               )}
               <div className="flex justify-between">
-                <span>Estimated {taxName} ({taxRate}%)</span>
+                <span>{taxInclusive ? `Incl. ${taxName} (${taxRate}%)` : `Estimated ${taxName} (${taxRate}%)`}</span>
                 <span className="text-brand-navy font-semibold">{currencySymbol}{taxAmount.toFixed(2)}</span>
               </div>
               <div className="flex justify-between border-t border-slate-100 pt-2 font-bold text-sm text-brand-navy">
-                <span>Grand Total</span>
+                <span>Subtotal{taxInclusive ? '' : ' + tax'}</span>
                 <span className="text-brand-purple text-base font-black">{currencySymbol}{total.toFixed(2)}</span>
               </div>
+              <p className="text-[10px] text-brand-muted pt-0.5">Shipping calculated at checkout.</p>
             </div>
 
             <button
