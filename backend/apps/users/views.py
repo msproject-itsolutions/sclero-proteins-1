@@ -604,6 +604,113 @@ class VerifyOTPView(APIView):
         return Response({"error": "Invalid OTP code"}, status=status.HTTP_400_BAD_REQUEST)
 
 
+# --- Magic-link (passwordless click-a-link) login -------------------------- #
+
+MAGIC_LINK_SALT = 'sclero-magic-link'
+MAGIC_LINK_MAX_AGE = 15 * 60  # 15 minutes
+
+
+def _safe_redirect_base(request):
+    """Pick a trusted base URL for the magic link. Only allow origins we own —
+    never echo an attacker-supplied origin (that would leak the token)."""
+    from django.conf import settings
+    origin = (request.data.get('origin') or '').rstrip('/')
+    allowed = set(getattr(settings, 'CSRF_TRUSTED_ORIGINS', []) or [])
+    allowed |= set(getattr(settings, 'CORS_ALLOWED_ORIGINS', []) or [])
+    allowed |= {'http://localhost:3000', 'http://localhost:3100', 'http://127.0.0.1:3000'}
+    if origin and origin in allowed:
+        return origin
+    site = (getattr(settings, 'SITE_URL', '') or '').rstrip('/')
+    return site or 'http://localhost:3000'
+
+
+class MagicLinkRequestView(APIView):
+    """Email a one-time, time-limited sign-in link. Sandbox returns the link too."""
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        from django.core import signing
+        email = (request.data.get('email') or '').strip().lower()
+        if not email or '@' not in email:
+            return Response({"error": "A valid email is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        user, _ = User.objects.get_or_create(email=email)
+        # Single-use nonce stored on the user; the link is invalid once consumed.
+        nonce = str(random.randint(10**9, 10**10 - 1))
+        user.otp_secret = f"magic:{nonce}"
+        user.save(update_fields=['otp_secret'])
+
+        token = signing.dumps({'email': email, 'nonce': nonce}, salt=MAGIC_LINK_SALT)
+        link = f"{_safe_redirect_base(request)}/auth/magic?token={token}"
+
+        try:
+            from apps.orders.email_service import send_templated_email
+            sent = send_templated_email(
+                'magic_link', user.home_region if hasattr(user, 'home_region') else None,
+                email, {'magic_link': link, 'customer_name': user.first_name or 'there'},
+                audit_target_type='User', audit_target_id=str(user.id),
+            )
+        except Exception:
+            sent = False
+        if not sent:
+            # No template configured / send failed — fall back to a plain email.
+            try:
+                from django.core.mail import send_mail
+                from django.conf import settings
+                send_mail(
+                    'Your Sclero Proteins sign-in link',
+                    f'Click to sign in (valid 15 minutes):\n\n{link}\n\nIf you didn\'t request this, ignore this email.',
+                    getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@scleroproteins.co.uk'),
+                    [email], fail_silently=True,
+                )
+            except Exception:
+                pass
+        print(f"--> [MAGIC LINK SANDBOX] {email}: {link}")
+
+        return Response({
+            "message": "Check your email for a sign-in link.",
+            "magic_link_for_sandbox": link,  # dev convenience, mirrors the OTP flow
+        })
+
+
+class MagicLinkVerifyView(APIView):
+    """Exchange a magic-link token for JWT tokens."""
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        from django.core import signing
+        token = request.data.get('token') or ''
+        try:
+            data = signing.loads(token, salt=MAGIC_LINK_SALT, max_age=MAGIC_LINK_MAX_AGE)
+        except signing.SignatureExpired:
+            return Response({"error": "This sign-in link has expired. Please request a new one."}, status=status.HTTP_400_BAD_REQUEST)
+        except signing.BadSignature:
+            return Response({"error": "Invalid sign-in link."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = User.objects.get(email=data.get('email'))
+        except User.DoesNotExist:
+            return Response({"error": "Invalid sign-in link."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if user.otp_secret != f"magic:{data.get('nonce')}":
+            return Response({"error": "This link has already been used. Please request a new one."}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.otp_secret = ""  # single use
+        user.save(update_fields=['otp_secret'])
+
+        try:
+            from apps.audit.recorder import record_audit
+            record_audit('login.success', actor=user, summary=f'Magic-link login: {user.email}')
+        except Exception:
+            pass
+
+        return Response({
+            "user": UserSerializer(user).data,
+            "tokens": get_tokens_for_user(user),
+            "message": "Signed in successfully.",
+        })
+
+
 class RoleViewSet(viewsets.ModelViewSet):
     """Manage staff roles (RBAC). Gated by 'rbac.manage' when RBAC is enforced."""
     queryset = Role.objects.all().order_by('name')
