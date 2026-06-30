@@ -4,6 +4,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
+from sclero_backend.health import live, ready
 
 from apps.regions.views import (
     RegionViewSet, detect_region, geo_detect,
@@ -14,7 +15,7 @@ from apps.regions.views import (
 from apps.products.views import (
     ProductViewSet, ProductReviewAdminViewSet,
     ProductAdminViewSet, CategoryAdminViewSet, ProductMediaAdminViewSet,
-    ProductLandingPageViewSet, BundleAdminViewSet,
+    ProductLandingPageViewSet, BundleAdminViewSet, MediaUploadView,
 )
 from apps.users.views import (
     RegisterView, UserProfileView, UserAddressViewSet, UserErasureRequestView,
@@ -38,6 +39,7 @@ from apps.admin_dashboard.views import (
     FeatureToggleViewSet, SystemSettingViewSet, HeroBannerSlideViewSet, PaymentGatewayViewSet, EmailTemplateViewSet,
     MarketingIntegrationViewSet, ContentPageViewSet, BlogPostViewSet, ReportAnalyticsView,
     ApprovalRequestViewSet, PublishedContentPageListView, PublishedContentPageDetailView,
+    PublishedBlogPostListView, PublishedBlogPostDetailView, PublicSiteSettingView,
     StoreConfigView, TaxSettingsAdminView,
 )
 from apps.audit.views import AuditLogViewSet
@@ -94,6 +96,8 @@ router.register(r'admin/coupons', CouponAdminViewSet, basename='admin-coupon')
 router.register(r'admin/risk-assessments', RiskAssessmentAdminViewSet, basename='admin-risk-assessment')
 
 urlpatterns = [
+    path('api/health/live/', live, name='health_live'),
+    path('api/health/ready/', ready, name='health_ready'),
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
     path('api/', include('apps.analytics.urls')),
@@ -105,6 +109,7 @@ urlpatterns = [
     path('api/admin/tax-settings/', TaxSettingsAdminView.as_view(), name='admin_tax_settings'),
     path('api/newsletter/subscribe/', NewsletterSubscribeView.as_view(), name='newsletter_subscribe'),
     path('api/wishlists/shared/<str:share_token>/', PublicWishlistView.as_view(), name='shared-wishlist'),
+    path('api/admin/upload-media/', MediaUploadView.as_view(), name='admin_upload_media'),
     
     # Custom Reports & Analytics
     path('api/admin/reports/analytics/', ReportAnalyticsView.as_view(), name='admin-analytics'),
@@ -148,6 +153,9 @@ urlpatterns = [
     # Public CMS endpoints
     path('api/content-pages/published-slugs/', PublishedContentPageListView.as_view(), name='public_content_pages_slugs'),
     path('api/content-pages/<slug:slug>/', PublishedContentPageDetailView.as_view(), name='public_content_page_detail'),
+    path('api/blog-posts/', PublishedBlogPostListView.as_view(), name='public_blog_posts'),
+    path('api/blog-posts/<slug:slug>/', PublishedBlogPostDetailView.as_view(), name='public_blog_post_detail'),
+    path('api/site-settings/<str:key>/', PublicSiteSettingView.as_view(), name='public_site_setting'),
 ]
 
 # Serve media files in development

@@ -1,15 +1,16 @@
-django>=5.0,<6.0
-djangorestframework>=3.15,<4.0
-djangorestframework-simplejwt>=5.3.0
-django-cors-headers>=4.3.0
-psycopg2-binary>=2.9.9
-python-dotenv>=1.0.1
-# Production WSGI server + static file serving
-gunicorn>=22.0.0
-whitenoise>=6.7.0
-reportlab>=4.1.0
-requests>=2.31.0
-pyotp>=2.9.0
-qrcode[pil]>=7.4.2
-# Optional — only used when MAXMIND_DB_PATH is set (see apps/regions/geo.py)
-geoip2>=4.7.0
+# Direct production dependencies are pinned for repeatable image builds.
+# Refresh deliberately, then run `python -m pip_audit -r requirements.txt`.
+Django==5.2.15
+djangorestframework==3.17.1
+djangorestframework-simplejwt==5.5.1
+django-cors-headers==4.9.0
+psycopg2-binary==2.9.12
+python-dotenv==1.2.2
+gunicorn==26.0.0
+whitenoise==6.12.0
+reportlab==4.5.1
+requests==2.34.2
+pyotp==2.10.0
+qrcode[pil]==8.2
+geoip2==5.2.0
+sentry-sdk==2.63.0

@@ -1,5 +1,7 @@
 import os
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
 from apps.regions.models import Region, Warehouse
 from apps.products.models import Product, ProductRegionConfig, ProductMedia, ProductReview
@@ -27,6 +29,10 @@ class Command(BaseCommand):
                     ))
                     return
                 pw = 'AdminPass123!'
+            try:
+                validate_password(pw)
+            except ValidationError as exc:
+                raise CommandError(f"SEED_SUPERUSER_PASSWORD is not strong enough: {'; '.join(exc.messages)}")
             User.objects.create_superuser(
                 email='admin@scleroproteins.co.uk',
                 password=pw,

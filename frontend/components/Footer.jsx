@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSelector } from 'react-redux';
 import {
@@ -10,6 +10,10 @@ import {
 import Logo from './Logo';
 import { getApiUrl } from '../lib/api';
 
+const COMPANY_REGISTRATION_NUMBER =
+  process.env.NEXT_PUBLIC_COMPANY_REGISTRATION_NUMBER || '';
+const INDIA_GSTIN = process.env.NEXT_PUBLIC_IN_GSTIN || '';
+
 // Region-aware copy so the UK store never shows a £ message to an India shopper.
 const REGION_COPY = {
   IN: {
@@ -18,7 +22,7 @@ const REGION_COPY = {
     email: 'support@scleroproteins.in',
     phone: '+91 80 4710 0000',
     phoneHref: 'tel:+918047100000',
-    address: 'Sclero Proteins India · Bengaluru, Karnataka',
+    address: '',
   },
   UK: {
     freeShip: 'Free UK shipping over £50',
@@ -26,7 +30,9 @@ const REGION_COPY = {
     email: 'support@scleroproteins.co.uk',
     phone: '+44 (0)20 4574 0000',
     phoneHref: 'tel:+442045740000',
-    address: 'Registered in England & Wales · Company No. 14722854',
+    address: COMPANY_REGISTRATION_NUMBER
+      ? `Registered in England & Wales · Company No. ${COMPANY_REGISTRATION_NUMBER}`
+      : '',
   },
 };
 
@@ -36,6 +42,16 @@ export default function Footer() {
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState('idle'); // idle | pending | success | error
   const [errorMsg, setErrorMsg] = useState('');
+  const [footerSettings, setFooterSettings] = useState(null);
+
+  useEffect(() => {
+    fetch(getApiUrl('/api/site-settings/FOOTER_SETTINGS/'))
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.value && typeof data.value === 'object') setFooterSettings(data.value);
+      })
+      .catch(() => {});
+  }, []);
 
   const handleSubscribe = async (e) => {
     e.preventDefault();
@@ -96,6 +112,17 @@ export default function Footer() {
     { name: 'GDPR data export', href: '/account' },
   ];
 
+  const fromCmsLinks = (items, fallback) => {
+    if (!Array.isArray(items) || items.length === 0) return fallback;
+    return items
+      .filter((item) => item?.label && item?.url)
+      .map((item) => ({ name: item.label, href: item.url }));
+  };
+  const effectiveShopLinks = fromCmsLinks(footerSettings?.shop, shopLinks);
+  const effectiveCompanyLinks = fromCmsLinks(footerSettings?.company, companyLinks);
+  const effectiveCareLinks = fromCmsLinks(footerSettings?.support, careLinks);
+  const effectiveLegalLinks = fromCmsLinks(footerSettings?.legal, legalLinks);
+
   const trustBadges = [
     { icon: Truck, label: copy.freeShip },
     { icon: Award, label: 'GMP-certified manufacture' },
@@ -116,7 +143,7 @@ export default function Footer() {
       <ul className="space-y-2 text-[13px] text-white/70">
         {links.map((l) => (
           <li key={l.name}>
-            <Link href={l.href} className="transition-colors hover:text-brand-orange">{l.name}</Link>
+            <Link href={l.href} className="transition-all duration-200 hover:text-brand-orange hover:translate-x-1 inline-block transform">{l.name}</Link>
           </li>
         ))}
       </ul>
@@ -142,9 +169,9 @@ export default function Footer() {
 
       {/* Main grid: brand/contact block + link columns */}
       <div className="container-page py-12">
-        <div className="grid grid-cols-1 gap-10 lg:grid-cols-12">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-10 lg:grid-cols-12">
           {/* Brand + contact */}
-          <div className="space-y-5 lg:col-span-4">
+          <div className="space-y-5 sm:col-span-2 lg:col-span-4">
             <Link href="/" className="flex items-center gap-2">
               <Logo className="h-9 w-9" />
               <span className="text-lg font-black tracking-tight text-white">
@@ -166,10 +193,12 @@ export default function Footer() {
                   <Phone className="h-4 w-4 shrink-0 text-brand-orange" /> {copy.phone}
                 </a>
               </li>
-              <li className="flex items-start gap-2.5">
-                <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-brand-orange" />
-                <span className="text-white/70">{copy.address}</span>
-              </li>
+              {copy.address && (
+                <li className="flex items-start gap-2.5">
+                  <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-brand-orange" />
+                  <span className="text-white/70">{copy.address}</span>
+                </li>
+              )}
             </ul>
             {/* Socials */}
             <div className="flex items-center gap-3 pt-1">
@@ -186,10 +215,10 @@ export default function Footer() {
           </div>
 
           {/* Link columns */}
-          <div className="lg:col-span-2"><LinkColumn title="Shop" links={shopLinks} /></div>
-          <div className="lg:col-span-2"><LinkColumn title="Customer care" links={careLinks} /></div>
-          <div className="lg:col-span-2"><LinkColumn title="Company" links={companyLinks} /></div>
-          <div className="lg:col-span-2"><LinkColumn title="Legal" links={legalLinks} /></div>
+          <div className="sm:col-span-1 lg:col-span-2"><LinkColumn title="Shop" links={effectiveShopLinks} /></div>
+          <div className="sm:col-span-1 lg:col-span-2"><LinkColumn title="Customer care" links={effectiveCareLinks} /></div>
+          <div className="sm:col-span-1 lg:col-span-2"><LinkColumn title="Company" links={effectiveCompanyLinks} /></div>
+          <div className="sm:col-span-1 lg:col-span-2"><LinkColumn title="Legal" links={effectiveLegalLinks} /></div>
         </div>
       </div>
 
@@ -250,7 +279,16 @@ export default function Footer() {
             <Logo className="h-7 w-7" />
             <div className="text-[11px] leading-relaxed text-white/60">
               <p>© 2026 Sclero Proteins Ltd. All rights reserved.</p>
-              <p>Registered in England &amp; Wales 14722854 · GSTIN 24AFXFS9162D1ZG</p>
+              {(COMPANY_REGISTRATION_NUMBER || INDIA_GSTIN) && (
+                <p>
+                  {COMPANY_REGISTRATION_NUMBER
+                    ? `Registered in England & Wales ${COMPANY_REGISTRATION_NUMBER}`
+                    : ''}
+                  {COMPANY_REGISTRATION_NUMBER && INDIA_GSTIN ? ' · ' : ''}
+                  {INDIA_GSTIN ? `GSTIN ${INDIA_GSTIN}` : ''}
+                </p>
+              )}
+              <p>Designed by MSProject.in</p>
             </div>
           </div>
 

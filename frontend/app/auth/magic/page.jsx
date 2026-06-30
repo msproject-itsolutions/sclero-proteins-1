@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { useDispatch } from 'react-redux';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -8,7 +8,7 @@ import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import StoreShell from '../../../components/StoreShell';
 import { verifyMagicLink, fetchProfile } from '../../../store/authSlice';
 
-export default function MagicLinkPage() {
+function MagicLinkContent() {
   const dispatch = useDispatch();
   const router = useRouter();
   const params = useSearchParams();
@@ -36,33 +36,46 @@ export default function MagicLinkPage() {
   }, [dispatch, params, router]);
 
   return (
+    <div className="mx-auto flex min-h-[60vh] max-w-md flex-col items-center justify-center px-4 text-center">
+      {status === 'verifying' && (
+        <>
+          <Loader2 className="mb-4 h-10 w-10 animate-spin text-brand-purple" />
+          <h1 className="text-xl font-black text-brand-navy">Signing you in…</h1>
+          <p className="mt-1 text-sm text-brand-muted">Verifying your magic link.</p>
+        </>
+      )}
+      {status === 'success' && (
+        <>
+          <CheckCircle2 className="mb-4 h-10 w-10 text-brand-success" />
+          <h1 className="text-xl font-black text-brand-navy">You're in!</h1>
+          <p className="mt-1 text-sm text-brand-muted">Taking you to your account…</p>
+        </>
+      )}
+      {status === 'error' && (
+        <>
+          <AlertCircle className="mb-4 h-10 w-10 text-brand-danger" />
+          <h1 className="text-xl font-black text-brand-navy">Link not valid</h1>
+          <p className="mt-1 text-sm text-brand-muted">{message}</p>
+          <Link href="/account" className="btn-primary mt-5 px-5 py-2.5 text-xs uppercase tracking-wider">
+            Back to sign in
+          </Link>
+        </>
+      )}
+    </div>
+  );
+}
+
+export default function MagicLinkPage() {
+  return (
     <StoreShell showFooter={false}>
-      <div className="mx-auto flex min-h-[60vh] max-w-md flex-col items-center justify-center px-4 text-center">
-        {status === 'verifying' && (
-          <>
-            <Loader2 className="mb-4 h-10 w-10 animate-spin text-brand-purple" />
-            <h1 className="text-xl font-black text-brand-navy">Signing you in…</h1>
-            <p className="mt-1 text-sm text-brand-muted">Verifying your magic link.</p>
-          </>
-        )}
-        {status === 'success' && (
-          <>
-            <CheckCircle2 className="mb-4 h-10 w-10 text-brand-success" />
-            <h1 className="text-xl font-black text-brand-navy">You're in!</h1>
-            <p className="mt-1 text-sm text-brand-muted">Taking you to your account…</p>
-          </>
-        )}
-        {status === 'error' && (
-          <>
-            <AlertCircle className="mb-4 h-10 w-10 text-brand-danger" />
-            <h1 className="text-xl font-black text-brand-navy">Link not valid</h1>
-            <p className="mt-1 text-sm text-brand-muted">{message}</p>
-            <Link href="/account" className="btn-primary mt-5 px-5 py-2.5 text-xs uppercase tracking-wider">
-              Back to sign in
-            </Link>
-          </>
-        )}
-      </div>
+      <Suspense fallback={
+        <div className="mx-auto flex min-h-[60vh] max-w-md flex-col items-center justify-center px-4 text-center">
+          <Loader2 className="mb-4 h-10 w-10 animate-spin text-brand-purple" />
+          <h1 className="text-xl font-black text-brand-navy">Loading…</h1>
+        </div>
+      }>
+        <MagicLinkContent />
+      </Suspense>
     </StoreShell>
   );
 }

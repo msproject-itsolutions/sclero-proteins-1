@@ -1,6 +1,7 @@
 import os
 import random
 from django.core.management.base import BaseCommand
+from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from decimal import Decimal
@@ -75,6 +76,7 @@ class Command(BaseCommand):
                             'Refusing to seed staff accounts with a publicly-known default in production.'
                         )
                     pw = 'ScleroStaff2026!'  # dev-only fallback
+                validate_password(pw, user=user)
                 user.set_password(pw)
             user.save()
             

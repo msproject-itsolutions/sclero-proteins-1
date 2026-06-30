@@ -6,11 +6,12 @@ export const metadata = {
   description: 'Read supplement science and formulation insights from Sclero Proteins.',
 };
 
-export default function BlogArticlePage({ params }) {
+export default async function BlogArticlePage({ params }) {
+  const { slug } = await params;
   return (
     <StoreShell>
       <main className="px-4 py-14 sm:px-6 lg:px-8">
-        <BlogArticle slug={params.slug} />
+        <BlogArticle slug={slug} />
       </main>
     </StoreShell>
   );

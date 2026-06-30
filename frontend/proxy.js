@@ -35,7 +35,7 @@ function regionalRedirect(request, targetHost, { setRegion } = {}) {
   return res;
 }
 
-export function middleware(request) {
+export function proxy(request) {
   const host = normalizeHost(request.headers.get('host') || '');
 
   // Localhost / preview / unknown hosts: never redirect. The in-page region

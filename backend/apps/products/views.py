@@ -1,4 +1,8 @@
+from pathlib import Path
+from uuid import uuid4
+
 from rest_framework import viewsets, status
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
@@ -21,6 +25,10 @@ from .serializers import (
 class ProductViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Product.objects.filter(is_active=True, is_archived=False)
     lookup_field = 'sku'
+    permission_classes = [AllowAny]
+    # DRF action kwargs must correspond to attributes on the viewset. Keeping
+    # the default unset lets only the review action opt into the review scope.
+    throttle_scope = None
 
     def get_region(self):
         region_code = self.request.query_params.get('region', '').upper()
@@ -200,7 +208,7 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         ser = ProductDetailSerializer(related, many=True, context={'region': region})
         return Response(ser.data)
 
-    @action(detail=True, methods=['post'], permission_classes=[AllowAny])
+    @action(detail=True, methods=['post'], permission_classes=[AllowAny], throttle_scope='review')
     def reviews(self, request, sku=None):
         product = self.get_object()
         serializer = ProductReviewSerializer(data=request.data)
@@ -265,6 +273,12 @@ class ProductReviewAdminViewSet(viewsets.ModelViewSet):
 
 # --- Admin ViewSets for Regional CRUD Operations --- #
 
+class AdminDashboardPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
 class ProductAdminViewSet(viewsets.ModelViewSet):
     """
     Admin CRUD operations for products with regional configurations.
@@ -273,6 +287,7 @@ class ProductAdminViewSet(viewsets.ModelViewSet):
     """
     permission_classes = [require_permission('products.manage')]
     lookup_field = 'sku'
+    pagination_class = AdminDashboardPagination
 
     def get_queryset(self):
         queryset = Product.objects.all()
@@ -287,6 +302,35 @@ class ProductAdminViewSet(viewsets.ModelViewSet):
         region_code = self.request.query_params.get('region')
         if region_code:
             queryset = queryset.filter(regional_configs__region__code=region_code.upper()).distinct()
+
+        # Advanced Search parameters
+        search_query = self.request.query_params.get('search')
+        if search_query:
+            search_query = search_query.strip()
+            queryset = queryset.filter(
+                Q(name__icontains=search_query) |
+                Q(sku__icontains=search_query) |
+                Q(description__icontains=search_query)
+            ).distinct()
+
+        # Category Filter
+        category_id = self.request.query_params.get('category')
+        if category_id:
+            queryset = queryset.filter(categories__id=category_id).distinct()
+
+        # Sort Ordering parameter
+        ordering = self.request.query_params.get('ordering')
+        if ordering == 'sku':
+            queryset = queryset.order_by('sku')
+        elif ordering == '-sku':
+            queryset = queryset.order_by('-sku')
+        elif ordering == 'name':
+            queryset = queryset.order_by('name')
+        elif ordering == '-name':
+            queryset = queryset.order_by('-name')
+        else:
+            queryset = queryset.order_by('-id')
+
         # regional_configs is a reverse FK → prefetch (not select_related).
         return queryset.prefetch_related(
             'regional_configs__region', 'media', 'categories', 'reviews'
@@ -398,3 +442,56 @@ class BundleAdminViewSet(viewsets.ModelViewSet):
         if self.action in ['create', 'update', 'partial_update']:
             return BundleAdminCreateUpdateSerializer
         return BundleAdminSerializer
+
+
+from rest_framework.views import APIView
+from rest_framework.parsers import MultiPartParser, FormParser
+from django.core.files.storage import default_storage
+
+class MediaUploadView(APIView):
+    """
+    API endpoint for direct device file uploads (Images/Videos).
+    Requires 'products.manage' permission.
+    """
+    parser_classes = [MultiPartParser, FormParser]
+    permission_classes = [require_permission('products.manage')]
+    throttle_scope = 'media_upload'
+
+    MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+    ALLOWED_UPLOADS = {
+        '.jpg': {'image/jpeg'},
+        '.jpeg': {'image/jpeg'},
+        '.png': {'image/png'},
+        '.webp': {'image/webp'},
+        '.gif': {'image/gif'},
+        '.mp4': {'video/mp4'},
+        '.mov': {'video/quicktime'},
+        '.pdf': {'application/pdf'},
+    }
+
+    def post(self, request, *args, **kwargs):
+        uploaded_file = request.FILES.get('file')
+        if not uploaded_file:
+            return Response({"error": "No file uploaded"}, status=status.HTTP_400_BAD_REQUEST)
+        if uploaded_file.size > self.MAX_UPLOAD_BYTES:
+            return Response({"error": "File must be 25 MB or smaller."}, status=status.HTTP_400_BAD_REQUEST)
+
+        ext = Path(uploaded_file.name).suffix.lower()
+        content_type = (getattr(uploaded_file, 'content_type', '') or '').lower()
+        if ext not in self.ALLOWED_UPLOADS or content_type not in self.ALLOWED_UPLOADS[ext]:
+            return Response(
+                {"error": "Unsupported file type. Upload JPG, PNG, WebP, GIF, MP4, MOV, or PDF files only."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Use a server-generated object name so attacker supplied filenames
+        # cannot influence storage paths or response URLs.
+        name = default_storage.save(f'uploads/{uuid4().hex}{ext}', uploaded_file)
+        file_url = default_storage.url(name)
+
+        # Prefix with request host if not absolute
+        if not file_url.startswith('http'):
+            request_host = request.build_absolute_uri('/')[:-1]
+            file_url = f"{request_host}{file_url}"
+
+        return Response({"file_url": file_url}, status=status.HTTP_201_CREATED)

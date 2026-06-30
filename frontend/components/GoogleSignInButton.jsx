@@ -28,7 +28,7 @@ function decodeJwt(token) {
  * NEXT_PUBLIC_GOOGLE_CLIENT_ID is configured. Until then it renders nothing, so
  * the login UI never shows an unavailable provider.
  */
-export default function GoogleSignInButton({ onError }) {
+export default function GoogleSignInButton({ onError, text = 'continue_with' }) {
   const dispatch = useDispatch();
   const containerRef = useRef(null);
   const onErrorRef = useRef(onError);
@@ -46,6 +46,7 @@ export default function GoogleSignInButton({ onError }) {
       }
       dispatch(
         googleLogin({
+          credential: response?.credential || '',
           email: profile.email,
           googleId: profile.sub,
           firstName: profile.given_name || '',
@@ -69,7 +70,7 @@ export default function GoogleSignInButton({ onError }) {
         theme: 'outline',
         size: 'large',
         width: 320,
-        text: 'continue_with',
+        text,
         shape: 'pill',
       });
     };
@@ -88,7 +89,7 @@ export default function GoogleSignInButton({ onError }) {
       document.body.appendChild(script);
     }
     // dispatch is stable (react-redux); onError is read via ref — so this runs once.
-  }, [dispatch]);
+  }, [dispatch, text]);
 
   if (!CLIENT_ID) return null;
 

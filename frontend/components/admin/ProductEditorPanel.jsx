@@ -10,14 +10,6 @@ import {
 } from 'lucide-react';
 
 /* ─── Utility helpers ───────────────────────────────────────────────────── */
-function fileToDataURL(file) {
-  return new Promise((res, rej) => {
-    const reader = new FileReader();
-    reader.onload = (e) => res(e.target.result);
-    reader.onerror = rej;
-    reader.readAsDataURL(file);
-  });
-}
 function getYouTubeId(url) {
   const m = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/))([^&?/\s]{11})/);
   return m ? m[1] : null;
@@ -54,25 +46,43 @@ const TABS = [
 ];
 
 /* ─── MEDIA EDITOR ──────────────────────────────────────────────────────── */
-function MediaEditor({ media, onChange }) {
+function MediaEditor({ media, onChange, authFetch }) {
   const [urlInput, setUrlInput] = useState('');
   const [urlType, setUrlType] = useState('IMAGE');
   const [dragOver, setDragOver] = useState(false);
   const [dragIdx, setDragIdx] = useState(null);
+  const [uploading, setUploading] = useState(false);
   const fileRef = useRef();
 
   const addMedia = (items) => onChange([...media, ...items]);
   const removeMedia = (i) => onChange(media.filter((_, x) => x !== i));
   const updateMedia = (i, patch) => { const m = [...media]; m[i] = { ...m[i], ...patch }; onChange(m); };
 
+  const uploadDeviceFile = async (file) => {
+    if (!authFetch) throw new Error('Upload service is not available.');
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await authFetch('/api/admin/upload-media/', { method: 'POST', body: formData });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.file_url) throw new Error(data.error || 'Upload failed.');
+    return data.file_url;
+  };
+
   const handleFiles = async (files) => {
+    setUploading(true);
     const items = [];
-    for (const f of Array.from(files)) {
-      const preview = await fileToDataURL(f);
-      const type = f.type.startsWith('video') ? 'VIDEO' : 'IMAGE';
-      items.push({ media_type: type, file_url: preview, _preview: preview, _fileName: f.name });
+    try {
+      for (const f of Array.from(files)) {
+        const fileUrl = await uploadDeviceFile(f);
+        const type = f.type.startsWith('video') ? 'VIDEO' : 'IMAGE';
+        items.push({ media_type: type, file_url: fileUrl, _fileName: f.name });
+      }
+      addMedia(items);
+    } catch (err) {
+      alert(err.message || 'Media upload failed.');
+    } finally {
+      setUploading(false);
     }
-    addMedia(items);
   };
 
   const handleDropZone = (e) => {
@@ -125,10 +135,11 @@ function MediaEditor({ media, onChange }) {
           <Upload className="h-6 w-6 text-violet-600" />
         </div>
         <div className="text-center">
-          <p className="text-sm font-semibold text-slate-700">Drop files here or click to upload</p>
+          <p className="text-sm font-semibold text-slate-700">{uploading ? 'Uploading files...' : 'Drop files here or click to upload'}</p>
           <p className="mt-0.5 text-xs text-slate-400">Supports JPG, PNG, GIF, MP4, WebM</p>
         </div>
         <input ref={fileRef} type="file" multiple accept="image/*,video/*" className="hidden"
+          disabled={uploading}
           onChange={(e) => handleFiles(e.target.files)} />
       </div>
 
@@ -202,9 +213,13 @@ function MediaEditor({ media, onChange }) {
                       <input type="file" accept="image/*,video/*" className="hidden"
                         onChange={async (e) => {
                           const f = e.target.files[0]; if (!f) return;
-                          const preview = await fileToDataURL(f);
-                          const type = f.type.startsWith('video') ? 'VIDEO' : 'IMAGE';
-                          updateMedia(i, { media_type: type, file_url: preview, _preview: preview, _fileName: f.name });
+                          try {
+                            const fileUrl = await uploadDeviceFile(f);
+                            const type = f.type.startsWith('video') ? 'VIDEO' : 'IMAGE';
+                            updateMedia(i, { media_type: type, file_url: fileUrl, _preview: '', _fileName: f.name });
+                          } catch (err) {
+                            alert(err.message || 'Media upload failed.');
+                          }
                         }} />
                     </label>
                     <button onClick={() => removeMedia(i)} type="button" title="Remove"
@@ -669,7 +684,7 @@ function AttributesEditor({ editing, onChange }) {
 }
 
 /* ─── MAIN EDITOR PANEL ─────────────────────────────────────────────────── */
-export default function ProductEditorPanel({ editing, onChange, onClose, onSave, saving, err, regions, categories }) {
+export default function ProductEditorPanel({ editing, onChange, onClose, onSave, saving, err, regions, categories, authFetch }) {
   const [activeTab, setActiveTab] = useState('general');
   const isNew = !editing.id;
   const productType = toText(editing.product_type) || 'Simple';
@@ -693,7 +708,7 @@ export default function ProductEditorPanel({ editing, onChange, onClose, onSave,
   };
 
   return (
-    <div className="fixed inset-y-0 right-0 left-0 md:left-[280px] lg:left-[288px] top-0 md:top-[65px] z-30 bg-slate-50 overflow-hidden flex flex-col">
+    <div className="bg-slate-50 overflow-hidden flex flex-col h-[calc(100vh-140px)] rounded-2xl border border-slate-200 shadow-sm">
       {/* Top bar */}
       <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 sm:px-6 flex-shrink-0">
         <div className="flex items-center gap-3">
@@ -831,7 +846,7 @@ export default function ProductEditorPanel({ editing, onChange, onClose, onSave,
                 <p className="text-sm font-bold text-slate-800">Product Media</p>
                 <p className="text-xs text-slate-400 mt-0.5">Upload images/videos or add URLs. Drag to reorder. First item is the cover.</p>
               </div>
-              <MediaEditor media={editing._media || []} onChange={setMedia} />
+              <MediaEditor media={editing._media || []} onChange={setMedia} authFetch={authFetch} />
             </div>
           )}
 

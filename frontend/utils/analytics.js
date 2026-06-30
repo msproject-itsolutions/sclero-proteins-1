@@ -3,6 +3,12 @@
  * Manages tracking events for Google Analytics 4, GTM, Meta Pixel, and TikTok Pixel.
  */
 
+const isValidId = (id) => {
+  if (!id) return false;
+  const s = String(id).trim().toLowerCase();
+  return s !== '' && s !== 'null' && s !== 'undefined' && !s.includes('mock') && !s.includes('todo');
+};
+
 export const initTrackingScripts = (settings = {}, consent = {}) => {
   if (typeof window === 'undefined') return;
 
@@ -12,7 +18,7 @@ export const initTrackingScripts = (settings = {}, consent = {}) => {
   const allowMarketing = Boolean(consent.marketing);
 
   // 1. Google Tag Manager / GA4
-  if (allowAnalytics && settings.google_analytics_id) {
+  if (allowAnalytics && isValidId(settings.google_analytics_id)) {
     const gaScript = document.createElement('script');
     gaScript.async = true;
     gaScript.src = `https://www.googletagmanager.com/gtag/js?id=${settings.google_analytics_id}`;
@@ -26,7 +32,7 @@ export const initTrackingScripts = (settings = {}, consent = {}) => {
   }
 
   // 2. Meta Pixel (Facebook)
-  if (allowMarketing && settings.meta_pixel_id) {
+  if (allowMarketing && isValidId(settings.meta_pixel_id)) {
     /* eslint-disable */
     !(function (f, b, e, v, n, t, s) {
       if (f.fbq) return;
@@ -50,7 +56,7 @@ export const initTrackingScripts = (settings = {}, consent = {}) => {
   }
 
   // 3. TikTok Pixel
-  if (allowMarketing && settings.tiktok_pixel_id) {
+  if (allowMarketing && isValidId(settings.tiktok_pixel_id)) {
     !(function (w, d, t) {
       w.TiktokAnalyticsObject = t;
       var ttq = (w[t] = w[t] || []);

@@ -5,7 +5,6 @@ import Navbar from './Navbar';
 import Footer from './Footer';
 import CartDrawer from './CartDrawer';
 import CheckoutModal from './CheckoutModal';
-import AdminDashboardModal from './AdminDashboardModal';
 import CookieConsent from './CookieConsent';
 import PromoBanner from './PromoBanner';
 import useStoreBootstrap from '../hooks/useStoreBootstrap';
@@ -37,7 +36,7 @@ export default function StoreShell({ children, showFooter = true, cartOpenSignal
       <PromoBanner />
       <Navbar
         onOpenCart={() => setCartOpen(true)}
-        onOpenAdmin={() => setAdminOpen(true)}
+        onOpenAdmin={() => { window.location.href = '/admin?section=audit'; }}
       />
       <main id="main-content" tabIndex={-1} className="flex-1 focus:outline-none">
         {children}
@@ -58,7 +57,7 @@ export default function StoreShell({ children, showFooter = true, cartOpenSignal
 
       {checkoutOpen && <CheckoutModal onClose={() => setCheckoutOpen(false)} />}
 
-      {adminOpen && <AdminDashboardModal onClose={() => setAdminOpen(false)} />}
+
 
       <CookieConsent />
     </div>
@@ -68,7 +67,6 @@ export default function StoreShell({ children, showFooter = true, cartOpenSignal
 export function useStoreModals() {
   const [cartOpen, setCartOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
-  const [adminOpen, setAdminOpen] = useState(false);
   const currentRegion = useSelector((state) => state.region.currentRegion);
 
   const modals = (
@@ -85,7 +83,6 @@ export function useStoreModals() {
         />
       )}
       {checkoutOpen && <CheckoutModal onClose={() => setCheckoutOpen(false)} />}
-      {adminOpen && <AdminDashboardModal onClose={() => setAdminOpen(false)} />}
     </>
   );
 
@@ -94,8 +91,8 @@ export function useStoreModals() {
     setCartOpen,
     checkoutOpen,
     setCheckoutOpen,
-    adminOpen,
-    setAdminOpen,
+    adminOpen: false,
+    setAdminOpen: () => { window.location.href = '/admin?section=audit'; },
     modals,
   };
 }

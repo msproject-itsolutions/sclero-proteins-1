@@ -1,10 +1,17 @@
 from rest_framework import viewsets
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.users.permissions import require_permission
 from .models import AuditLog
 from .serializers import AuditLogSerializer
+
+
+class AdminDashboardPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 100
 
 
 class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
@@ -14,6 +21,7 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     """
     serializer_class = AuditLogSerializer
     permission_classes = [require_permission('audit.view')]
+    pagination_class = AdminDashboardPagination
 
     def get_queryset(self):
         qs = AuditLog.objects.select_related('actor').all()
@@ -28,7 +36,7 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
             qs = qs.filter(target_id=str(p['target_id']))
         if p.get('search'):
             qs = qs.filter(summary__icontains=p['search'])
-        return qs[:500]
+        return qs
 
     @action(detail=False, methods=['get'])
     def actions(self, request):

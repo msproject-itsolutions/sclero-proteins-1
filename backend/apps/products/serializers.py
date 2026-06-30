@@ -13,7 +13,7 @@ class CategorySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Category
-        fields = ['id', 'name', 'slug', 'description', 'display_order', 'product_count']
+        fields = ['id', 'name', 'slug', 'description', 'display_order', 'product_count', 'image_url']
 
 
 class ProductMediaSerializer(serializers.ModelSerializer):

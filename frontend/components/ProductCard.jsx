@@ -5,6 +5,8 @@ import {
   Leaf, Wheat, MilkOff, Candy, Beef, ShieldCheck, FlaskConical, Sprout
 } from 'lucide-react';
 import { CompactTrustBadges } from './TrustBadges';
+import { getApiUrl } from '../lib/api';
+import { authenticatedFetch } from '../lib/authFetch';
 
 // Slug -> label + icon
 const DIETARY_TAG_MAP = {
@@ -64,7 +66,11 @@ export default function ProductCard({
   variant = 'standard', // 'standard' | 'compact' | 'featured'
 }) {
   const { currencySymbol, currentRegion, taxMode } = useSelector((state) => state.region);
+  const accessToken = useSelector((state) => state.auth?.access);
   const [isWishlisted, setIsWishlisted] = React.useState(false);
+  const [wishlistItemId, setWishlistItemId] = React.useState(null);
+  const [wishlistLoading, setWishlistLoading] = React.useState(false);
+
   const taxLabel = currentRegion === 'IN' ? 'GST' : 'VAT';
   const taxNote = taxMode === 'exclusive' ? `+ ${taxLabel} at checkout` : `inc. ${taxLabel}`;
 
@@ -80,6 +86,59 @@ export default function ProductCard({
   const discountPercent = promoPriceVal && priceVal
     ? Math.round(((priceVal - promoPriceVal) / priceVal) * 100)
     : 0;
+
+  React.useEffect(() => {
+    if (!accessToken || unavailable) return;
+    authenticatedFetch(`/api/wishlist/?region=${currentRegion}`, {}, accessToken)
+      .then((res) => res.ok ? res.json() : [])
+      .then((data) => {
+        const items = Array.isArray(data) ? data : (data.results || []);
+        const found = items.find((item) => item.product_sku === product.sku);
+        if (found) {
+          setIsWishlisted(true);
+          setWishlistItemId(found.id);
+        }
+      })
+      .catch(() => {});
+  }, [accessToken, product.sku, currentRegion, unavailable]);
+
+  const handleWishlistToggle = async (e) => {
+    e.stopPropagation();
+    if (!accessToken) {
+      window.location.href = '/account';
+      return;
+    }
+    if (wishlistLoading) return;
+    setWishlistLoading(true);
+    try {
+      if (isWishlisted && wishlistItemId) {
+        const res = await authenticatedFetch(`/api/wishlist/${wishlistItemId}/`, {
+          method: 'DELETE',
+        }, accessToken);
+        if (res.ok) {
+          setIsWishlisted(false);
+          setWishlistItemId(null);
+        }
+      } else {
+        const res = await authenticatedFetch('/api/wishlist/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ product_id: product.id, region: currentRegion })
+        }, accessToken);
+        if (res.ok) {
+          const data = await res.json();
+          setIsWishlisted(true);
+          setWishlistItemId(data.id);
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setWishlistLoading(false);
+    }
+  };
 
   if (variant === 'compact') {
     // Compact card for grid display
@@ -164,9 +223,10 @@ export default function ProductCard({
             {unavailable ? 'Unavailable here' : 'Add to cart'}
           </button>
           <button
-            onClick={() => setIsWishlisted(!isWishlisted)}
+            onClick={handleWishlistToggle}
+            disabled={wishlistLoading}
             aria-label={isWishlisted ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`}
-            className="px-3 py-2 rounded-lg border border-slate-200 hover:border-brand-purple hover:bg-brand-purple/5 transition-colors"
+            className="px-3 py-2 rounded-lg border border-slate-200 hover:border-brand-purple hover:bg-brand-purple/5 transition-colors disabled:opacity-60"
           >
             <Heart
               className={`h-4 w-4 ${isWishlisted ? 'fill-brand-purple text-brand-purple' : 'text-brand-muted'}`}

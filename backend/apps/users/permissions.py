@@ -5,13 +5,14 @@ A registry of permission KEYS. Roles (apps.users.models.Role) each hold a
 list of these keys; a user's effective permissions are the union of their roles'
 keys (superusers implicitly have all).
 
-Enforcement is OPT-IN via settings.RBAC_ENFORCED so the existing open prototype
-keeps working until the admin UI sends JWTs. When the flag is off, the permission
-classes allow everything; when on, they require an authenticated staff user whose
-roles grant the required key.
+Enforcement defaults on in every environment. An explicit local-only override
+may disable it for isolated fixture work.
 """
+import ipaddress
+
 from django.conf import settings
 from rest_framework.permissions import BasePermission
+from apps.audit.context import client_ip_from_request
 
 # --- Granular Permission Catalogue (Category-based) ------------------------- #
 PERMISSIONS = {
@@ -200,6 +201,23 @@ def user_has_permission(user, key):
         return True
     return key in get_user_permission_keys(user)
 
+
+def client_ip_is_allowed(client_ip, allowed_rules):
+    if not client_ip:
+        return False
+    try:
+        address = ipaddress.ip_address(client_ip)
+    except ValueError:
+        return False
+    for rule in allowed_rules:
+        try:
+            network = ipaddress.ip_network(rule, strict=False)
+        except ValueError:
+            continue
+        if address in network:
+            return True
+    return False
+
 # --- DRF permission classes -------------------------------------------------- #
 class HasPermission(BasePermission):
     """
@@ -219,9 +237,9 @@ class HasPermission(BasePermission):
         
         # Enforce IP restrict logic if present
         if user and user.is_authenticated and user.allowed_ip_range:
-            client_ip = request.META.get('REMOTE_ADDR')
+            client_ip = client_ip_from_request(request)
             allowed_ips = [ip.strip() for ip in user.allowed_ip_range.split(',') if ip.strip()]
-            if allowed_ips and client_ip not in allowed_ips:
+            if allowed_ips and not client_ip_is_allowed(client_ip, allowed_ips):
                 self.message = f"IP address {client_ip} is not allowed to access this profile."
                 return False
                 

@@ -132,6 +132,8 @@ def _wrap_branded_html(subject, body, raw_html_inside=False):
     responsibility) and inlined verbatim.
     """
     site_url = getattr(settings, 'SITE_URL', '') or 'https://scleroproteins.co.uk'
+    company_number = _escape(getattr(settings, 'COMPANY_REGISTRATION_NUMBER', ''))
+    gstin = _escape(getattr(settings, 'IN_GSTIN', ''))
     inner = body if raw_html_inside else (
         '<p style="margin:0 0 16px 0;font:16px/1.55 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1F2A44;">'
         + _escape(body).replace('\n\n', '</p><p style="margin:0 0 16px 0;font:16px/1.55 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1F2A44;">').replace('\n', '<br>')
@@ -163,7 +165,7 @@ def _wrap_branded_html(subject, body, raw_html_inside=False):
         <td style="background:#F9FAFC;padding:18px 28px;border-top:1px solid #E6EAF2;
                    font:12px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#6B7280;">
           <p style="margin:0 0 6px 0;">
-            Sclero Proteins Ltd · Registered in England &amp; Wales 14722854 · GSTIN 24AFXFS9162D1ZG
+            Sclero Proteins Ltd · Registered in England &amp; Wales {company_number} · GSTIN {gstin}
           </p>
           <p style="margin:0;">
             <a href="{site_url}/policies/privacy" style="color:#6E5BFF;text-decoration:none;">Privacy</a> ·

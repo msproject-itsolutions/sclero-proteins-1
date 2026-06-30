@@ -16,9 +16,13 @@ paste real keys from the admin panel later — no code change required here.
 """
 import hashlib
 import hmac
+import json
 import os
 import time
 from decimal import Decimal
+
+import requests
+from django.conf import settings
 
 from apps.admin_dashboard.models import PaymentGateway
 
@@ -27,17 +31,28 @@ class PaymentError(Exception):
     """Raised for routing/validation/charge failures. Carries an HTTP-friendly message."""
 
 
+def _sandbox_payments_allowed() -> bool:
+    return (
+        settings.DEBUG
+        or getattr(settings, 'TESTING', False)
+        or os.getenv('ALLOW_SANDBOX_PAYMENTS', 'False') == 'True'
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Adapters
 # --------------------------------------------------------------------------- #
 class BaseGatewayAdapter:
     code = None
+    supports_live = False
 
     def __init__(self, gateway):
         self.gateway = gateway  # PaymentGateway instance
 
     # --- sandbox helpers (used until live credentials + SDK are present) ----
     def _sandbox_charge(self, order, payload):
+        if not _sandbox_payments_allowed():
+            raise PaymentError('Sandbox payments are disabled outside development.')
         return {
             "status": "SUCCESS",
             "transaction_id": payload.get("payment_id")
@@ -50,6 +65,8 @@ class BaseGatewayAdapter:
         }
 
     def _sandbox_refund(self, order, amount, reason):
+        if not _sandbox_payments_allowed():
+            raise PaymentError('Sandbox refunds are disabled outside development.')
         return {
             "status": "REFUNDED",
             "refund_id": f"sandbox_refund_{self.code.lower()}_{order.id}",
@@ -73,11 +90,21 @@ class BaseGatewayAdapter:
         client-supplied payment reference (e.g. Razorpay signature, Stripe
         PaymentIntent) before returning SUCCESS. Until keys exist we sandbox.
         """
+        if self._is_live:
+            raise PaymentError(
+                f'{self.code} live capture is not implemented; disable this gateway '
+                'until a provider-backed adapter is deployed.'
+            )
         return self._sandbox_charge(order, payload)
 
     def refund(self, order, amount, reason=""):
         if not (self.gateway and self.gateway.supports_refunds):
             raise PaymentError(f"{self.code} does not support refunds.")
+        if self._is_live:
+            raise PaymentError(
+                f'{self.code} live refunds are not implemented; reconcile this '
+                'refund in the provider dashboard.'
+            )
         return self._sandbox_refund(order, amount, reason)
 
 
@@ -101,6 +128,7 @@ class PayPalAdapter(BaseGatewayAdapter):
 
 class CODAdapter(BaseGatewayAdapter):
     code = "COD"
+    supports_live = True
 
     def charge(self, order, payload):
         # No money moves now; payment is collected on delivery.
@@ -154,7 +182,27 @@ def resolve_gateway(region, code):
         raise PaymentError(
             f"Payment method '{code}' is not available for region {region.code}."
         )
-    return get_adapter(gateway)
+    adapter = get_adapter(gateway)
+    if gateway.code == 'COD':
+        return adapter
+    if gateway.mode == 'LIVE' and not adapter.supports_live:
+        raise PaymentError(
+            f"Payment method '{code}' is disabled because its live provider adapter "
+            'has not been implemented.'
+        )
+    if gateway.mode != 'LIVE' and not _sandbox_payments_allowed():
+        raise PaymentError(f"Test payment method '{code}' is disabled in production.")
+    return adapter
+
+
+def gateway_is_checkout_ready(gateway) -> bool:
+    """Return whether a gateway can safely be offered to a shopper."""
+    adapter = get_adapter(gateway)
+    if gateway.code == 'COD':
+        return True
+    if gateway.mode == 'LIVE':
+        return adapter.supports_live
+    return _sandbox_payments_allowed()
 
 
 def refund_payment(order, amount=None, reason=""):
@@ -188,17 +236,17 @@ def verify_stripe_signature(payload_bytes: bytes, sig_header: str,
     if not sig_header or not secret:
         return False
     try:
-        parts = dict(p.split('=', 1) for p in sig_header.split(',') if '=' in p)
-        ts = parts.get('t')
-        v1 = parts.get('v1')
-        if not ts or not v1:
+        parts = [p.split('=', 1) for p in sig_header.split(',') if '=' in p]
+        ts = next((value for key, value in parts if key == 't'), None)
+        signatures = [value for key, value in parts if key == 'v1']
+        if not ts or not signatures:
             return False
         if abs(time.time() - int(ts)) > tolerance:
             return False
         signed_payload = f"{ts}.{payload_bytes.decode('utf-8')}".encode('utf-8')
         computed = hmac.new(secret.encode('utf-8'), signed_payload,
                             hashlib.sha256).hexdigest()
-        return hmac.compare_digest(v1, computed)
+        return any(hmac.compare_digest(signature, computed) for signature in signatures)
     except Exception:
         return False
 
@@ -216,19 +264,54 @@ def verify_razorpay_signature(payload_bytes: bytes, sig_header: str,
         return False
 
 
-def verify_paypal_signature(headers, payload_bytes: bytes,
-                            webhook_id: str) -> bool:
-    """STUB. PayPal verification requires a server-to-server call to
-    POST /v1/notifications/verify-webhook-signature with the auth_algo /
-    cert_url / transmission_id / transmission_sig / transmission_time headers
-    plus the merchant's webhook_id.
+def verify_paypal_signature(headers, payload_bytes: bytes, webhook_id: str,
+                            client_id: str, client_secret: str,
+                            mode: str = 'LIVE') -> bool:
+    """Verify a PayPal webhook through PayPal's signature-verification API.
 
-    Gate the real verification behind PAYPAL_WEBHOOK_VERIFY=True so sandbox
-    deployments without PayPal credentials keep working.
+    Verification is fail-closed: missing headers/credentials, network errors,
+    non-2xx responses, and malformed payloads all return False.
     """
-    if os.getenv('PAYPAL_WEBHOOK_VERIFY', 'False') != 'True':
-        return True
-    # TODO: real implementation should POST to
-    # https://api.paypal.com/v1/notifications/verify-webhook-signature and
-    # return verification_status == 'SUCCESS'.
-    return False
+    required = {
+        'auth_algo': headers.get('HTTP_PAYPAL_AUTH_ALGO', ''),
+        'cert_url': headers.get('HTTP_PAYPAL_CERT_URL', ''),
+        'transmission_id': headers.get('HTTP_PAYPAL_TRANSMISSION_ID', ''),
+        'transmission_sig': headers.get('HTTP_PAYPAL_TRANSMISSION_SIG', ''),
+        'transmission_time': headers.get('HTTP_PAYPAL_TRANSMISSION_TIME', ''),
+    }
+    if not webhook_id or not client_id or not client_secret or not all(required.values()):
+        return False
+
+    try:
+        event = json.loads(payload_bytes.decode('utf-8'))
+        base = 'https://api-m.sandbox.paypal.com' if mode == 'TEST' \
+            else 'https://api-m.paypal.com'
+        token_response = requests.post(
+            f'{base}/v1/oauth2/token',
+            auth=(client_id, client_secret),
+            data={'grant_type': 'client_credentials'},
+            headers={'Accept': 'application/json'},
+            timeout=10,
+        )
+        token_response.raise_for_status()
+        access_token = token_response.json().get('access_token', '')
+        if not access_token:
+            return False
+
+        verify_response = requests.post(
+            f'{base}/v1/notifications/verify-webhook-signature',
+            json={
+                **required,
+                'webhook_id': webhook_id,
+                'webhook_event': event,
+            },
+            headers={
+                'Authorization': f'Bearer {access_token}',
+                'Content-Type': 'application/json',
+            },
+            timeout=10,
+        )
+        verify_response.raise_for_status()
+        return verify_response.json().get('verification_status') == 'SUCCESS'
+    except (ValueError, UnicodeDecodeError, requests.RequestException):
+        return False

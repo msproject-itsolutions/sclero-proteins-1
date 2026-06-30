@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import Link from 'next/link';
 import { Search, X, Loader } from 'lucide-react';
+import { useSelector } from 'react-redux';
+import { getApiUrl } from '../lib/api';
 
 export default function SearchBar({ onSearch = null, showFullResults = false }) {
   const [query, setQuery] = useState('');
@@ -12,13 +13,7 @@ export default function SearchBar({ onSearch = null, showFullResults = false }) 
   const [activeIndex, setActiveIndex] = useState(-1);
   const inputRef = useRef(null);
   const dropdownRef = useRef(null);
-
-  // Mock product suggestions (replace with API call)
-  const mockProducts = [
-    { sku: 'COMBO-COLLAGEN-60', name: 'Combo Collagen®', category: 'Collagen' },
-    { sku: 'OVOSHELL-COLLAGEN-60', name: 'OvoShell Collagen™', category: 'Collagen' },
-    { sku: 'BJC-BONE-JOINT-60', name: 'BJC® Bone & Joint Care', category: 'Supplements' },
-  ];
+  const currentRegion = useSelector((state) => state.region.currentRegion || 'UK');
 
   // Debounced search
   useEffect(() => {
@@ -27,21 +22,38 @@ export default function SearchBar({ onSearch = null, showFullResults = false }) 
       return;
     }
 
+    const controller = new AbortController();
     setIsLoading(true);
-    const timer = setTimeout(() => {
-      // Filter mock products (in real app, this would be an API call)
-      const filtered = mockProducts.filter((p) =>
-        p.name.toLowerCase().includes(query.toLowerCase()) ||
-        p.sku.toLowerCase().includes(query.toLowerCase())
-      );
-      setSuggestions(filtered);
-      setIsLoading(false);
-      setShowDropdown(true);
-      setActiveIndex(-1);
+    const timer = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({
+          region: currentRegion,
+          search: query.trim(),
+        });
+        const response = await fetch(getApiUrl(`/api/products/?${params}`), {
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error('Search request failed');
+        const payload = await response.json();
+        const products = Array.isArray(payload) ? payload : (payload.results || []);
+        setSuggestions(products.slice(0, 6));
+        setShowDropdown(true);
+        setActiveIndex(-1);
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          setSuggestions([]);
+          setShowDropdown(true);
+        }
+      } finally {
+        if (!controller.signal.aborted) setIsLoading(false);
+      }
     }, 300);
 
-    return () => clearTimeout(timer);
-  }, [query]);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [query, currentRegion]);
 
   // Handle keyboard navigation
   const handleKeyDown = (e) => {
@@ -127,7 +139,7 @@ export default function SearchBar({ onSearch = null, showFullResults = false }) 
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
-          onFocus={() => query.length >= 2 && setSuggestions.length > 0 && setShowDropdown(true)}
+          onFocus={() => query.length >= 2 && suggestions.length > 0 && setShowDropdown(true)}
           placeholder="Search products, benefits, SKU..."
           className="w-full pl-10 pr-10 py-2.5 text-sm border border-slate-200 rounded-lg bg-white focus:border-brand-purple focus:outline-none focus:ring-1 focus:ring-brand-purple/20"
         />
@@ -170,7 +182,7 @@ export default function SearchBar({ onSearch = null, showFullResults = false }) 
                     {suggestion.name}
                   </div>
                   <div className="text-xs text-brand-muted">
-                    {suggestion.category}
+                    {suggestion.short_benefit || suggestion.sku}
                   </div>
                 </div>
               </button>

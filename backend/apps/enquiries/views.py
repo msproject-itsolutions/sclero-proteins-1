@@ -2,6 +2,8 @@ from rest_framework import viewsets, mixins, status, views
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from django.utils import timezone
+from django.core.validators import validate_email
+from django.core.exceptions import ValidationError as DjangoValidationError
 
 from apps.users.permissions import require_permission
 from .models import BulkEnquiry, NewsletterSubscriber
@@ -13,6 +15,7 @@ class BulkEnquiryCreateView(mixins.CreateModelMixin, viewsets.GenericViewSet):
     queryset = BulkEnquiry.objects.all()
     serializer_class = BulkEnquirySerializer
     permission_classes = [AllowAny]
+    throttle_scope = 'contact'
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -25,7 +28,6 @@ class BulkEnquiryCreateView(mixins.CreateModelMixin, viewsets.GenericViewSet):
                          summary=f'{enquiry.get_enquiry_type_display()} enquiry from {enquiry.name} ({enquiry.email})')
         except Exception:
             pass
-        print(f'--> [Enquiry] New {enquiry.enquiry_type} enquiry #{enquiry.pk} from {enquiry.email}')
 
         # Best-effort: notify the configured ops mailbox via the
         # contact_received EmailTemplate. Failures must not break submission.
@@ -87,10 +89,13 @@ class NewsletterSubscribeView(views.APIView):
     unsubscribed email reactivates them. Double opt-in is not wired here yet
     (is_confirmed stays False until a future confirmation flow lands)."""
     permission_classes = [AllowAny]
+    throttle_scope = 'contact'
 
     def post(self, request):
         email = (request.data.get('email') or '').strip().lower()
-        if not email or '@' not in email:
+        try:
+            validate_email(email)
+        except DjangoValidationError:
             return Response({'error': 'A valid email is required.'}, status=status.HTTP_400_BAD_REQUEST)
         region = (request.data.get('region') or '').upper()
         source = (request.data.get('source') or 'footer')[:40]

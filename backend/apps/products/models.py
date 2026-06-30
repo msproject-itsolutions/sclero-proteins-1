@@ -13,6 +13,7 @@ class Category(models.Model):
     description = models.TextField(blank=True, default='')
     display_order = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True, db_index=True)
+    image_url = models.TextField(blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -49,6 +50,8 @@ class Product(models.Model):
     class Meta:
         indexes = [
             models.Index(fields=['is_active', 'is_archived']),
+            models.Index(fields=['is_active', 'is_archived', 'created_at']),
+            models.Index(fields=['name']),
         ]
 
     def __str__(self):
@@ -79,7 +82,7 @@ class ProductMedia(models.Model):
         ('PDF', 'PDF/Certificate'),
     ]
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="media")
-    file_url = models.URLField(max_length=500, help_text="S3 / Cloudflare R2 absolute URL or local path")
+    file_url = models.TextField(help_text="S3 / Cloudflare R2 absolute URL or local path")
     media_type = models.CharField(max_length=10, choices=MEDIA_TYPES, default='IMAGE')
     display_order = models.PositiveIntegerField(default=0)
 
@@ -110,6 +113,7 @@ class ProductReview(models.Model):
         indexes = [
             models.Index(fields=['product', 'is_approved']),
             models.Index(fields=['product', 'is_featured', 'is_approved']),
+            models.Index(fields=['is_approved', 'created_at']),
         ]
 
     def __str__(self):
@@ -189,4 +193,3 @@ class ProductLandingPage(models.Model):
 
     def __str__(self):
         return f"{self.product.name} Landing Page (/{self.slug})"
-

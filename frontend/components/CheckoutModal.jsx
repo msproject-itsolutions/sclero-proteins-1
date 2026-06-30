@@ -20,6 +20,8 @@ function CheckoutModalInner({ onClose }) {
   const authUser = useSelector((state) => state.auth?.user);
   const guestCheckoutEnabled = useSelector((state) => state.region.guestCheckoutEnabled);
 
+  const modalRef = React.useRef(null);
+
   // Form Fields
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
@@ -37,6 +39,7 @@ function CheckoutModalInner({ onClose }) {
   // Payment gateways — loaded from the admin-configured, region-scoped list.
   const [gateways, setGateways] = useState([]);
   const [paymentMethod, setPaymentMethod] = useState('');
+  const [gatewayError, setGatewayError] = useState(false);
 
   // Checkout statuses
   const [loading, setLoading] = useState(false);
@@ -48,23 +51,82 @@ function CheckoutModalInner({ onClose }) {
   const [calcShipping, setCalcShipping] = useState(null);
   const destCountry = currentRegion === 'IN' ? 'IN' : 'GB';
 
+  // 1. Accessibility listener: Escape key and Tab focus trap
   useEffect(() => {
-    let active = true;
+    const prevActiveElement = document.activeElement;
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+
+      if (e.key === 'Tab') {
+        if (!modalRef.current) return;
+        const focusableElements = modalRef.current.querySelectorAll(
+          'a[href], area[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), iframe, object, embed, [tabindex="0"], [contenteditable]'
+        );
+        if (focusableElements.length === 0) return;
+        const first = focusableElements[0];
+        const last = focusableElements[focusableElements.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            last.focus();
+            e.preventDefault();
+          }
+        } else {
+          if (document.activeElement === last) {
+            first.focus();
+            e.preventDefault();
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    if (modalRef.current) {
+      const firstInput = modalRef.current.querySelector('input');
+      if (firstInput) {
+        firstInput.focus();
+      } else {
+        const closeBtn = modalRef.current.querySelector('button[aria-label="Close checkout"]');
+        if (closeBtn) closeBtn.focus();
+      }
+    }
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      if (prevActiveElement && typeof prevActiveElement.focus === 'function') {
+        prevActiveElement.focus();
+      }
+    };
+  }, [onClose]);
+
+  // 2. Fetch gateways driven by region configuration
+  const fetchGateways = React.useCallback(() => {
+    setGatewayError(false);
     fetch(getApiUrl(`/api/admin/payment-gateways/available/?region=${currentRegion}`))
-      .then((r) => (r.ok ? r.json() : []))
+      .then((r) => {
+        if (!r.ok) throw new Error();
+        return r.json();
+      })
       .then((data) => {
-        if (!active) return;
         const list = Array.isArray(data) ? data : [];
         setGateways(list);
         setPaymentMethod((prev) =>
           list.some((g) => g.code === prev) ? prev : (list[0]?.code || '')
         );
       })
-      .catch(() => active && setGateways([]));
-    return () => {
-      active = false;
-    };
+      .catch(() => {
+        setGateways([]);
+        setGatewayError(true);
+      });
   }, [currentRegion]);
+
+  useEffect(() => {
+    fetchGateways();
+  }, [fetchGateways]);
 
   const gatewayIcon = (code) => {
     if (code === 'COD') return Banknote;
@@ -313,7 +375,13 @@ function CheckoutModalInner({ onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-navy/25 p-4 backdrop-blur-sm overflow-y-auto">
-      <div className="glass-panel w-full max-w-3xl rounded-3xl overflow-hidden flex flex-col md:flex-row shadow-2xl relative my-8">
+      <div
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="checkout-title"
+        className="glass-panel w-full max-w-3xl rounded-3xl overflow-hidden flex flex-col md:flex-row shadow-2xl relative my-8"
+      >
         
         {/* Close */}
         <button
@@ -326,7 +394,7 @@ function CheckoutModalInner({ onClose }) {
 
         {/* Left Side: Checkout Form */}
         <form onSubmit={handleSubmit} className="w-full md:w-3/5 p-6 space-y-4">
-          <h2 className="text-lg font-black text-brand-navy border-b border-slate-100 pb-2">Delivery & Shipping Address</h2>
+          <h2 id="checkout-title" className="text-lg font-black text-brand-navy border-b border-slate-100 pb-2">Delivery & Shipping Address</h2>
           {errorMsg && <p className="text-xs text-brand-danger font-semibold bg-brand-danger/10 border border-brand-danger/20 p-2.5 rounded-lg">{errorMsg}</p>}
           {guestCheckoutBlocked && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] font-semibold text-amber-800">
@@ -455,9 +523,18 @@ function CheckoutModalInner({ onClose }) {
               Select payment option
             </h3>
             {gateways.length === 0 ? (
-              <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-[11px] text-brand-muted">
-                No payment methods are currently available for this region. Please check back shortly.
-              </p>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-center">
+                <p className="text-[11px] text-brand-muted mb-2">
+                  {gatewayError ? 'Failed to connect to payment gateways.' : 'No payment options loaded for this region.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={fetchGateways}
+                  className="rounded-lg bg-brand-purple/10 px-3.5 py-1.5 text-[10px] font-bold text-brand-purple hover:bg-brand-purple/20 transition-all"
+                >
+                  Retry Loading Options
+                </button>
+              </div>
             ) : (
               <div className="grid grid-cols-2 gap-3">
                 {gateways.map((g) => {
