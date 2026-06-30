@@ -4,55 +4,24 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import StoreShell from '../../../components/StoreShell';
 import { getApiUrl } from '../../../lib/api';
-
-// Minimal markdown-ish renderer. Supports # headings, **bold**, *italic*,
-// [text](url), and `- list item` lines. Each input line becomes a paragraph
-// (or list item). We keep this dependency-free.
-function renderMarkdownLine(line) {
-  let html = line
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>')
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="text-brand-purple underline" target="_blank" rel="noreferrer">$1</a>');
-  return html;
-}
+import { parseMarkdownBlocks, renderInlineMarkdown } from '../../../lib/markdown';
 
 function MarkdownContent({ content }) {
-  const lines = (content || '').split(/\r?\n/);
-  const blocks = [];
-  let listBuffer = [];
-  const flushList = () => {
-    if (listBuffer.length) {
-      blocks.push({ type: 'ul', items: [...listBuffer] });
-      listBuffer = [];
-    }
-  };
-
-  lines.forEach((raw, idx) => {
-    const line = raw.trim();
-    if (!line) { flushList(); blocks.push({ type: 'space', key: idx }); return; }
-    if (line.startsWith('## ')) { flushList(); blocks.push({ type: 'h2', text: line.slice(3), key: idx }); return; }
-    if (line.startsWith('# ')) { flushList(); blocks.push({ type: 'h1', text: line.slice(2), key: idx }); return; }
-    if (line.startsWith('- ')) { listBuffer.push(line.slice(2)); return; }
-    flushList();
-    blocks.push({ type: 'p', text: line, key: idx });
-  });
-  flushList();
+  const blocks = parseMarkdownBlocks(content);
 
   return (
     <div className="prose-content space-y-4 text-sm leading-relaxed text-brand-navy">
       {blocks.map((b, i) => {
-        if (b.type === 'h1') return <h2 key={i} className="text-2xl font-black text-brand-navy" dangerouslySetInnerHTML={{ __html: renderMarkdownLine(b.text) }} />;
-        if (b.type === 'h2') return <h3 key={i} className="text-xl font-bold text-brand-navy" dangerouslySetInnerHTML={{ __html: renderMarkdownLine(b.text) }} />;
+        if (b.type === 'h1') return <h2 key={i} className="text-2xl font-black text-brand-navy">{renderInlineMarkdown(b.text, `h1-${i}`)}</h2>;
+        if (b.type === 'h2') return <h3 key={i} className="text-xl font-bold text-brand-navy">{renderInlineMarkdown(b.text, `h2-${i}`)}</h3>;
+        if (b.type === 'image' && b.src) return <img key={i} src={b.src} alt={b.alt} className="w-full rounded-2xl border border-slate-200 object-cover" />;
         if (b.type === 'ul') return (
           <ul key={i} className="list-disc space-y-1 pl-6">
-            {b.items.map((it, j) => <li key={j} dangerouslySetInnerHTML={{ __html: renderMarkdownLine(it) }} />)}
+            {b.items.map((it, j) => <li key={j}>{renderInlineMarkdown(it, `li-${i}-${j}`)}</li>)}
           </ul>
         );
         if (b.type === 'space') return null;
-        return <p key={i} dangerouslySetInnerHTML={{ __html: renderMarkdownLine(b.text) }} />;
+        return <p key={i}>{renderInlineMarkdown(b.text, `p-${i}`)}</p>;
       })}
     </div>
   );

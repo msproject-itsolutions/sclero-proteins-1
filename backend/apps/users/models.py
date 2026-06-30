@@ -34,6 +34,10 @@ class UserManager(BaseUserManager):
     def create_superuser(self, email, password=None, **extra_fields):
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
+        if extra_fields.get('is_staff') is not True:
+            raise ValueError('Superuser must have is_staff=True.')
+        if extra_fields.get('is_superuser') is not True:
+            raise ValueError('Superuser must have is_superuser=True.')
         return self.create_user(email, password, **extra_fields)
 
 
@@ -44,7 +48,9 @@ class User(AbstractBaseUser, PermissionsMixin):
     phone_number = models.CharField(max_length=30, blank=True, null=True, db_index=True)
     loyalty_points = models.PositiveIntegerField(default=0)
     google_id = models.CharField(max_length=255, blank=True, null=True, unique=True, db_index=True)
-    otp_secret = models.CharField(max_length=32, blank=True, null=True)
+    # Stores purpose-prefixed, expiring password hashes for email OTP or a
+    # signed magic-link nonce. It never stores a live OTP in plaintext.
+    otp_secret = models.CharField(max_length=255, blank=True, null=True)
 
     # Single-identity, multi-region: "home region" is where the user lives / is
     # billed; they may still browse in a different "session region" (handled
@@ -208,4 +214,3 @@ class SupportTicket(models.Model):
 
     def __str__(self):
         return f"Ticket #{self.id} ({self.status}) - {self.subject}"
-

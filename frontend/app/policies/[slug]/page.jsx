@@ -1,13 +1,9 @@
-'use client';
-
-import React, { useState } from 'react';
-import { useParams } from 'next/navigation';
-import Link from 'next/link';
-import { Shield, FileText, Truck, RefreshCw, Bookmark, Eye, HeartPulse, Send, Check } from 'lucide-react';
+import React from 'react';
+import { Shield, FileText, Truck, RefreshCw, Bookmark, Eye, HeartPulse, Send } from 'lucide-react';
 import StoreShell from '../../../components/StoreShell';
-import { getApiUrl } from '../../../lib/api';
+import ContactForm from '../../contact/ContactForm';
+import Link from 'next/link';
 
-// Local repository of high-quality premium policy documents
 const POLICIES = {
   privacy: {
     title: 'Privacy Policy',
@@ -184,56 +180,30 @@ const POLICIES = {
   },
 };
 
-export default function PolicyPage() {
-  const params = useParams();
-  const slug = params?.slug || 'privacy';
+export async function generateMetadata({ params }) {
+  const { slug = 'privacy' } = await params;
   const policy = POLICIES[slug] || POLICIES.privacy;
-  
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [msg, setMsg] = useState('');
-  const [sent, setSent] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [contactError, setContactError] = useState('');
-
-  const handleContactSubmit = async (e) => {
-    e.preventDefault();
-    if (!name || !email || !msg) return;
-    setSending(true);
-    setContactError('');
-    try {
-      const response = await fetch(getApiUrl('/api/enquiries/'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name,
-          email,
-          message: msg,
-          enquiry_type: 'GENERAL',
-          product_interest: 'Customer support',
-        }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.detail || data.error || 'Could not send your message.');
-      setSent(true);
-      setName('');
-      setEmail('');
-      setMsg('');
-    } catch (err) {
-      setContactError(err.message);
-    } finally {
-      setSending(false);
-    }
+  return {
+    title: policy.metaTitle,
+    description: policy.metaDesc,
+    alternates: {
+      canonical: `/policies/${slug}`,
+    },
+    openGraph: {
+      title: policy.metaTitle,
+      description: policy.metaDesc,
+      type: 'website',
+    },
   };
+}
 
+export default async function PolicyPage({ params }) {
+  const { slug = 'privacy' } = await params;
+  const policy = POLICIES[slug] || POLICIES.privacy;
   const IconComponent = policy.icon;
 
   return (
     <StoreShell>
-      {/* Dynamic SEO Meta Tags via standard head component injection */}
-      <title>{policy.metaTitle}</title>
-      <meta name="description" content={policy.metaDesc} />
-
       <div className="bg-slate-50 py-12 border-b border-slate-200/80">
         <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
@@ -303,56 +273,7 @@ export default function PolicyPage() {
                 <h3 className="text-sm font-black text-brand-navy uppercase tracking-wider mb-4">
                   Send a Support Ticket
                 </h3>
-                
-                {sent ? (
-                  <div className="rounded-2xl border border-brand-success/20 bg-brand-success/5 p-5 text-center">
-                    <Check className="mx-auto mb-2 h-8 w-8 text-brand-success" />
-                    <p className="text-xs font-bold text-brand-success">
-                      Message sent successfully! Our support agents will follow up in 24 hours.
-                    </p>
-                  </div>
-                ) : (
-                  <form onSubmit={handleContactSubmit} className="space-y-3.5">
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <input
-                        type="text"
-                        placeholder="Your name"
-                        autoComplete="name"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        className="rounded-xl border border-slate-200 bg-white p-3 text-xs focus:border-brand-purple focus:outline-none"
-                        required
-                      />
-                      <input
-                        type="email"
-                        placeholder="Your email"
-                        autoComplete="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="rounded-xl border border-slate-200 bg-white p-3 text-xs focus:border-brand-purple focus:outline-none"
-                        required
-                      />
-                    </div>
-                    <textarea
-                      placeholder="How can we help you?"
-                      value={msg}
-                      onChange={(e) => setMsg(e.target.value)}
-                      rows={4}
-                      className="w-full rounded-xl border border-slate-200 bg-white p-3 text-xs focus:border-brand-purple focus:outline-none"
-                      required
-                    />
-                    {contactError && (
-                      <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{contactError}</p>
-                    )}
-                    <button
-                      type="submit"
-                      disabled={sending}
-                      className="btn-primary w-full py-3 text-xs uppercase tracking-wider"
-                    >
-                      {sending ? 'Sending...' : 'Send Message'}
-                    </button>
-                  </form>
-                )}
+                <ContactForm />
               </div>
             )}
           </main>

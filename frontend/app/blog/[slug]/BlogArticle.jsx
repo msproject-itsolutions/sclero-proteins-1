@@ -4,18 +4,16 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { getApiUrl } from '../../../lib/api';
+import { jsonLdScriptProps } from '../../../lib/jsonLd';
 
 export default function BlogArticle({ slug }) {
   const [post, setPost] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(getApiUrl('/api/admin/blog-posts/'))
+    fetch(getApiUrl(`/api/blog-posts/${slug}/`))
       .then((res) => res.json())
-      .then((data) => {
-        const list = Array.isArray(data) ? data : data.results || [];
-        setPost(list.find((item) => item.slug === slug && item.is_published) || null);
-      })
+      .then((data) => setPost(data?.slug ? data : null))
       .catch(() => setPost(null))
       .finally(() => setLoading(false));
   }, [slug]);
@@ -49,16 +47,14 @@ export default function BlogArticle({ slug }) {
       </div>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
-            '@context': 'https://schema.org',
-            '@type': 'Article',
-            headline: post.title,
-            author: { '@type': 'Person', name: post.author },
-            datePublished: post.published_at,
-            description: post.meta_description,
-          }),
-        }}
+        dangerouslySetInnerHTML={jsonLdScriptProps({
+          '@context': 'https://schema.org',
+          '@type': 'Article',
+          headline: post.title,
+          author: { '@type': 'Person', name: post.author },
+          datePublished: post.published_at,
+          description: post.meta_description,
+        })}
       />
     </article>
   );

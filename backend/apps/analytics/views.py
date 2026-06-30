@@ -25,6 +25,17 @@ def pageview_ingest(request):
         if not path:
             return Response({'ok': False}, status=status.HTTP_400_BAD_REQUEST)
 
+        ip = (request.META.get('HTTP_X_FORWARDED_FOR') or request.META.get('REMOTE_ADDR') or '').split(',')[0].strip()
+        if ip:
+            ip_key = f"pv-ip:{ip}"
+            try:
+                count = cache.get(ip_key) or 0
+                if count >= 120:
+                    return Response({'ok': True, 'throttled': True})
+                cache.set(ip_key, count + 1, timeout=60)
+            except Exception:
+                pass
+
         # Per-session-per-path 5s rate limit
         if session_id:
             cache_key = f"pv:{session_id}:{path}"

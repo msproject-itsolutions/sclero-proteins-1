@@ -7,6 +7,7 @@ this middleware runs.
 """
 
 import threading
+from django.conf import settings
 
 _state = threading.local()
 
@@ -33,8 +34,20 @@ def get_current_ip():
     req = _request()
     if not req:
         return None
-    xff = req.META.get('HTTP_X_FORWARDED_FOR', '')
-    return xff.split(',')[0].strip() if xff else req.META.get('REMOTE_ADDR')
+    return client_ip_from_request(req)
+
+
+def client_ip_from_request(request):
+    """Return the proxy-validated client IP.
+
+    X-Forwarded-For is trusted only when the deployment explicitly trusts its
+    reverse proxy. The host nginx configuration replaces untrusted inbound XFF.
+    """
+    if getattr(settings, 'TRUST_PROXY_HEADERS', False):
+        xff = request.META.get('HTTP_X_FORWARDED_FOR', '')
+        if xff:
+            return xff.split(',')[0].strip()
+    return request.META.get('REMOTE_ADDR')
 
 
 def get_current_user_agent():

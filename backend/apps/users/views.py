@@ -1,5 +1,11 @@
-import random
+import hashlib
+import secrets
+import requests
+from django.conf import settings
+from django.core.validators import validate_email
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import viewsets, status, generics
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -9,16 +15,50 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
-from django.contrib.auth.hashers import check_password
+from django.contrib.auth.hashers import check_password, make_password
+from django.contrib.auth.password_validation import validate_password
 from .models import UserAddress, Role, Wishlist, WishlistItem, CustomerSegment, CustomerActivity, SupportTicket
 from .serializers import (
     UserSerializer, RegisterSerializer, UserAddressSerializer,
     RoleSerializer, StaffUserSerializer, WishlistItemSerializer, WishlistSerializer,
     CustomerSegmentSerializer, CustomerActivitySerializer, SupportTicketSerializer,
 )
-from .permissions import require_permission, PERMISSIONS
+from .permissions import require_permission, PERMISSIONS, client_ip_is_allowed
+from apps.audit.context import client_ip_from_request
 
 User = get_user_model()
+
+OTP_MAX_AGE_SECONDS = 10 * 60
+
+
+def _new_otp_value():
+    from django.utils import timezone
+    code = f'{secrets.randbelow(900000) + 100000:06d}'
+    expires = int(timezone.now().timestamp()) + OTP_MAX_AGE_SECONDS
+    return code, f'otp:{expires}:{make_password(code)}'
+
+
+def _verify_otp_value(stored, candidate):
+    from django.utils import timezone
+    try:
+        purpose, expires, encoded = (stored or '').split(':', 2)
+        if purpose != 'otp' or int(expires) < int(timezone.now().timestamp()):
+            return False
+        return check_password(str(candidate), encoded)
+    except (TypeError, ValueError):
+        return False
+
+
+def _send_email_otp(email, code, subject='Your Sclero Proteins sign-in code'):
+    from django.core.mail import send_mail
+    send_mail(
+        subject,
+        f'Your verification code is {code}. It expires in 10 minutes. '
+        'If you did not request this code, ignore this email.',
+        settings.DEFAULT_FROM_EMAIL,
+        [email],
+        fail_silently=False,
+    )
 
 def get_tokens_for_user(user):
     refresh = RefreshToken.for_user(user)
@@ -46,6 +86,7 @@ class AuditedLoginView(TokenObtainPairView):
       as-is for backward compatibility. Only fires if TOTP is not enabled.
     """
     permission_classes = [AllowAny]
+    throttle_scope = 'auth'
 
     def post(self, request, *args, **kwargs):
         from apps.audit.recorder import record_audit
@@ -86,10 +127,10 @@ class AuditedLoginView(TokenObtainPairView):
             )
 
         # Enforce IP restrict logic on login
-        client_ip = request.META.get('REMOTE_ADDR')
+        client_ip = client_ip_from_request(request)
         if actor.allowed_ip_range:
             allowed_ips = [ip.strip() for ip in actor.allowed_ip_range.split(',') if ip.strip()]
-            if allowed_ips and client_ip not in allowed_ips:
+            if allowed_ips and not client_ip_is_allowed(client_ip, allowed_ips):
                 record_audit(
                     'login.failed',
                     actor=actor,
@@ -145,17 +186,29 @@ class AuditedLoginView(TokenObtainPairView):
         actor.save(update_fields=['current_devices'])
 
         if actor.two_factor_enabled:
-            otp_code = str(random.randint(100000, 999999))
-            actor.otp_secret = otp_code
+            otp_code, stored_otp = _new_otp_value()
+            actor.otp_secret = stored_otp
             actor.save(update_fields=['otp_secret'])
-            print(f"--> [2FA OTP SANDBOX] Sent OTP {otp_code} to {email}")
+            if settings.DEBUG:
+                print(f"--> [2FA OTP SANDBOX] Sent OTP {otp_code} to {email}")
+            try:
+                _send_email_otp(email, otp_code, subject='Your Sclero Proteins two-factor code')
+            except Exception:
+                actor.otp_secret = ''
+                actor.save(update_fields=['otp_secret'])
+                return Response(
+                    {"detail": "Unable to send the verification code. Try again later."},
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
             record_audit('login.2fa_required', actor=actor, summary=f'2FA challenge issued for {email}')
-            return Response({
+            payload = {
                 "two_factor_required": True,
                 "email": email,
-                "otp_preview_for_sandbox": otp_code,
                 "message": "Two-factor authentication is required. An OTP has been sent."
-            }, status=status.HTTP_200_OK)
+            }
+            if settings.DEBUG:
+                payload["otp_preview_for_sandbox"] = otp_code
+            return Response(payload, status=status.HTTP_200_OK)
 
         record_audit('login.success', actor=actor, summary=f'Successful login: {email}')
         return Response({
@@ -170,6 +223,7 @@ class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     permission_classes = [AllowAny]
     serializer_class = RegisterSerializer
+    throttle_scope = 'auth'
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -454,6 +508,11 @@ class AccountDeleteView(APIView):
             user.phone_number = ""
             user.google_id = None
             user.otp_secret = ""
+            user.totp_secret = ""
+            user.totp_backup_codes = []
+            user.totp_enabled = False
+            user.password_reset_token = ""
+            user.password_reset_token_expires = None
             user.allowed_ip_range = ""
             user.current_devices = []
             user.is_active = False
@@ -464,6 +523,13 @@ class AccountDeleteView(APIView):
             # Clear M2M relationships (roles, assigned_regions, segments).
             user.roles.clear()
             user.assigned_regions.clear()
+
+            from rest_framework_simplejwt.token_blacklist.models import (
+                BlacklistedToken,
+                OutstandingToken,
+            )
+            for token in OutstandingToken.objects.filter(user=user):
+                BlacklistedToken.objects.get_or_create(token=token)
 
             record_audit(
                 'account.deleted',
@@ -480,13 +546,10 @@ class AccountDeleteView(APIView):
                 },
             )
 
-        # NOTE: rest_framework_simplejwt.token_blacklist is NOT in INSTALLED_APPS,
-        # so existing refresh tokens cannot be server-side revoked. Frontend MUST
-        # discard the tokens client-side; access tokens expire on their own TTL.
         return Response(
             {
                 "message": "Account deleted. Tax records retained per UK/IN law.",
-                "token_blacklist_available": False,
+                "token_blacklist_available": True,
             },
             status=status.HTTP_200_OK,
         )
@@ -515,58 +578,60 @@ class UserAddressViewSet(viewsets.ModelViewSet):
 
 class SendOTPView(APIView):
     permission_classes = [AllowAny]
+    throttle_scope = 'otp'
 
     def post(self, request):
-        phone_or_email = request.data.get('identifier') # Can be phone or email
-        if not phone_or_email:
-            return Response({"error": "identifier is required (email or phone number)"}, status=status.HTTP_400_BAD_REQUEST)
+        identifier = (request.data.get('identifier') or '').strip().lower()
+        try:
+            validate_email(identifier)
+        except DjangoValidationError:
+            return Response(
+                {"error": "Email OTP is supported. Phone OTP requires a configured SMS provider."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        # Generate a random 6-digit OTP
-        otp_code = str(random.randint(100000, 999999))
-        
-        # Save it to the user profile (retrieve user or create a guest profile)
-        is_email = "@" in phone_or_email
-        if is_email:
-            user, created = User.objects.get_or_create(email=phone_or_email)
-        else:
-            # For phone number, we use phone_number field. We generate a dummy email
-            email_dummy = f"phone_{phone_or_email.replace('+', '')}@scleroproteins.com"
-            user, created = User.objects.get_or_create(email=email_dummy)
-            user.phone_number = phone_or_email
-            
-        user.otp_secret = otp_code
-        user.save()
+        user, _ = User.objects.get_or_create(email=identifier)
+        otp_code, stored_otp = _new_otp_value()
+        user.otp_secret = stored_otp
+        user.save(update_fields=['otp_secret'])
+
+        try:
+            _send_email_otp(identifier, otp_code)
+        except Exception:
+            user.otp_secret = ''
+            user.save(update_fields=['otp_secret'])
+            return Response(
+                {"error": "Unable to send the verification code. Try again later."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
         # In Sandbox mode, we print to terminal console & return it in the response for dev ease
-        print(f"--> [OTP SANDBOX] Sent OTP {otp_code} to {phone_or_email}")
-        
-        return Response({
-            "message": "OTP sent successfully (Sandbox Mode)",
-            "otp_preview_for_sandbox": otp_code # Shared for frontend testing convenience
-        })
+        if settings.DEBUG:
+            print(f"--> [OTP SANDBOX] Sent OTP {otp_code} to {identifier}")
+
+        payload = {"message": "OTP sent successfully."}
+        if settings.DEBUG:
+            payload["otp_preview_for_sandbox"] = otp_code
+        return Response(payload)
 
 
 class VerifyOTPView(APIView):
     permission_classes = [AllowAny]
+    throttle_scope = 'otp'
 
     def post(self, request):
-        phone_or_email = request.data.get('identifier')
-        otp_code = request.data.get('otp')
+        identifier = (request.data.get('identifier') or '').strip().lower()
+        otp_code = str(request.data.get('otp') or '').strip()
         
-        if not phone_or_email or not otp_code:
+        if not identifier or not otp_code:
             return Response({"error": "identifier and otp are required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        is_email = "@" in phone_or_email
         try:
-            if is_email:
-                user = User.objects.get(email=phone_or_email)
-            else:
-                user = User.objects.get(phone_number=phone_or_email)
+            user = User.objects.get(email__iexact=identifier)
         except User.DoesNotExist:
             return Response({"error": "Invalid identifier or OTP code"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Validate OTP code (simple validation)
-        if user.otp_secret == otp_code or otp_code == "123456": # 123456 is fallback master bypass key for sandbox ease
+        if _verify_otp_value(user.otp_secret, otp_code):
             user.otp_secret = "" # Reset OTP
             user.save()
             
@@ -574,7 +639,7 @@ class VerifyOTPView(APIView):
             from django.utils import timezone
             from apps.audit.recorder import record_audit
             
-            client_ip = request.META.get('REMOTE_ADDR')
+            client_ip = client_ip_from_request(request)
             user_agent = request.META.get('HTTP_USER_AGENT', 'Unknown')
             session_id = str(uuid.uuid4())
             
@@ -627,16 +692,19 @@ def _safe_redirect_base(request):
 class MagicLinkRequestView(APIView):
     """Email a one-time, time-limited sign-in link. Sandbox returns the link too."""
     permission_classes = [AllowAny]
+    throttle_scope = 'auth'
 
     def post(self, request):
         from django.core import signing
         email = (request.data.get('email') or '').strip().lower()
-        if not email or '@' not in email:
+        try:
+            validate_email(email)
+        except DjangoValidationError:
             return Response({"error": "A valid email is required."}, status=status.HTTP_400_BAD_REQUEST)
 
         user, _ = User.objects.get_or_create(email=email)
         # Single-use nonce stored on the user; the link is invalid once consumed.
-        nonce = str(random.randint(10**9, 10**10 - 1))
+        nonce = secrets.token_urlsafe(16)
         user.otp_secret = f"magic:{nonce}"
         user.save(update_fields=['otp_secret'])
 
@@ -665,17 +733,21 @@ class MagicLinkRequestView(APIView):
                 )
             except Exception:
                 pass
-        print(f"--> [MAGIC LINK SANDBOX] {email}: {link}")
+        if settings.DEBUG:
+            print(f"--> [MAGIC LINK SANDBOX] {email}: {link}")
 
-        return Response({
+        payload = {
             "message": "Check your email for a sign-in link.",
-            "magic_link_for_sandbox": link,  # dev convenience, mirrors the OTP flow
-        })
+        }
+        if settings.DEBUG:
+            payload["magic_link_for_sandbox"] = link
+        return Response(payload)
 
 
 class MagicLinkVerifyView(APIView):
     """Exchange a magic-link token for JWT tokens."""
     permission_classes = [AllowAny]
+    throttle_scope = 'auth'
 
     def post(self, request):
         from django.core import signing
@@ -836,15 +908,36 @@ class PublicWishlistView(APIView):
 
 class GoogleLoginView(APIView):
     permission_classes = [AllowAny]
+    throttle_scope = 'auth'
 
     def post(self, request):
-        email = request.data.get('email')
-        google_id = request.data.get('googleId')
-        first_name = request.data.get('firstName', '')
-        last_name = request.data.get('lastName', '')
+        credential = request.data.get('credential') or ''
+        client_id = getattr(settings, 'GOOGLE_CLIENT_ID', '') or ''
 
-        if not email or not google_id:
-            return Response({"error": "email and googleId are required"}, status=status.HTTP_400_BAD_REQUEST)
+        if not client_id:
+            return Response({"error": "Google sign-in is not configured."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        if not credential:
+            return Response({"error": "Google credential is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            google_res = requests.get(
+                'https://oauth2.googleapis.com/tokeninfo',
+                params={'id_token': credential},
+                timeout=5,
+            )
+            if google_res.status_code != 200:
+                return Response({"error": "Invalid Google credential."}, status=status.HTTP_401_UNAUTHORIZED)
+            claims = google_res.json()
+        except requests.RequestException:
+            return Response({"error": "Could not verify Google credential."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        if claims.get('aud') != client_id or claims.get('email_verified') not in (True, 'true', 'True'):
+            return Response({"error": "Invalid Google credential."}, status=status.HTTP_401_UNAUTHORIZED)
+
+        email = (claims.get('email') or '').strip().lower()
+        google_id = claims.get('sub') or ''
+        first_name = claims.get('given_name') or ''
+        last_name = claims.get('family_name') or ''
 
         user, created = User.objects.get_or_create(
             email=email,
@@ -871,23 +964,42 @@ class GoogleLoginView(APIView):
 from django.db.models import Sum
 from apps.orders.models import Order
 
+class AdminDashboardPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
 class CustomerProfileViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all().order_by('-created_at')
     serializer_class = UserSerializer
     permission_classes = [require_permission('users.manage')]
+    pagination_class = AdminDashboardPagination
 
     def get_queryset(self):
         qs = super().get_queryset()
         q = self.request.query_params.get('q')
         if q:
             qs = qs.filter(Q(email__icontains=q) | Q(first_name__icontains=q) | Q(last_name__icontains=q) | Q(phone_number__icontains=q))
+
+        # Sort ordering parameter
+        ordering = self.request.query_params.get('ordering')
+        if ordering == 'oldest':
+            qs = qs.order_by('created_at')
+        elif ordering == 'email':
+            qs = qs.order_by('email')
+        elif ordering == '-email':
+            qs = qs.order_by('-email')
+        else:
+            qs = qs.order_by('-created_at')
+
         return qs
 
     @action(detail=True, methods=['get'])
     def details(self, request, pk=None):
         customer = self.get_object()
         addresses = UserAddressSerializer(customer.addresses.all(), many=True).data
-        
+
         orders_qs = Order.objects.filter(email__iexact=customer.email).order_by('-created_at')
         orders_count = orders_qs.count()
         total_spent = orders_qs.aggregate(total=Sum('total'))['total'] or 0
@@ -981,6 +1093,7 @@ class PasswordResetRequestView(APIView):
     template is dispatched with ``{reset_url}`` populated.
     """
     permission_classes = [AllowAny]
+    throttle_scope = 'password_reset'
 
     def post(self, request):
         import uuid
@@ -994,8 +1107,8 @@ class PasswordResetRequestView(APIView):
 
         user = User.objects.filter(email__iexact=email, is_active=True).first()
         if user:
-            token = uuid.uuid4().hex
-            user.password_reset_token = token
+            token = secrets.token_urlsafe(32)
+            user.password_reset_token = hashlib.sha256(token.encode()).hexdigest()
             user.password_reset_token_expires = dj_tz.now() + timedelta(hours=1)
             user.save(update_fields=['password_reset_token', 'password_reset_token_expires'])
 
@@ -1035,6 +1148,7 @@ class PasswordResetConfirmView(APIView):
     saved.
     """
     permission_classes = [AllowAny]
+    throttle_scope = 'password_reset'
 
     def post(self, request):
         from django.utils import timezone as dj_tz
@@ -1044,11 +1158,13 @@ class PasswordResetConfirmView(APIView):
         if not token or not new_password:
             return Response({"error": "Token and new_password are required."},
                             status=status.HTTP_400_BAD_REQUEST)
-        if len(new_password) < 8:
-            return Response({"error": "Password must be at least 8 characters."},
-                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            validate_password(new_password)
+        except DjangoValidationError as exc:
+            return Response({"error": list(exc.messages)}, status=status.HTTP_400_BAD_REQUEST)
 
-        user = User.objects.filter(password_reset_token=token).first()
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        user = User.objects.filter(password_reset_token=token_hash).first()
         if not user or not user.password_reset_token_expires or \
                 user.password_reset_token_expires < dj_tz.now():
             return Response({"error": "Invalid or expired reset token."},

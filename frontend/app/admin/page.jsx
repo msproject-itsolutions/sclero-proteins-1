@@ -14,6 +14,7 @@ import {
 import StoreShell from '../../components/StoreShell';
 import { fetchProfile } from '../../store/authSlice';
 import { getApiUrl } from '../../lib/api';
+import { authenticatedFetch } from '../../lib/authFetch';
 import ProductEditorPanel from '../../components/admin/ProductEditorPanel';
 import CreateOrderPanel from '../../components/admin/CreateOrderPanel';
 import ShippingZonePanel from '../../components/admin/ShippingZonePanel';
@@ -66,19 +67,33 @@ const toSeoMeta = (value) => ({
   description: toDisplayText(value?.description),
   handle: toDisplayText(value?.handle),
 });
+async function uploadAdminMedia(authFetch, file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await authFetch('/api/admin/upload-media/', { method: 'POST', body: formData });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.file_url) {
+    throw new Error(data.error || 'Upload failed.');
+  }
+  return data.file_url;
+}
 
 function useAuthFetch() {
   const access = useSelector((s) => s.auth.access);
   return useCallback(
-    (path, opts = {}) =>
-      fetch(getApiUrl(path), {
+    (path, opts = {}) => {
+      const headers = {
+        ...(access ? { Authorization: `Bearer ${access}` } : {}),
+        ...(opts.headers || {}),
+      };
+      if (!(opts.body instanceof FormData) && !headers['Content-Type']) {
+        headers['Content-Type'] = 'application/json';
+      }
+      return authenticatedFetch(path, {
         ...opts,
-        headers: {
-          'Content-Type': 'application/json',
-          ...(access ? { Authorization: `Bearer ${access}` } : {}),
-          ...(opts.headers || {}),
-        },
-      }),
+        headers,
+      }, access);
+    },
     [access]
   );
 }
@@ -666,14 +681,46 @@ function ProductsTab({ authFetch, regions, categories }) {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [sortOrder, setSortOrder] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalCount, setTotalCount] = useState(0);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedQuery(searchQuery);
+    }, 450);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
 
   const load = useCallback(() => {
     setLoading(true);
-    authFetch('/api/admin/products/').then((r) => r.json())
-      .then((d) => setProducts(Array.isArray(d) ? d : d.results || []))
-      .catch(() => setProducts([])).finally(() => setLoading(false));
-  }, [authFetch]);
+    const params = new URLSearchParams({
+      page,
+      page_size: pageSize,
+      search: debouncedQuery,
+    });
+    if (selectedCategory) params.append('category', selectedCategory);
+    if (sortOrder) params.append('ordering', sortOrder);
+
+    authFetch(`/api/admin/products/?${params.toString()}`).then((r) => r.json())
+      .then((d) => {
+        setProducts(d.results || []);
+        setTotalCount(d.count || 0);
+      })
+      .catch(() => {
+        setProducts([]);
+        setTotalCount(0);
+      }).finally(() => setLoading(false));
+  }, [authFetch, page, pageSize, debouncedQuery, selectedCategory, sortOrder]);
+
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedQuery, selectedCategory, sortOrder]);
 
   const blankMedia = () => ({ media_type: 'IMAGE', file_url: '' });
   const startNew = () => setEditing({
@@ -759,24 +806,46 @@ function ProductsTab({ authFetch, regions, categories }) {
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
-  const filtered = products.filter((p) => {
-    const q = searchQuery.toLowerCase();
-    return !q || p.name?.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q);
-  });
+  if (editing) {
+    return (
+      <ProductEditorPanel
+        editing={editing}
+        onChange={setEditing}
+        onClose={() => { setEditing(null); setErr(''); }}
+        onSave={save}
+        saving={saving}
+        err={err}
+        regions={regions}
+        categories={categories}
+        authFetch={authFetch}
+      />
+    );
+  }
 
-  if (loading) return <p className="text-sm text-brand-muted">Loading products…</p>;
+  if (loading && products.length === 0) return <p className="text-sm text-brand-muted font-medium">Loading products…</p>;
 
   return (
     <div>
       {/* Toolbar */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 max-w-xs">
+        <div className="relative flex-grow max-w-xs">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-muted" />
           <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search products…"
             className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/30" />
         </div>
-        <p className="text-sm text-brand-muted ml-auto">{filtered.length} products</p>
+        <select value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/30">
+          <option value="">All Categories</option>
+          {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/30">
+          <option value="">Default order</option>
+          <option value="name">Name (A-Z)</option>
+          <option value="-name">Name (Z-A)</option>
+          <option value="sku">SKU (A-Z)</option>
+          <option value="-sku">SKU (Z-A)</option>
+        </select>
+        <p className="text-sm text-brand-muted ml-auto font-medium">{totalCount} products</p>
         <div className="flex gap-2">
           <button onClick={handleExport} className="inline-flex items-center gap-1.5 px-3 py-2 text-xs uppercase border border-slate-200 bg-white rounded-lg hover:bg-slate-50 transition"><Download className="h-3.5 w-3.5" /> Export</button>
           <button onClick={startNew} className="inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase bg-violet-600 text-white rounded-lg font-bold hover:bg-violet-700 transition"><Plus className="h-4 w-4" /> Add product</button>
@@ -797,7 +866,7 @@ function ProductsTab({ authFetch, regions, categories }) {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((p) => {
+            {products.map((p) => {
               const thumb = p.media?.[0]?.file_url;
               const variantCount = (p.nutrition_facts?._variants || []).length;
               const firstConfig = p.regional_configs?.[0];
@@ -838,23 +907,20 @@ function ProductsTab({ authFetch, regions, categories }) {
                 </tr>
               );
             })}
-            {filtered.length === 0 && (
+            {products.length === 0 && (
               <tr><td colSpan={6} className="px-3 py-12 text-center text-sm text-brand-muted">No products found.</td></tr>
             )}
           </tbody>
         </table>
       </div>
 
-      {editing && (
-        <ProductEditorPanel
-          editing={editing}
-          onChange={setEditing}
-          onClose={() => { setEditing(null); setErr(''); }}
-          onSave={save}
-          saving={saving}
-          err={err}
-          regions={regions}
-          categories={categories}
+      {totalCount > pageSize && (
+        <PaginationControls
+          page={page}
+          pageSize={pageSize}
+          totalCount={totalCount}
+          onChangePage={setPage}
+          onChangePageSize={setPageSize}
         />
       )}
     </div>
@@ -867,6 +933,17 @@ function CollectionsTab({ authFetch }) {
   const [form, setForm] = useState(null);
   const [rulesMap, setRulesMap] = useState({});
   const [loading, setLoading] = useState(true);
+  const [uploadingImage, setUploadingImage] = useState(false);
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingImage(true);
+    uploadAdminMedia(authFetch, file)
+      .then((fileUrl) => setForm(p => ({ ...p, image_url: fileUrl })))
+      .catch((err) => alert(err.message || 'Image upload failed.'))
+      .finally(() => setUploadingImage(false));
+  };
 
   const load = useCallback(() => {
     setLoading(true);
@@ -890,6 +967,7 @@ function CollectionsTab({ authFetch }) {
     const meta = rulesMap[c.slug] || { type: 'manual', match: 'all', rules: [] };
     setForm({
       ...c,
+      image_url: c.image_url || '',
       type: meta.type || 'manual',
       match: meta.match || 'all',
       rules: meta.rules || []
@@ -901,6 +979,7 @@ function CollectionsTab({ authFetch }) {
       name: '',
       slug: '',
       description: '',
+      image_url: '',
       type: 'manual',
       match: 'all',
       rules: []
@@ -927,7 +1006,7 @@ function CollectionsTab({ authFetch }) {
     const isNew = !form.id;
     authFetch(isNew ? '/api/admin/categories/' : `/api/admin/categories/${form.slug}/`, {
       method: isNew ? 'POST' : 'PUT',
-      body: JSON.stringify({ name: form.name, slug: form.slug, description: form.description || '' })
+      body: JSON.stringify({ name: form.name, slug: form.slug, description: form.description || '', image_url: form.image_url || '' })
     })
       .then((r) => r.json())
       .then((savedCat) => {
@@ -972,16 +1051,25 @@ function CollectionsTab({ authFetch }) {
           const meta = rulesMap[c.slug] || { type: 'manual' };
           return (
             <div key={c.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3">
-              <div>
-                <p className="text-sm font-semibold text-brand-navy">
-                  {toDisplayText(c.name)} <span className="font-mono text-[10px] text-brand-muted">/{toDisplayText(c.slug)}</span>
-                  {meta.type === 'automated' ? (
-                    <span className="ml-2 rounded-full bg-purple-100 text-purple-700 px-1.5 py-0.5 text-[9px] font-bold">AUTOMATED</span>
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 overflow-hidden rounded-lg border border-slate-200 bg-slate-100 flex items-center justify-center flex-shrink-0">
+                  {c.image_url ? (
+                    <img src={c.image_url} alt="" className="h-full w-full object-cover" />
                   ) : (
-                    <span className="ml-2 rounded-full bg-slate-100 text-slate-500 px-1.5 py-0.5 text-[9px] font-bold">MANUAL</span>
+                    <Layers className="h-4 w-4 text-slate-300" />
                   )}
-                </p>
-                {c.product_count != null && <p className="text-[11px] text-brand-muted">{c.product_count} products</p>}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-brand-navy">
+                    {toDisplayText(c.name)} <span className="font-mono text-[10px] text-brand-muted">/{toDisplayText(c.slug)}</span>
+                    {meta.type === 'automated' ? (
+                      <span className="ml-2 rounded-full bg-purple-100 text-purple-700 px-1.5 py-0.5 text-[9px] font-bold">AUTOMATED</span>
+                    ) : (
+                      <span className="ml-2 rounded-full bg-slate-100 text-slate-500 px-1.5 py-0.5 text-[9px] font-bold">MANUAL</span>
+                    )}
+                  </p>
+                  {c.product_count != null && <p className="text-[11px] text-brand-muted">{c.product_count} products</p>}
+                </div>
               </div>
               <div className="flex gap-2">
                 <button onClick={() => startEdit(c)} className="text-brand-purple hover:opacity-70">
@@ -1006,6 +1094,23 @@ function CollectionsTab({ authFetch }) {
               <input placeholder="Slug" value={form.slug} disabled={!!form.id} onChange={(e) => setForm({ ...form, slug: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm disabled:bg-slate-50" />
               <textarea placeholder="Description" rows={2} value={form.description || ''} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" />
               
+              <div className="space-y-1">
+                <label className="block text-[10px] font-bold text-brand-muted uppercase">Collection Image URL</label>
+                <div className="flex gap-3">
+                  <input placeholder="https://example.com/collection-image.jpg" value={form.image_url || ''} onChange={(e) => setForm({ ...form, image_url: e.target.value })} className="flex-1 rounded-lg border border-slate-200 p-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-violet-500" />
+                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2.5 text-xs font-bold text-brand-navy hover:border-brand-purple">
+                    <Upload className="h-3.5 w-3.5" />
+                    {uploadingImage ? 'Uploading' : 'Upload'}
+                    <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" disabled={uploadingImage} />
+                  </label>
+                  {form.image_url && (
+                    <div className="h-10 w-10 rounded-lg overflow-hidden border border-slate-200 bg-slate-100 flex items-center justify-center flex-shrink-0">
+                      <img src={form.image_url} alt="" className="h-full w-full object-cover" />
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div className="border-t border-slate-100 pt-3">
                 <label className="block text-xs font-bold text-brand-navy mb-2 uppercase">Collection Type</label>
                 <div className="flex gap-4">
@@ -1436,42 +1541,150 @@ function OrderDetail({ authFetch, order, onClose, onChanged }) {
   );
 }
 
+function PaginationControls({ page, pageSize, totalCount, onChangePage, onChangePageSize }) {
+  const totalPages = Math.ceil(totalCount / pageSize) || 1;
+  const startRange = (page - 1) * pageSize + 1;
+  const endRange = Math.min(page * pageSize, totalCount);
+
+  const pages = [];
+  const maxButtons = 5;
+  let startPage = Math.max(1, page - Math.floor(maxButtons / 2));
+  let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+
+  if (endPage - startPage + 1 < maxButtons) {
+    startPage = Math.max(1, endPage - maxButtons + 1);
+  }
+
+  for (let i = startPage; i <= endPage; i++) {
+    pages.push(i);
+  }
+
+  return (
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-100 pt-4 mt-4">
+      <div className="text-xs text-brand-muted">
+        Showing <span className="font-semibold text-brand-navy">{totalCount > 0 ? startRange : 0}</span> to{' '}
+        <span className="font-semibold text-brand-navy">{endRange}</span> of{' '}
+        <span className="font-semibold text-brand-navy">{totalCount}</span> results
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          value={pageSize}
+          onChange={(e) => {
+            onChangePageSize(Number(e.target.value));
+            onChangePage(1);
+          }}
+          className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-brand-navy"
+        >
+          {[10, 25, 50, 100].map((size) => (
+            <option key={size} value={size}>
+              {size} per page
+            </option>
+          ))}
+        </select>
+        <div className="flex items-center rounded-lg border border-slate-200 bg-white overflow-hidden">
+          <button
+            onClick={() => onChangePage(Math.max(1, page - 1))}
+            disabled={page === 1}
+            className="px-3 py-1.5 text-xs font-semibold text-brand-navy hover:bg-slate-50 disabled:opacity-40 transition-colors border-r border-slate-200"
+          >
+            Prev
+          </button>
+          {pages.map((p) => (
+            <button
+              key={p}
+              onClick={() => onChangePage(p)}
+              className={`px-3 py-1.5 text-xs font-semibold border-r border-slate-200 last:border-0 transition-colors ${
+                page === p
+                  ? 'bg-brand-purple/10 text-brand-purple'
+                  : 'text-brand-navy hover:bg-slate-50'
+              }`}
+            >
+              {p}
+            </button>
+          ))}
+          <button
+            onClick={() => onChangePage(Math.min(totalPages, page + 1))}
+            disabled={page === totalPages}
+            className="px-3 py-1.5 text-xs font-semibold text-brand-navy hover:bg-slate-50 disabled:opacity-40 transition-colors"
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function OrdersTab({ authFetch, initialStatus = 'ALL', title = 'orders' }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [detail, setDetail] = useState(null);
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [status, setStatus] = useState(initialStatus);
   const [paymentStatus, setPaymentStatus] = useState('ALL');
   const [sort, setSort] = useState('newest');
   const [showCreate, setShowCreate] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalCount, setTotalCount] = useState(0);
+  const [stats, setStats] = useState(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedQuery(query);
+    }, 450);
+    return () => clearTimeout(t);
+  }, [query]);
 
   const load = useCallback(() => {
     setLoading(true);
-    authFetch('/api/admin/orders/').then((r) => r.json()).then((d) => setOrders(Array.isArray(d) ? d : d.results || [])).catch(() => setOrders([])).finally(() => setLoading(false));
-  }, [authFetch]);
-  useEffect(() => { load(); }, [load]);
-
-  if (loading) return <p className="text-sm text-brand-muted">Loading orders…</p>;
-
-  const filtered = orders
-    .filter((o) => status === 'ALL' || o.status === status)
-    .filter((o) => paymentStatus === 'ALL' || (o.payment_status || 'PAID') === paymentStatus)
-    .filter((o) => {
-      const haystack = normalize(`${o.id} ${o.email} ${o.shipping_name} ${o.payment_id} ${o.region_code}`);
-      return !query || haystack.includes(normalize(query));
-    })
-    .sort((a, b) => {
-      if (sort === 'oldest') return (a.created_at || '').localeCompare(b.created_at || '');
-      if (sort === 'total') return Number(b.total || 0) - Number(a.total || 0);
-      return (b.created_at || '').localeCompare(a.created_at || '');
+    const params = new URLSearchParams({
+      page,
+      page_size: pageSize,
+      status,
+      payment_status: paymentStatus,
+      search: debouncedQuery,
+      ordering: sort,
     });
+    authFetch(`/api/admin/orders/?${params.toString()}`)
+      .then((r) => r.json())
+      .then((d) => {
+        setOrders(d.results || []);
+        setTotalCount(d.count || 0);
+      })
+      .catch(() => {
+        setOrders([]);
+        setTotalCount(0);
+      })
+      .finally(() => setLoading(false));
+  }, [authFetch, page, pageSize, status, paymentStatus, debouncedQuery, sort]);
 
-  const counts = ORDER_STATUSES.reduce((acc, s) => ({ ...acc, [s]: orders.filter((o) => o.status === s).length }), {});
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    authFetch('/api/admin/orders/stats/')
+      .then((r) => r.json())
+      .then(setStats)
+      .catch(() => {});
+  }, [authFetch]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedQuery, status, paymentStatus, sort]);
+
+  const getStatusCount = (s) => {
+    if (!stats) return '';
+    const key = `${s.toLowerCase()}_orders`;
+    return stats[key] !== undefined ? ` (${stats[key]})` : '';
+  };
+
+  if (loading && orders.length === 0) return <p className="text-sm text-brand-muted font-medium">Loading orders…</p>;
 
   return (
     <div className="space-y-4">
-      {/* Toolbar row with Create Order CTA */}
       <div className="flex flex-wrap items-stretch gap-3">
         <div className="flex-1 grid gap-2 rounded-xl border border-slate-200 bg-white p-2.5 sm:grid-cols-[1fr_auto_auto_auto]">
           <label className="relative block">
@@ -1480,7 +1693,7 @@ function OrdersTab({ authFetch, initialStatus = 'ALL', title = 'orders' }) {
           </label>
           <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
             <option value="ALL">All statuses</option>
-            {ORDER_STATUSES.map((s) => <option key={s} value={s}>{s} ({counts[s] || 0})</option>)}
+            {ORDER_STATUSES.map((s) => <option key={s} value={s}>{s}{getStatusCount(s)}</option>)}
           </select>
           <select value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
             <option value="ALL">All payments</option>
@@ -1492,7 +1705,6 @@ function OrdersTab({ authFetch, initialStatus = 'ALL', title = 'orders' }) {
             <option value="total">Highest total</option>
           </select>
         </div>
-        {/* Prominent Create Order button — mirrors Shopify's primary CTA */}
         <button
           onClick={() => { setDetail(null); setShowCreate(true); }}
           className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-violet-700 active:scale-95 transition-all shadow-sm whitespace-nowrap flex-shrink-0"
@@ -1501,7 +1713,6 @@ function OrdersTab({ authFetch, initialStatus = 'ALL', title = 'orders' }) {
         </button>
       </div>
 
-      {/* Orders table */}
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
         <table className="w-full text-left text-xs">
           <thead className="bg-slate-50 text-brand-muted border-b border-slate-100">
@@ -1515,7 +1726,7 @@ function OrdersTab({ authFetch, initialStatus = 'ALL', title = 'orders' }) {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((o) => (
+            {orders.map((o) => (
               <tr key={o.id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50 transition-colors" onClick={() => { setShowCreate(false); setDetail(o); }}>
                 <td className="px-3 py-3"><p className="font-bold text-brand-navy">#{o.id}</p><p className="text-[10px] text-brand-muted">{o.region_code || o.region}</p></td>
                 <td className="px-3 py-3"><p className="font-semibold text-brand-navy">{o.shipping_name || 'Customer'}</p><p className="text-brand-muted">{o.email}</p></td>
@@ -1528,7 +1739,7 @@ function OrdersTab({ authFetch, initialStatus = 'ALL', title = 'orders' }) {
                 <td className="px-3 py-3"><span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${STATUS_COLOR[o.status]}`}>{o.status}</span></td>
               </tr>
             ))}
-            {!filtered.length && (
+            {!orders.length && (
               <tr><td colSpan={6} className="px-3 py-10 text-center text-sm text-brand-muted">
                 {query || status !== 'ALL' || paymentStatus !== 'ALL'
                   ? 'No orders match these filters.'
@@ -1538,6 +1749,16 @@ function OrdersTab({ authFetch, initialStatus = 'ALL', title = 'orders' }) {
           </tbody>
         </table>
       </div>
+
+      {totalCount > pageSize && (
+        <PaginationControls
+          page={page}
+          pageSize={pageSize}
+          totalCount={totalCount}
+          onChangePage={setPage}
+          onChangePageSize={setPageSize}
+        />
+      )}
 
       {detail && !showCreate && (
         <OrderDetail authFetch={authFetch} order={detail} onClose={() => setDetail(null)} onChanged={(next) => { setDetail(next); load(); }} />
@@ -2163,27 +2384,56 @@ function CustomersTab({ authFetch }) {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [customerDetails, setCustomerDetails] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [sortOrder, setSortOrder] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalCount, setTotalCount] = useState(0);
   const [editingCustomer, setEditingCustomer] = useState(null);
 
   const [metadataMap, setMetadataMap] = useState({});
   const [creditInput, setCreditInput] = useState('');
   const [tagsInput, setTagsInput] = useState('');
 
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedQuery(searchQuery);
+    }, 450);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
   const load = useCallback(() => {
     setLoading(true);
-    authFetch(`/api/admin/customers/?q=${searchQuery}`)
+    const params = new URLSearchParams({
+      page,
+      page_size: pageSize,
+      q: debouncedQuery,
+    });
+    if (sortOrder) params.append('ordering', sortOrder);
+
+    authFetch(`/api/admin/customers/?${params.toString()}`)
       .then((r) => r.json())
-      .then((d) => setCustomers(Array.isArray(d) ? d : d.results || []))
-      .catch(() => setCustomers([]))
+      .then((d) => {
+        setCustomers(d.results || []);
+        setTotalCount(d.count || 0);
+      })
+      .catch(() => {
+        setCustomers([]);
+        setTotalCount(0);
+      })
       .finally(() => setLoading(false));
 
     authFetch('/api/admin/settings/USER_CREDITS_AND_TAGS/')
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d && d.value) setMetadataMap(d.value); })
       .catch(() => {});
-  }, [authFetch, searchQuery]);
+  }, [authFetch, page, pageSize, debouncedQuery, sortOrder]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedQuery, sortOrder]);
 
   const viewDetails = (customer) => {
     setSelectedCustomer(customer);
@@ -2249,10 +2499,18 @@ function CustomersTab({ authFetch }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <label className="relative block flex-1 max-w-md">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-muted" />
-          <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search email, name..." className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm" />
-        </label>
+        <div className="flex flex-wrap gap-2 flex-grow max-w-xl">
+          <label className="relative block flex-grow max-w-md">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-muted" />
+            <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search email, name..." className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm focus:outline-none" />
+          </label>
+          <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/30">
+            <option value="">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="email">Email (A-Z)</option>
+            <option value="-email">Email (Z-A)</option>
+          </select>
+        </div>
         <button onClick={startNew} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase bg-brand-purple text-white rounded-lg"><UserPlus className="h-4 w-4" /> Add Customer</button>
       </div>
 
@@ -2284,6 +2542,16 @@ function CustomersTab({ authFetch }) {
           </tbody>
         </table>
       </div>
+
+      {totalCount > pageSize && (
+        <PaginationControls
+          page={page}
+          pageSize={pageSize}
+          totalCount={totalCount}
+          onChangePage={setPage}
+          onChangePageSize={setPageSize}
+        />
+      )}
 
       {/* Selected Customer Details Slide-out */}
       {selectedCustomer && (
@@ -2673,121 +2941,6 @@ function SupportTab({ authFetch }) {
 }
 
 /* --------------------------------------------------------- Landing Pages */
-function LandingPagesTab({ authFetch, products }) {
-  const [pages, setPages] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState(null);
-
-  const load = useCallback(() => {
-    setLoading(true);
-    authFetch('/api/admin/product-landing-pages/')
-      .then((r) => r.json())
-      .then((d) => setPages(Array.isArray(d) ? d : d.results || []))
-      .catch(() => setPages([]))
-      .finally(() => setLoading(false));
-  }, [authFetch]);
-
-  useEffect(() => { load(); }, [load]);
-
-  const save = () => {
-    const isNew = !form.id;
-    authFetch(isNew ? '/api/admin/product-landing-pages/' : `/api/admin/product-landing-pages/${form.id}/`, {
-      method: isNew ? 'POST' : 'PUT',
-      body: JSON.stringify(form)
-    }).then(() => { setForm(null); load(); });
-  };
-
-  const deletePage = (p) => {
-    if (confirm("Are you sure you want to unpublish and delete this automated landing page?")) {
-      authFetch(`/api/admin/product-landing-pages/${p.id}/`, { method: 'DELETE' }).then(load);
-    }
-  };
-
-  if (loading) return <p className="text-sm text-brand-muted">Loading Open Pages catalog mapping...</p>;
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-brand-muted">{pages.length} automated product pages published</p>
-        <button onClick={() => setForm({ product: products[0]?.id || '', slug: '', template_style: 'bold', custom_branding: {}, seo_meta: {}, is_published: true, dynamic_feed_sync: true })} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase bg-brand-purple text-white rounded-lg"><Plus className="h-4 w-4" /> Generate Landing Page</button>
-      </div>
-
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-        <table className="w-full text-left text-xs">
-          <thead className="bg-slate-50 text-brand-muted font-bold">
-            <tr><th className="px-3 py-3">Product Name</th><th className="px-3 py-3">URL Slug</th><th className="px-3 py-3">Template</th><th className="px-3 py-3">Traffic</th><th className="px-3 py-3">Conversions</th><th className="px-3 py-3">Conv. Rate</th><th className="px-3 py-3 text-right">Actions</th></tr>
-          </thead>
-          <tbody>
-            {pages.map((p) => {
-              const cr = p.visits_count > 0 ? (p.conversions_count / p.visits_count * 100).toFixed(1) : '0.0';
-              return (
-                <tr key={p.id} className="border-t border-slate-100">
-                  <td className="px-3 py-3 font-semibold text-brand-navy">{toDisplayText(p.product_name) || `Product ID ${p.product}`}</td>
-                  <td className="px-3 py-3 font-mono">/{p.slug}</td>
-                  <td className="px-3 py-3 uppercase font-bold text-slate-500">{p.template_style}</td>
-                  <td className="px-3 py-3 font-semibold">{p.visits_count} visits</td>
-                  <td className="px-3 py-3">{p.conversions_count} sales</td>
-                  <td className="px-3 py-3 font-bold text-green-600">{cr}%</td>
-                  <td className="px-3 py-3"><div className="flex justify-end gap-2"><button onClick={() => setForm({ ...p, seo_meta: toSeoMeta(p.seo_meta), custom_branding: p.custom_branding || {} })} className="text-brand-purple"><Pencil className="h-4 w-4" /></button><button onClick={() => deletePage(p)} className="text-brand-muted hover:text-brand-danger"><X className="h-4 w-4" /></button></div></td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {form && (
-        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-slate-50 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-          <div className="my-8 w-full max-w-lg bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
-            <h3 className="text-lg font-black text-brand-navy">{form.id ? 'Edit Landing Page' : 'Generate Product Landing Page'}</h3>
-            <div className="space-y-3 text-xs">
-              <div>
-                <p className="font-bold text-brand-muted mb-1">SELECT PRODUCT FROM CATALOG</p>
-                <select value={form.product} disabled={!!form.id} onChange={(e) => setForm({ ...form, product: Number(e.target.value) })} className="w-full rounded-lg border border-slate-200 p-2 text-xs">
-                  {products.map((p) => <option key={p.id} value={p.id}>{toDisplayText(p.name) || 'Untitled product'} ({toDisplayText(p.sku) || p.id})</option>)}
-                </select>
-              </div>
-
-              <div>
-                <p className="font-bold text-brand-muted mb-1">LANDING PAGE SLUG</p>
-                <input placeholder="landing-product-name" value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2.5 text-xs font-mono" />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <p className="font-bold text-brand-muted mb-1">TEMPLATE STYLE</p>
-                  <select value={form.template_style} onChange={(e) => setForm({ ...form, template_style: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2 text-xs">
-                    <option value="minimal">Minimalist Clean</option>
-                    <option value="bold">Bold &amp; Premium</option>
-                    <option value="sporty">Sporty &amp; High Energy</option>
-                    <option value="clinical">Clinical Research</option>
-                  </select>
-                </div>
-                <div className="flex items-center pt-5">
-                  <label className="flex items-center gap-1.5 font-bold text-brand-navy cursor-pointer"><input type="checkbox" checked={form.dynamic_feed_sync} onChange={(e) => setForm({ ...form, dynamic_feed_sync: e.target.checked })} className="accent-brand-purple" /> Dynamic Sync Feed</label>
-                </div>
-              </div>
-
-              {/* SEO Tags */}
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
-                <p className="font-bold text-slate-400">SEO STRUCTURED META</p>
-                <input placeholder="Meta Title" value={form.seo_meta?.title || ''} onChange={(e) => setForm({ ...form, seo_meta: { ...form.seo_meta, title: e.target.value } })} className="w-full rounded border border-slate-200 p-1.5 text-xs bg-white" />
-                <textarea placeholder="Meta Description" value={form.seo_meta?.description || ''} onChange={(e) => setForm({ ...form, seo_meta: { ...form.seo_meta, description: e.target.value } })} className="w-full rounded border border-slate-200 p-1.5 text-xs bg-white" rows={2} />
-              </div>
-
-              <label className="flex items-center gap-2 text-sm text-brand-navy cursor-pointer"><input type="checkbox" checked={form.is_published} onChange={(e) => setForm({ ...form, is_published: e.target.checked })} className="accent-brand-purple" /> Publish landing page immediately</label>
-              <div className="flex gap-2">
-                <button onClick={save} className="btn-primary flex-1 py-2.5 text-xs bg-brand-purple text-white rounded-lg uppercase">Save Configuration</button>
-                <button onClick={() => setForm(null)} className="flex-1 rounded-lg border border-slate-200 py-2.5 text-xs font-bold uppercase">Cancel</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 /* ---------------------------------------------------------- Integrations */
 const MARKETING_CHANNELS_CATALOG = [
   { code: 'GOOGLE_MERCHANT', name: 'Google Merchant Center', desc: 'Sync catalogs and verify product feeds dynamically.', icon: Globe },
@@ -2952,7 +3105,7 @@ function IntegrationsTab({ authFetch }) {
           {/* API keys credentials form */}
           <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
             <h3 className="text-sm font-bold text-brand-navy">API Key &amp; Credentials Center</h3>
-            <p className="text-xs text-brand-muted font-medium">Input your production API secret credentials below. The values are encrypted and stored securely inside settings model.</p>
+            <p className="text-xs text-brand-muted font-medium">Input production credentials below. Secret values are accepted by the server but are never returned to the browser.</p>
             
             <div className="space-y-3.5 text-xs">
               <div className="border-b border-slate-100 pb-3">
@@ -3063,6 +3216,46 @@ function IntegrationsTab({ authFetch }) {
 
 
 /* --------------------------------------------------------- Content Pages */
+function ContentOverviewTab({ authFetch, go }) {
+  const [counts, setCounts] = useState({ pages: 0, blogs: 0, media: 0 });
+
+  useEffect(() => {
+    Promise.all([
+      authFetch('/api/admin/content-pages/').then((r) => (r.ok ? r.json() : null)),
+      authFetch('/api/admin/blog-posts/').then((r) => (r.ok ? r.json() : null)),
+      authFetch('/api/admin/settings/MEDIA_ASSETS/').then((r) => (r.ok ? r.json() : null)),
+    ]).then(([pages, blogs, media]) => {
+      setCounts({
+        pages: Array.isArray(pages) ? pages.length : pages?.results?.length || 0,
+        blogs: Array.isArray(blogs) ? blogs.length : blogs?.results?.length || 0,
+        media: Array.isArray(media?.value) ? media.value.length : 0,
+      });
+    }).catch(() => {});
+  }, [authFetch]);
+
+  const cards = [
+    { key: 'pages', title: 'Pages & banners', detail: `${counts.pages} pages`, icon: FileText },
+    { key: 'blogs', title: 'Blog', detail: `${counts.blogs} articles`, icon: Film },
+    { key: 'navigation', title: 'Menus', detail: 'Header and footer links', icon: MenuIcon },
+    { key: 'media', title: 'Media', detail: `${counts.media} assets`, icon: ImageIcon },
+  ];
+
+  return (
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      {cards.map((card) => {
+        const Icon = card.icon;
+        return (
+          <button key={card.key} type="button" onClick={() => go(card.key)} className="rounded-2xl border border-slate-200 bg-white p-5 text-left hover:border-brand-purple/30 hover:shadow-sm">
+            <Icon className="mb-4 h-5 w-5 text-brand-purple" />
+            <p className="text-sm font-black text-brand-navy">{card.title}</p>
+            <p className="mt-1 text-xs text-brand-muted">{card.detail}</p>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function slugify(text) {
   return String(text || '')
     .toLowerCase()
@@ -3120,6 +3313,24 @@ function PagesTab({ authFetch }) {
     setEditing({ ...editing, content: next });
   };
 
+  const uploadContentImage = (file) => {
+    if (!file) return;
+    uploadAdminMedia(authFetch, file)
+      .then((fileUrl) => {
+        const ta = contentRef.current;
+        const imageText = `\n![${file.name.replace(/\.[^.]+$/, '')}](${fileUrl})\n`;
+        if (!ta) {
+          setEditing((prev) => ({ ...prev, content: `${prev.content || ''}${imageText}` }));
+          return;
+        }
+        const start = ta.selectionStart;
+        const end = ta.selectionEnd;
+        const next = ta.value.slice(0, start) + imageText + ta.value.slice(end);
+        setEditing((prev) => ({ ...prev, content: next }));
+      })
+      .catch((err) => alert(err.message || 'Image upload failed.'));
+  };
+
   const startNew = () => { setSlugManuallyEdited(false); setEditing({ title: '', slug: '', content: '', page_type: 'STANDARD', is_published: true }); };
   
   const save = () => {
@@ -3134,6 +3345,13 @@ function PagesTab({ authFetch }) {
     if (confirm(`Delete content page: ${item.title}?`)) {
       authFetch(`/api/admin/content-pages/${item.id}/`, { method: 'DELETE' }).then(load);
     }
+  };
+
+  const togglePublish = (item) => {
+    authFetch(`/api/admin/content-pages/${item.id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify({ is_published: !item.is_published }),
+    }).then(load);
   };
 
   if (loading) return <p className="text-sm text-brand-muted">Loading web pages...</p>;
@@ -3151,8 +3369,14 @@ function PagesTab({ authFetch }) {
             <div>
               <p className="text-sm font-semibold text-brand-navy">{toDisplayText(p.title)} <span className="font-mono text-[10px] text-brand-muted">/{toDisplayText(p.slug)}</span></p>
               <p className="text-[10px] uppercase font-bold text-slate-400">{p.page_type}</p>
+              <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[9px] font-bold uppercase ${p.is_published ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                {p.is_published ? 'Published' : 'Draft'}
+              </span>
             </div>
             <div className="flex gap-2">
+              <button onClick={() => togglePublish(p)} className="text-brand-muted hover:text-brand-purple" title={p.is_published ? 'Unpublish' : 'Publish'}>
+                {p.is_published ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
+              </button>
               <button onClick={() => setEditing({ ...p })} className="text-brand-purple"><Pencil className="h-4 w-4" /></button>
               <button onClick={() => deleteItem(p)} className="text-brand-muted hover:text-brand-danger"><X className="h-4 w-4" /></button>
             </div>
@@ -3172,7 +3396,16 @@ function PagesTab({ authFetch }) {
                 <option value="LANDING">Landing page layout</option>
                 <option value="PROMO">Promotional grid</option>
               </select>
-              <textarea placeholder="HTML/Markdown content" value={editing.content} onChange={(e) => setEditing({ ...editing, content: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2.5 font-mono" rows={5} />
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={() => insertToken('**', true)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-[10px] font-bold text-brand-navy">Bold</button>
+                <button type="button" onClick={() => insertToken('*', true)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-[10px] font-bold text-brand-navy">Italic</button>
+                <button type="button" onClick={insertLink} className="rounded-lg border border-slate-200 px-3 py-1.5 text-[10px] font-bold text-brand-navy">Link</button>
+                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-[10px] font-bold text-brand-navy">
+                  <Upload className="h-3.5 w-3.5" /> Image
+                  <input type="file" accept="image/*" onChange={(e) => uploadContentImage(e.target.files?.[0])} className="hidden" />
+                </label>
+              </div>
+              <textarea ref={contentRef} placeholder="HTML/Markdown content" value={editing.content} onChange={(e) => setEditing({ ...editing, content: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2.5 font-mono" rows={5} />
               
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
                 <p className="font-bold text-slate-400">SEO TAGS</p>
@@ -3198,6 +3431,7 @@ function BlogsTab({ authFetch }) {
   const [blogs, setBlogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
+  const [uploadingCover, setUploadingCover] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -3210,7 +3444,16 @@ function BlogsTab({ authFetch }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const startNew = () => setEditing({ title: '', slug: '', content: '', author: 'Admin', is_published: true });
+  const startNew = () => setEditing({ title: '', slug: '', content: '', author: 'Admin', cover_image_url: '', is_published: true });
+
+  const uploadCover = (file) => {
+    if (!file) return;
+    setUploadingCover(true);
+    uploadAdminMedia(authFetch, file)
+      .then((fileUrl) => setEditing((prev) => ({ ...prev, cover_image_url: fileUrl })))
+      .catch((err) => alert(err.message || 'Cover image upload failed.'))
+      .finally(() => setUploadingCover(false));
+  };
 
   const save = () => {
     const isNew = !editing.id;
@@ -3224,6 +3467,10 @@ function BlogsTab({ authFetch }) {
     if (confirm(`Delete blog post: ${item.title}?`)) {
       authFetch(`/api/admin/blog-posts/${item.id}/`, { method: 'DELETE' }).then(load);
     }
+  };
+
+  const togglePublish = (item) => {
+    authFetch(`/api/admin/blog-posts/${item.id}/${item.is_published ? 'unpublish' : 'publish'}/`, { method: 'POST' }).then(load);
   };
 
   if (loading) return <p className="text-sm text-brand-muted">Loading blogs...</p>;
@@ -3241,8 +3488,14 @@ function BlogsTab({ authFetch }) {
             <div>
               <p className="text-sm font-semibold text-brand-navy">{toDisplayText(b.title)}</p>
               <p className="text-[10px] text-brand-muted">Written by {b.author} · /{b.slug}</p>
+              <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[9px] font-bold uppercase ${b.is_published ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                {b.is_published ? 'Published' : 'Draft'}
+              </span>
             </div>
             <div className="flex gap-2">
+              <button onClick={() => togglePublish(b)} className="text-brand-muted hover:text-brand-purple" title={b.is_published ? 'Unpublish' : 'Publish'}>
+                {b.is_published ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
+              </button>
               <button onClick={() => setEditing({ ...b })} className="text-brand-purple"><Pencil className="h-4 w-4" /></button>
               <button onClick={() => deleteItem(b)} className="text-brand-muted hover:text-brand-danger"><X className="h-4 w-4" /></button>
             </div>
@@ -3258,6 +3511,18 @@ function BlogsTab({ authFetch }) {
               <input placeholder="Article Title" value={editing.title} onChange={(e) => setEditing({ ...editing, title: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" />
               <input placeholder="Slug" value={editing.slug} disabled={!!editing.id} onChange={(e) => setEditing({ ...editing, slug: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm disabled:bg-slate-50" />
               <input placeholder="Author name" value={editing.author} onChange={(e) => setEditing({ ...editing, author: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" />
+              <div>
+                <label className="mb-1 block text-[10px] font-bold uppercase text-brand-muted">Cover image</label>
+                <div className="flex gap-2">
+                  <input placeholder="https://..." value={editing.cover_image_url || ''} onChange={(e) => setEditing({ ...editing, cover_image_url: e.target.value })} className="flex-1 rounded-lg border border-slate-200 p-2.5 text-sm" />
+                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-brand-navy hover:border-brand-purple">
+                    <Upload className="h-3.5 w-3.5" />
+                    {uploadingCover ? 'Uploading' : 'Upload'}
+                    <input type="file" accept="image/*" onChange={(e) => uploadCover(e.target.files?.[0])} disabled={uploadingCover} className="hidden" />
+                  </label>
+                </div>
+                {editing.cover_image_url && <img src={editing.cover_image_url} alt="" className="mt-2 h-28 w-full rounded-lg object-cover" />}
+              </div>
               <textarea placeholder="Write article content..." value={editing.content} onChange={(e) => setEditing({ ...editing, content: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2.5 font-serif text-sm" rows={8} />
 
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
@@ -3752,6 +4017,7 @@ function ThemeTab({ authFetch }) {
   });
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
 
   useEffect(() => {
     authFetch('/api/admin/settings/THEME_BRANDING/')
@@ -3784,6 +4050,15 @@ function ThemeTab({ authFetch }) {
         setTimeout(() => setSuccess(false), 3000);
       })
       .finally(() => setSaving(false));
+  };
+
+  const uploadLogo = (file) => {
+    if (!file) return;
+    setUploadingLogo(true);
+    uploadAdminMedia(authFetch, file)
+      .then((fileUrl) => setTheme((prev) => ({ ...prev, logoUrl: fileUrl })))
+      .catch((err) => alert(err.message || 'Logo upload failed.'))
+      .finally(() => setUploadingLogo(false));
   };
 
   return (
@@ -3847,7 +4122,14 @@ function ThemeTab({ authFetch }) {
 
           <div>
             <label className="block font-bold text-brand-navy mb-1">Logo image URL</label>
-            <input type="text" value={theme.logoUrl} onChange={(e) => setTheme({ ...theme, logoUrl: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2" />
+            <div className="flex gap-2">
+              <input type="text" value={theme.logoUrl} onChange={(e) => setTheme({ ...theme, logoUrl: e.target.value })} className="flex-1 rounded-lg border border-slate-200 p-2" />
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-3 font-bold text-brand-navy hover:border-brand-purple">
+                <Upload className="h-3.5 w-3.5" />
+                {uploadingLogo ? 'Uploading' : 'Upload'}
+                <input type="file" accept="image/*" onChange={(e) => uploadLogo(e.target.files?.[0])} className="hidden" disabled={uploadingLogo} />
+              </label>
+            </div>
           </div>
 
           <div>
@@ -4280,6 +4562,8 @@ function MediaLibraryTab({ authFetch }) {
   const [uploadModal, setUploadModal] = useState(false);
   const [newName, setNewName] = useState('');
   const [newUrl, setNewUrl] = useState('');
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -4307,14 +4591,24 @@ function MediaLibraryTab({ authFetch }) {
     }) : r).then(() => load());
   };
 
-  const uploadFile = () => {
+  const uploadFile = async () => {
     if (!newName.trim()) return;
-    const link = newUrl.trim() || 'https://images.unsplash.com/photo-1579758629938-03607ccdbaba?q=80&w=200';
-    const nextList = [...assets, { name: newName, url: link, size: '840 KB', date: new Date().toISOString().split('T')[0] }];
-    save(nextList);
-    setNewName('');
-    setNewUrl('');
-    setUploadModal(false);
+    setUploading(true);
+    try {
+      const link = selectedFile ? await uploadAdminMedia(authFetch, selectedFile) : newUrl.trim();
+      if (!link) throw new Error('Choose a file or paste an asset URL.');
+      const size = selectedFile ? `${Math.max(1, Math.round(selectedFile.size / 1024))} KB` : 'External URL';
+      const nextList = [...assets, { name: newName, url: link, size, date: new Date().toISOString().split('T')[0] }];
+      save(nextList);
+      setNewName('');
+      setNewUrl('');
+      setSelectedFile(null);
+      setUploadModal(false);
+    } catch (err) {
+      alert(err.message || 'Asset upload failed.');
+    } finally {
+      setUploading(false);
+    }
   };
 
   const deleteAsset = (idx) => {
@@ -4378,9 +4672,14 @@ function MediaLibraryTab({ authFetch }) {
                 <label className="block font-bold text-brand-navy mb-1">Asset Image URL</label>
                 <input placeholder="e.g. https://images.unsplash.com/..." value={newUrl} onChange={(e) => setNewUrl(e.target.value)} className="w-full rounded-lg border border-slate-200 p-2" />
               </div>
+              <label className="flex cursor-pointer items-center justify-between rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3 font-semibold text-brand-navy">
+                <span>{selectedFile ? selectedFile.name : 'Upload from device'}</span>
+                <Upload className="h-4 w-4 text-brand-purple" />
+                <input type="file" accept="image/*,video/*" onChange={(e) => setSelectedFile(e.target.files?.[0] || null)} className="hidden" />
+              </label>
               <div className="flex gap-2 pt-2">
-                <button onClick={uploadFile} className="btn-primary flex-1 py-2.5 text-xs bg-brand-purple text-white rounded-lg uppercase font-bold">Add Asset</button>
-                <button onClick={() => setUploadModal(false)} className="flex-1 rounded-lg border border-slate-200 py-2.5 text-xs font-bold uppercase">Cancel</button>
+                <button onClick={uploadFile} disabled={uploading} className="btn-primary flex-1 py-2.5 text-xs bg-brand-purple text-white rounded-lg uppercase font-bold disabled:opacity-60">{uploading ? 'Uploading...' : 'Add Asset'}</button>
+                <button onClick={() => { setUploadModal(false); setSelectedFile(null); }} className="flex-1 rounded-lg border border-slate-200 py-2.5 text-xs font-bold uppercase">Cancel</button>
               </div>
             </div>
           </div>
@@ -4686,6 +4985,7 @@ function HeroBannersTab({ authFetch }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [uploadingMediaKey, setUploadingMediaKey] = useState('');
 
   const load = useCallback(() => {
     setLoading(true);
@@ -4715,6 +5015,15 @@ function HeroBannersTab({ authFetch }) {
   };
 
   const setField = (key, value) => setEditing((prev) => ({ ...prev, [key]: value }));
+
+  const uploadHeroMedia = (field, file) => {
+    if (!file) return;
+    setUploadingMediaKey(field);
+    uploadAdminMedia(authFetch, file)
+      .then((fileUrl) => setField(field, fileUrl))
+      .catch((err) => setError(err.message || 'Media upload failed.'))
+      .finally(() => setUploadingMediaKey(''));
+  };
 
   const payload = () => ({
     ...editing,
@@ -4909,15 +5218,33 @@ function HeroBannersTab({ authFetch }) {
                 </div>
                 <div>
                   <label className="mb-1 block text-[11px] font-bold uppercase text-brand-muted">Desktop image/video URL</label>
-                  <input value={editing.desktop_media_url} onChange={(e) => setField('desktop_media_url', e.target.value)} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" placeholder="https://..." />
+                  <div className="flex gap-2">
+                    <input value={editing.desktop_media_url} onChange={(e) => setField('desktop_media_url', e.target.value)} className="flex-1 rounded-lg border border-slate-200 p-2.5 text-sm" placeholder="https://..." />
+                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-bold text-brand-navy hover:border-brand-purple">
+                      <Upload className="h-3.5 w-3.5" /> {uploadingMediaKey === 'desktop_media_url' ? 'Uploading' : 'Upload'}
+                      <input type="file" accept="image/*,video/*" onChange={(e) => uploadHeroMedia('desktop_media_url', e.target.files?.[0])} className="hidden" />
+                    </label>
+                  </div>
                 </div>
                 <div>
                   <label className="mb-1 block text-[11px] font-bold uppercase text-brand-muted">Tablet image URL optional</label>
-                  <input value={editing.tablet_media_url} onChange={(e) => setField('tablet_media_url', e.target.value)} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" placeholder="https://..." />
+                  <div className="flex gap-2">
+                    <input value={editing.tablet_media_url} onChange={(e) => setField('tablet_media_url', e.target.value)} className="flex-1 rounded-lg border border-slate-200 p-2.5 text-sm" placeholder="https://..." />
+                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-bold text-brand-navy hover:border-brand-purple">
+                      <Upload className="h-3.5 w-3.5" /> {uploadingMediaKey === 'tablet_media_url' ? 'Uploading' : 'Upload'}
+                      <input type="file" accept="image/*" onChange={(e) => uploadHeroMedia('tablet_media_url', e.target.files?.[0])} className="hidden" />
+                    </label>
+                  </div>
                 </div>
                 <div>
                   <label className="mb-1 block text-[11px] font-bold uppercase text-brand-muted">Mobile image URL</label>
-                  <input value={editing.mobile_media_url} onChange={(e) => setField('mobile_media_url', e.target.value)} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" placeholder="https://..." />
+                  <div className="flex gap-2">
+                    <input value={editing.mobile_media_url} onChange={(e) => setField('mobile_media_url', e.target.value)} className="flex-1 rounded-lg border border-slate-200 p-2.5 text-sm" placeholder="https://..." />
+                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-bold text-brand-navy hover:border-brand-purple">
+                      <Upload className="h-3.5 w-3.5" /> {uploadingMediaKey === 'mobile_media_url' ? 'Uploading' : 'Upload'}
+                      <input type="file" accept="image/*" onChange={(e) => uploadHeroMedia('mobile_media_url', e.target.files?.[0])} className="hidden" />
+                    </label>
+                  </div>
                 </div>
                 <div>
                   <label className="mb-1 block text-[11px] font-bold uppercase text-brand-muted">Alt text</label>
@@ -5341,13 +5668,13 @@ const NAV_GROUPS = [
   { title: 'Catalog', items: [
     { key: 'products', label: 'Products', icon: Package },
     { key: 'collections', label: 'Collections', icon: Layers },
-    { key: 'landing-pages', label: 'Landing pages', icon: Globe },
   ] },
   { title: 'Marketing', items: [
     { key: 'integrations', label: 'Integrations', icon: Megaphone },
     { key: 'newsletter', label: 'Newsletters', icon: Mail },
   ] },
   { title: 'Content', items: [
+    { key: 'content', label: 'Content', icon: FileText },
     { key: 'pages', label: 'Pages & banners', icon: FileText },
     { key: 'blogs', label: 'Blog', icon: Film },
     { key: 'navigation', label: 'Menus', icon: MenuIcon },
@@ -5357,6 +5684,7 @@ const NAV_GROUPS = [
     { key: 'staff', label: 'Staff & permissions', icon: UserRound },
     { key: 'approvals', label: 'Approvals', icon: CheckCircle2 },
     { key: 'security', label: 'Security', icon: ShieldAlert },
+    { key: 'audit', label: 'Audit logs', icon: Activity },
   ] },
   { title: 'Settings', items: [
     { key: 'settings', label: 'General', icon: Sliders },
@@ -5808,23 +6136,43 @@ function AuditTab({ authFetch }) {
   const [filterAction, setFilterAction] = useState('ALL');
   const [filterActor, setFilterActor] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalCount, setTotalCount] = useState(0);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedQuery(searchQuery);
+    }, 450);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
 
   const loadLogs = useCallback(() => {
     setLoading(true);
-    let url = `/api/admin/audit-logs/?search=${searchQuery}`;
-    if (filterAction !== 'ALL') url += `&action=${filterAction}`;
-    if (filterActor.trim()) url += `&actor_email=${filterActor}`;
+    const params = new URLSearchParams({
+      page,
+      page_size: pageSize,
+      search: debouncedQuery,
+    });
+    if (filterAction !== 'ALL') params.append('action', filterAction);
+    if (filterActor.trim()) params.append('actor_email', filterActor);
     
     Promise.all([
-      authFetch(url).then((r) => r.json()).catch(() => []),
+      authFetch(`/api/admin/audit-logs/?${params.toString()}`).then((r) => r.json()).catch(() => ({ results: [], count: 0 })),
       authFetch('/api/admin/audit-logs/actions/').then((r) => r.json()).catch(() => []),
     ]).then(([lData, aData]) => {
-      setLogs(Array.isArray(lData) ? lData : lData.results || []);
+      setLogs(lData.results || []);
+      setTotalCount(lData.count || 0);
       setActions(aData || []);
     }).finally(() => setLoading(false));
-  }, [authFetch, searchQuery, filterAction, filterActor]);
+  }, [authFetch, page, pageSize, debouncedQuery, filterAction, filterActor]);
 
   useEffect(() => { loadLogs(); }, [loadLogs]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedQuery, filterAction, filterActor]);
 
   return (
     <div className="space-y-4">
@@ -5832,17 +6180,17 @@ function AuditTab({ authFetch }) {
       <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-3 md:grid-cols-[1fr_200px_200px_auto]">
         <label className="relative block">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-muted" />
-          <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search audit summaries..." className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-xs" />
+          <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search audit summaries..." className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-xs focus:outline-none" />
         </label>
-        <select value={filterAction} onChange={(e) => setFilterAction(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs bg-white">
+        <select value={filterAction} onChange={(e) => setFilterAction(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs bg-white focus:outline-none">
           <option value="ALL">All Actions</option>
           {actions.map((act) => <option key={act} value={act}>{act}</option>)}
         </select>
-        <input value={filterActor} onChange={(e) => setFilterActor(e.target.value)} placeholder="Filter actor email" className="rounded-lg border border-slate-200 px-3 py-2 text-xs" />
-        <button onClick={loadLogs} className="btn-primary px-4 py-2 bg-brand-purple text-white text-xs uppercase font-bold rounded-lg">Apply</button>
+        <input value={filterActor} onChange={(e) => setFilterActor(e.target.value)} placeholder="Filter actor email" className="rounded-lg border border-slate-200 px-3 py-2 text-xs focus:outline-none" />
+        <button onClick={loadLogs} className="btn-primary px-4 py-2 bg-brand-purple text-white text-xs uppercase font-bold rounded-lg hover:opacity-90">Apply</button>
       </div>
 
-      {loading ? (
+      {loading && logs.length === 0 ? (
         <p className="text-sm text-brand-muted">Querying audit logs trail...</p>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
@@ -5872,6 +6220,16 @@ function AuditTab({ authFetch }) {
             </tbody>
           </table>
         </div>
+      )}
+
+      {totalCount > pageSize && (
+        <PaginationControls
+          page={page}
+          pageSize={pageSize}
+          totalCount={totalCount}
+          onChangePage={setPage}
+          onChangePageSize={setPageSize}
+        />
       )}
 
       {selectedLog && (
@@ -6058,6 +6416,15 @@ export default function AdminPage() {
   const { user, access } = useSelector((s) => s.auth);
   const authFetch = useAuthFetch();
   const [section, setSection] = useState('home');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const sec = params.get('section');
+      if (sec) setSection(sec);
+    }
+  }, []);
+
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [regions, setRegions] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -6200,9 +6567,9 @@ export default function AdminPage() {
           {section === 'customers' && <CustomersTab authFetch={authFetch} />}
           {section === 'segments' && <SegmentsTab authFetch={authFetch} />}
           {section === 'support' && <SupportTab authFetch={authFetch} />}
-          {section === 'landing-pages' && <LandingPagesTab authFetch={authFetch} products={products} />}
           {section === 'integrations' && <IntegrationsTab authFetch={authFetch} />}
           {/* hero-banners merged into 'pages' (Pages & Banners) per spec 2026-06-24. */}
+          {section === 'content' && <ContentOverviewTab authFetch={authFetch} go={setSection} />}
           {section === 'pages' && <PagesAndBannersTab authFetch={authFetch} />}
           {section === 'blogs' && <BlogsTab authFetch={authFetch} />}
           {section === 'home' && <HomeTab authFetch={authFetch} go={setSection} />}

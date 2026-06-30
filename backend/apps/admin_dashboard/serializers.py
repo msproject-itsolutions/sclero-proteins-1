@@ -23,10 +23,73 @@ class FeatureToggleSerializer(serializers.ModelSerializer):
         fields = ['id', 'module_name', 'is_enabled', 'region', 'region_code', 'updated_at']
 
 
+SENSITIVE_SETTING_PARTS = (
+    'password', 'secret', 'token', 'api_key', 'private_key', 'webhook',
+)
+
+
+def _is_sensitive_setting_key(key):
+    normalized = str(key or '').lower()
+    return any(part in normalized for part in SENSITIVE_SETTING_PARTS)
+
+
+def _redact_sensitive_values(value):
+    if isinstance(value, dict):
+        return {
+            key: ('' if _is_sensitive_setting_key(key) else _redact_sensitive_values(item))
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_sensitive_values(item) for item in value]
+    return value
+
+
+def _merge_sensitive_values(existing, incoming):
+    if not isinstance(existing, dict) or not isinstance(incoming, dict):
+        return incoming
+    merged = dict(existing)
+    for key, value in incoming.items():
+        if _is_sensitive_setting_key(key) and value in ('', None):
+            # Empty means "leave unchanged"; explicit deletion should happen by
+            # deleting/recreating the setting under controlled admin workflow.
+            continue
+        if isinstance(value, dict) and isinstance(existing.get(key), dict):
+            merged[key] = _merge_sensitive_values(existing[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
 class SystemSettingSerializer(serializers.ModelSerializer):
+    sensitive_fields_configured = serializers.SerializerMethodField()
+
     class Meta:
         model = SystemSetting
-        fields = ['id', 'key', 'value', 'description', 'updated_at']
+        fields = [
+            'id', 'key', 'value', 'description', 'updated_at',
+            'sensitive_fields_configured',
+        ]
+
+    def get_sensitive_fields_configured(self, obj):
+        if not isinstance(obj.value, dict):
+            return []
+        return sorted(
+            str(key) for key, value in obj.value.items()
+            if _is_sensitive_setting_key(key) and value not in ('', None)
+        )
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['value'] = _redact_sensitive_values(data.get('value'))
+        return data
+
+    def update(self, instance, validated_data):
+        if 'value' in validated_data:
+            validated_data['value'] = _merge_sensitive_values(
+                instance.value,
+                validated_data['value'],
+            )
+        return super().update(instance, validated_data)
 
 
 class HeroBannerSlideSerializer(serializers.ModelSerializer):
@@ -46,7 +109,7 @@ class HeroBannerSlideSerializer(serializers.ModelSerializer):
 
 
 class PaymentGatewayAdminSerializer(serializers.ModelSerializer):
-    """Full representation for the admin panel — includes credentials so staff can configure keys."""
+    """Admin representation that accepts credentials but never returns them."""
     region_code = serializers.CharField(source='region.code', read_only=True)
     is_configured = serializers.BooleanField(read_only=True)
 
@@ -57,6 +120,19 @@ class PaymentGatewayAdminSerializer(serializers.ModelSerializer):
             'mode', 'publishable_key', 'secret_key', 'extra_config',
             'supports_refunds', 'sort_order', 'is_configured', 'updated_at',
         ]
+        extra_kwargs = {
+            'secret_key': {'write_only': True, 'required': False},
+            'extra_config': {'write_only': True, 'required': False},
+        }
+
+    def update(self, instance, validated_data):
+        # Empty secret fields from an edit form mean "leave unchanged", not
+        # "erase the configured production credential".
+        if not validated_data.get('secret_key'):
+            validated_data.pop('secret_key', None)
+        if not validated_data.get('extra_config'):
+            validated_data.pop('extra_config', None)
+        return super().update(instance, validated_data)
 
 
 class PaymentGatewayPublicSerializer(serializers.ModelSerializer):
@@ -67,9 +143,29 @@ class PaymentGatewayPublicSerializer(serializers.ModelSerializer):
 
 
 class MarketingIntegrationSerializer(serializers.ModelSerializer):
+    is_configured = serializers.SerializerMethodField()
+
     class Meta:
         model = MarketingIntegration
-        fields = '__all__'
+        fields = [
+            'id', 'name', 'channel', 'is_connected', 'credentials',
+            'is_configured', 'sync_status', 'last_sync', 'metrics', 'updated_at',
+        ]
+        extra_kwargs = {
+            'credentials': {'write_only': True, 'required': False},
+        }
+
+    def get_is_configured(self, obj):
+        return bool(obj.credentials)
+
+    def update(self, instance, validated_data):
+        credentials = validated_data.get('credentials')
+        if isinstance(credentials, dict):
+            validated_data['credentials'] = _merge_sensitive_values(
+                instance.credentials,
+                credentials,
+            )
+        return super().update(instance, validated_data)
 
 
 class ContentPageSerializer(serializers.ModelSerializer):

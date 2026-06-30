@@ -10,11 +10,11 @@ export default function BlogList() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(getApiUrl('/api/admin/blog-posts/'))
+    fetch(getApiUrl('/api/blog-posts/'))
       .then((res) => res.json())
       .then((data) => {
         const list = Array.isArray(data) ? data : data.results || [];
-        setPosts(list.filter((post) => post.is_published));
+        setPosts(list);
       })
       .catch(() => setPosts([]))
       .finally(() => setLoading(false));

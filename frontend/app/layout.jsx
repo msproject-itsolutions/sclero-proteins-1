@@ -1,6 +1,7 @@
 import './globals.css';
 import { Inter, Outfit } from 'next/font/google';
 import Providers from '../components/Providers';
+import { jsonLdScriptProps } from '../lib/jsonLd';
 
 // Self-host both fonts via next/font — Next downloads them at build time,
 // inlines the font-face declarations, and serves them from same-origin.
@@ -57,19 +58,13 @@ export const metadata = {
 };
 
 // Organization JSON-LD — emitted once at the document root for site-wide knowledge
-// graph recognition. TODO: confirm the social URLs below match the real handles.
+// graph recognition. Unverified social profiles are intentionally omitted.
 const ORG_SCHEMA = {
   '@context': 'https://schema.org',
   '@type': 'Organization',
   name: 'Sclero Proteins Ltd',
   url: 'https://scleroproteins.co.uk',
-  logo: 'https://scleroproteins.co.uk/logo.png',
-  // TODO: confirm social profile URLs with marketing before launch.
-  sameAs: [
-    'https://instagram.com/scleroproteins',
-    'https://facebook.com/scleroproteins',
-    'https://www.linkedin.com/company/scleroproteins',
-  ],
+  logo: 'https://scleroproteins.co.uk/logo-full.png',
   address: { '@type': 'PostalAddress', addressCountry: 'GB' },
   contactPoint: {
     '@type': 'ContactPoint',
@@ -84,7 +79,7 @@ export default function RootLayout({ children }) {
       <head>
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(ORG_SCHEMA) }}
+          dangerouslySetInnerHTML={jsonLdScriptProps(ORG_SCHEMA)}
         />
       </head>
       <body>

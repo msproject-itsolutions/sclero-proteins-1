@@ -24,6 +24,43 @@ const SHIPPING_METHODS = [
   'International Express', 'Custom',
 ];
 
+const COMMON_COUNTRIES = [
+  { code: 'GB', name: 'United Kingdom (GB)' },
+  { code: 'IN', name: 'India (IN)' },
+  { code: 'US', name: 'United States (US)' },
+  { code: 'CA', name: 'Canada (CA)' },
+  { code: 'AU', name: 'Australia (AU)' },
+  { code: 'DE', name: 'Germany (DE)' },
+  { code: 'FR', name: 'France (FR)' },
+  { code: 'IE', name: 'Ireland (IE)' },
+];
+
+const STATES_BY_COUNTRY = {
+  GB: [
+    'England', 'Northern Ireland', 'Scotland', 'Wales',
+    'Greater London', 'West Midlands', 'Greater Manchester', 'West Yorkshire'
+  ],
+  IN: [
+    'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+    'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka',
+    'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram',
+    'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana',
+    'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal', 'Delhi',
+    'Jammu and Kashmir', 'Ladakh', 'Puducherry', 'Chandigarh', 'Lakshadweep',
+    'Andaman and Nicobar Islands'
+  ],
+  US: [
+    'Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 'Colorado', 'Connecticut',
+    'Delaware', 'Florida', 'Georgia', 'Hawaii', 'Idaho', 'Illinois', 'Indiana', 'Iowa',
+    'Kansas', 'Kentucky', 'Louisiana', 'Maine', 'Maryland', 'Massachusetts', 'Michigan',
+    'Minnesota', 'Mississippi', 'Missouri', 'Montana', 'Nebraska', 'Nevada', 'New Hampshire',
+    'New Jersey', 'New Mexico', 'New York', 'North Carolina', 'North Dakota', 'Ohio',
+    'Oklahoma', 'Oregon', 'Pennsylvania', 'Rhode Island', 'South Carolina', 'South Dakota',
+    'Tennessee', 'Texas', 'Utah', 'Vermont', 'Virginia', 'Washington', 'West Virginia',
+    'Wisconsin', 'Wyoming'
+  ]
+};
+
 const LABEL = 'block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-1';
 const INPUT = 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400 transition';
 const CARD  = 'rounded-2xl border border-slate-200 bg-white overflow-hidden';
@@ -326,9 +363,20 @@ function ZoneEditorPanel({ zone, regions, onSave, onClose }) {
             </div>
             <div className="px-5 py-4 space-y-3">
               <div className="flex gap-2">
-                <input value={countryInput} onChange={e => setCountryInput(e.target.value.toUpperCase())}
+                <input
+                  list="country-suggestions"
+                  value={countryInput}
+                  onChange={e => setCountryInput(e.target.value.toUpperCase())}
                   onKeyDown={e => e.key === 'Enter' && addChip('countries', countryInput, setCountryInput)}
-                  className={INPUT} placeholder="ISO code e.g. GB, IN, US — Enter to add" maxLength={2} />
+                  className={INPUT}
+                  placeholder="Select or type country code (e.g. GB, IN, US)"
+                  maxLength={2}
+                />
+                <datalist id="country-suggestions">
+                  {COMMON_COUNTRIES.map(c => (
+                    <option key={c.code} value={c.code}>{c.name}</option>
+                  ))}
+                </datalist>
                 <button type="button" onClick={() => addChip('countries', countryInput, setCountryInput)}
                   className="rounded-lg bg-violet-600 px-4 text-white text-sm font-bold hover:bg-violet-700 transition flex-shrink-0">Add</button>
               </div>
@@ -349,9 +397,19 @@ function ZoneEditorPanel({ zone, regions, onSave, onClose }) {
             </div>
             <div className="px-5 py-4 space-y-3">
               <div className="flex gap-2">
-                <input value={stateInput} onChange={e => setStateInput(e.target.value)}
+                <input
+                  list="state-suggestions"
+                  value={stateInput}
+                  onChange={e => setStateInput(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && addChip('states', stateInput, setStateInput)}
-                  className={INPUT} placeholder="State/province name or code, e.g. England, Maharashtra, CA" />
+                  className={INPUT}
+                  placeholder="Select or type state/province name (e.g. England, Karnataka)"
+                />
+                <datalist id="state-suggestions">
+                  {STATES_BY_COUNTRY.GB.map(s => <option key={s} value={s}>{s} (UK)</option>)}
+                  {STATES_BY_COUNTRY.IN.map(s => <option key={s} value={s}>{s} (India)</option>)}
+                  {STATES_BY_COUNTRY.US.map(s => <option key={s} value={s}>{s} (US)</option>)}
+                </datalist>
                 <button type="button" onClick={() => addChip('states', stateInput, setStateInput)}
                   className="rounded-lg bg-violet-600 px-4 text-white text-sm font-bold hover:bg-violet-700 transition flex-shrink-0">Add</button>
               </div>

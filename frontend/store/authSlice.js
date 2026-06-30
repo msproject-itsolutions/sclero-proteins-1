@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { getApiUrl } from '../lib/api';
+import { authenticatedFetch } from '../lib/authFetch';
 
 const ACCESS_KEY = 'sclero_access';
 const REFRESH_KEY = 'sclero_refresh';
@@ -96,11 +97,11 @@ export const login = createAsyncThunk(
 // env-gated GoogleSignInButton, so it's inert unless Google is configured.
 export const googleLogin = createAsyncThunk(
   'auth/googleLogin',
-  async ({ email, googleId, firstName, lastName }, { rejectWithValue }) => {
+  async ({ credential, email, googleId, firstName, lastName }, { rejectWithValue }) => {
     const res = await fetch(getApiUrl('/api/auth/google/'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, googleId, firstName, lastName }),
+      body: JSON.stringify({ credential, email, googleId, firstName, lastName }),
     });
     const data = await res.json();
     if (!res.ok) return rejectWithValue(data.error || 'Google sign-in failed');
@@ -140,17 +141,14 @@ export const completeLogin = createAsyncThunk(
 );
 
 // --- TOTP (authenticator app) management ----------------------------------
-function authHeader(getState) {
-  const access = getState().auth.access || loadTokens().access;
-  return access ? { Authorization: `Bearer ${access}` } : {};
-}
-
 export const fetch2faStatus = createAsyncThunk(
   'auth/fetch2faStatus',
   async (_, { getState, rejectWithValue }) => {
-    const res = await fetch(getApiUrl('/api/auth/2fa/status/'), {
-      headers: { ...authHeader(getState) },
-    });
+    const res = await authenticatedFetch(
+      '/api/auth/2fa/status/',
+      {},
+      getState().auth.access,
+    );
     if (!res.ok) return rejectWithValue('Could not load 2FA status');
     return res.json();
   }
@@ -159,10 +157,10 @@ export const fetch2faStatus = createAsyncThunk(
 export const setup2fa = createAsyncThunk(
   'auth/setup2fa',
   async (_, { getState, rejectWithValue }) => {
-    const res = await fetch(getApiUrl('/api/auth/2fa/setup/'), {
+    const res = await authenticatedFetch('/api/auth/2fa/setup/', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeader(getState) },
-    });
+      headers: { 'Content-Type': 'application/json' },
+    }, getState().auth.access);
     const data = await res.json();
     if (!res.ok) return rejectWithValue(data.detail || 'Could not start 2FA setup');
     return data; // { secret, provisioning_uri, qr_data_url }
@@ -172,11 +170,11 @@ export const setup2fa = createAsyncThunk(
 export const verify2fa = createAsyncThunk(
   'auth/verify2fa',
   async ({ code }, { getState, rejectWithValue }) => {
-    const res = await fetch(getApiUrl('/api/auth/2fa/verify/'), {
+    const res = await authenticatedFetch('/api/auth/2fa/verify/', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeader(getState) },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code }),
-    });
+    }, getState().auth.access);
     const data = await res.json();
     if (!res.ok) return rejectWithValue(data.detail || 'Invalid code');
     return data; // { enabled, backup_codes: [...] }
@@ -186,11 +184,11 @@ export const verify2fa = createAsyncThunk(
 export const disable2fa = createAsyncThunk(
   'auth/disable2fa',
   async ({ password, code }, { getState, rejectWithValue }) => {
-    const res = await fetch(getApiUrl('/api/auth/2fa/disable/'), {
+    const res = await authenticatedFetch('/api/auth/2fa/disable/', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeader(getState) },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password, code }),
-    });
+    }, getState().auth.access);
     const data = await res.json();
     if (!res.ok) return rejectWithValue(data.detail || 'Could not disable 2FA');
     return data;
@@ -272,9 +270,7 @@ export const fetchProfile = createAsyncThunk(
     const access = (typeof tokenArg === 'string' && tokenArg)
       || getState().auth.access || loadTokens().access;
     if (!access) return rejectWithValue('Not authenticated');
-    const res = await fetch(getApiUrl('/api/auth/profile/'), {
-      headers: { Authorization: `Bearer ${access}` },
-    });
+    const res = await authenticatedFetch('/api/auth/profile/', {}, access);
     if (!res.ok) return rejectWithValue('Session expired');
     return res.json();
   }

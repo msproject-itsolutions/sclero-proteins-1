@@ -56,11 +56,16 @@ export default function CookieConsent() {
   if (!show) return null;
 
   return (
-    <div className="fixed bottom-6 left-6 right-6 z-[9999] max-w-xl md:left-auto md:right-8 bg-brand-indigo/95 backdrop-blur-xl border border-white/20 rounded-2xl p-6 shadow-luxe-lg text-white transition-all duration-300 transform translate-y-0 flex flex-col gap-4 font-sans">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="cookie-title"
+      className="fixed bottom-6 left-6 right-6 z-[9999] max-w-xl md:left-auto md:right-8 bg-brand-indigo/95 backdrop-blur-xl border border-white/20 rounded-2xl p-6 shadow-luxe-lg text-white transition-all duration-300 transform translate-y-0 flex flex-col gap-4 font-sans"
+    >
       <div>
-        <h3 className="text-lg font-semibold tracking-wide flex items-center gap-2">
+        <div id="cookie-title" className="text-lg font-bold tracking-wide flex items-center gap-2">
           <span className="text-xl">🍪</span> Cookie Preferences
-        </h3>
+        </div>
         <p className="text-xs text-gray-200 mt-2 leading-relaxed">
           We use cookies to enhance security, analyze site usage, and support regional configurations. Manage your settings below or accept all to continue.
         </p>
@@ -110,14 +115,27 @@ export default function CookieConsent() {
         </label>
       </div>
 
-      <div className="flex flex-col sm:flex-row justify-end gap-3 mt-1">
+      <div className="flex flex-col sm:flex-row justify-end gap-2.5 mt-1">
         <button
+          type="button"
+          onClick={() => {
+            const rejected = { necessary: true, analytics: false, marketing: false };
+            setPreferences(rejected);
+            saveConsent(rejected);
+          }}
+          className="px-4 py-2 text-xs font-semibold text-red-200 border border-red-500/30 rounded-lg hover:bg-red-500/10 transition-all duration-200"
+        >
+          Reject Optional
+        </button>
+        <button
+          type="button"
           onClick={handleSavePreferences}
           className="px-4 py-2 text-xs font-semibold text-gray-200 border border-white/20 rounded-lg hover:bg-white/10 transition-all duration-200"
         >
           Save Settings
         </button>
         <button
+          type="button"
           onClick={handleAcceptAll}
           className="px-5 py-2 text-xs font-semibold text-white bg-brand-orange hover:bg-brand-orange/90 rounded-lg transition-all duration-200 shadow-md shadow-brand-orange/20"
         >

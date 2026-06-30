@@ -248,5 +248,14 @@ class WebhookEvent(models.Model):
     error_message = models.TextField(blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['gateway', 'event_id'],
+                condition=~models.Q(event_id=''),
+                name='unique_gateway_webhook_event',
+            ),
+        ]
+
     def __str__(self):
         return f"{self.gateway} - {self.event_type} ({self.status})"

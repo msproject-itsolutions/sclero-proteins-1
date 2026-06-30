@@ -1,7 +1,10 @@
 import os
+import sys
+import tempfile
 from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
+from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -9,11 +12,35 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Load environment variables from .env
 load_dotenv(BASE_DIR / '.env')
 
-# Quick-start development settings - unsuitable for production
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-default-fallback-key')
-DEBUG = os.getenv('DEBUG', 'True') == 'True'
+def env_bool(name, default=False):
+    return os.getenv(name, str(default)).strip().lower() in {'1', 'true', 'yes', 'on'}
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+
+DEBUG = env_bool('DEBUG', False)
+_BUILDING_STATIC = env_bool('DJANGO_COLLECTSTATIC', False)
+TESTING = 'test' in sys.argv
+
+# Fail closed outside development. A known fallback key is acceptable only for
+# local developer runs and Docker collectstatic, never for a live process.
+SECRET_KEY = os.getenv('SECRET_KEY', '')
+if not SECRET_KEY:
+    if DEBUG or _BUILDING_STATIC:
+        SECRET_KEY = 'django-insecure-local-build-only-fallback-key'
+    else:
+        raise ImproperlyConfigured('SECRET_KEY must be set when DEBUG=False.')
+if not DEBUG and SECRET_KEY.startswith(('django-insecure-', 'CHANGE_ME')):
+    raise ImproperlyConfigured('SECRET_KEY must be a real production secret.')
+
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+    if host.strip()
+]
+if not DEBUG and not _BUILDING_STATIC:
+    if not os.getenv('ALLOWED_HOSTS', '').strip():
+        raise ImproperlyConfigured('ALLOWED_HOSTS must be set when DEBUG=False.')
+    if '*' in ALLOWED_HOSTS:
+        raise ImproperlyConfigured('Wildcard ALLOWED_HOSTS is not allowed in production.')
 
 # Sentry — optional. When SENTRY_DSN is set the SDK initialises on import; in dev
 # leave SENTRY_DSN empty and nothing is reported. send_default_pii=False keeps
@@ -77,6 +104,7 @@ INSTALLED_APPS = [
     
     # Third party apps
     'rest_framework',
+    'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     
     # Project apps
@@ -133,26 +161,43 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'sclero_backend.wsgi.application'
 
-# Database Setup: PostgreSQL with SQLite fallback
+# Database setup. Production configures PostgreSQL without performing network I/O
+# while importing settings; readiness and the entrypoint verify connectivity.
+# The convenience SQLite fallback is limited to explicit local DEBUG runs.
 DB_NAME = os.getenv('DB_NAME')
 DB_USER = os.getenv('DB_USER')
 DB_PASSWORD = os.getenv('DB_PASSWORD')
 DB_HOST = os.getenv('DB_HOST', 'localhost')
 DB_PORT = os.getenv('DB_PORT', '5432')
 
+ALLOW_SQLITE_FALLBACK = env_bool('ALLOW_SQLITE_FALLBACK', DEBUG)
+
 if DB_NAME and DB_USER:
-    try:
-        import psycopg2
-        # Verify connectivity with a short timeout
-        conn = psycopg2.connect(
-            dbname=DB_NAME,
-            user=DB_USER,
-            password=DB_PASSWORD,
-            host=DB_HOST,
-            port=DB_PORT,
-            connect_timeout=2
-        )
-        conn.close()
+    use_sqlite = False
+    if DEBUG and ALLOW_SQLITE_FALLBACK:
+        try:
+            import psycopg2
+            conn = psycopg2.connect(
+                dbname=DB_NAME,
+                user=DB_USER,
+                password=DB_PASSWORD,
+                host=DB_HOST,
+                port=DB_PORT,
+                connect_timeout=2,
+            )
+            conn.close()
+        except Exception as e:
+            use_sqlite = True
+            print(f"--> WARNING: PostgreSQL connection failed: {e}. Falling back to SQLite local database.")
+
+    if use_sqlite:
+        DATABASES = {
+            'default': {
+                'ENGINE': 'django.db.backends.sqlite3',
+                'NAME': BASE_DIR / 'db.sqlite3',
+            }
+        }
+    else:
         DATABASES = {
             'default': {
                 'ENGINE': 'django.db.backends.postgresql',
@@ -161,19 +206,14 @@ if DB_NAME and DB_USER:
                 'PASSWORD': DB_PASSWORD,
                 'HOST': DB_HOST,
                 'PORT': DB_PORT,
-                'CONN_MAX_AGE': 600, # Connection pooling for optimization
-            }
-        }
-        print("--> Successfully connected to PostgreSQL. Using PostgreSQL as main database.")
-    except Exception as e:
-        print(f"--> WARNING: PostgreSQL connection failed: {e}. Falling back to SQLite local database.")
-        DATABASES = {
-            'default': {
-                'ENGINE': 'django.db.backends.sqlite3',
-                'NAME': BASE_DIR / 'db.sqlite3',
+                'CONN_MAX_AGE': 600,
+                'CONN_HEALTH_CHECKS': True,
+                'OPTIONS': {'connect_timeout': 5},
             }
         }
 else:
+    if not ALLOW_SQLITE_FALLBACK and not _BUILDING_STATIC:
+        raise ImproperlyConfigured('DB_NAME and DB_USER must be set when DEBUG=False.')
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
@@ -188,6 +228,7 @@ AUTH_PASSWORD_VALIDATORS = [
     },
     {
         'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        'OPTIONS': {'min_length': 12},
     },
     {
         'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
@@ -225,6 +266,21 @@ STORAGES = {
     'staticfiles': {'BACKEND': _STATIC_BACKEND},
 }
 
+# A shared on-disk cache keeps rate-limit counters coherent across Gunicorn
+# workers in the single backend container. Use Redis before scaling to multiple
+# backend containers.
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
+        'LOCATION': os.getenv(
+            'DJANGO_CACHE_LOCATION',
+            str(Path(tempfile.gettempdir()) / 'sclero-django-cache'),
+        ),
+        'TIMEOUT': 300,
+        'OPTIONS': {'MAX_ENTRIES': 10000},
+    }
+}
+
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -234,7 +290,7 @@ CORS_ALLOWED_ORIGINS = [
         'CORS_ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:3100'
     ).split(',') if o.strip()
 ]
-CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_CREDENTIALS = env_bool('CORS_ALLOW_CREDENTIALS', False)
 
 # CSRF: the trusted origins that may submit forms / unsafe methods. In the ccTLD
 # deployment the frontend calls the API same-origin (per domain), so list every
@@ -252,15 +308,22 @@ CSRF_TRUSTED_ORIGINS = [
 # X-Forwarded-Proto. This lets Django know the request was secure.
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 USE_X_FORWARDED_HOST = True
+TRUST_PROXY_HEADERS = env_bool('TRUST_PROXY_HEADERS', not DEBUG)
 
 # Production hardening — only when DEBUG is off so local dev over http still works.
 if not DEBUG:
     SESSION_COOKIE_SECURE = True
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = 'Lax'
     CSRF_COOKIE_SECURE = True
-    SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '31536000'))
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    SECURE_HSTS_PRELOAD = True
+    CSRF_COOKIE_SAMESITE = 'Lax'
+    SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '3600'))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool('SECURE_HSTS_INCLUDE_SUBDOMAINS', False)
+    SECURE_HSTS_PRELOAD = env_bool('SECURE_HSTS_PRELOAD', False)
     SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+    SECURE_CROSS_ORIGIN_OPENER_POLICY = 'same-origin'
+    X_FRAME_OPTIONS = 'DENY'
     # nginx already redirects http->https; leave Django's redirect off to avoid
     # double-redirect loops behind the proxy.
     SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'False') == 'True'
@@ -271,17 +334,31 @@ REST_FRAMEWORK = {
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
-        'rest_framework.permissions.AllowAny',
+        'rest_framework.permissions.IsAuthenticated',
     ),
+    'DEFAULT_THROTTLE_CLASSES': (
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+        'rest_framework.throttling.ScopedRateThrottle',
+    ),
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': os.getenv('DRF_THROTTLE_ANON', '500/hour'),
+        'user': os.getenv('DRF_THROTTLE_USER', '5000/hour'),
+        'auth': os.getenv('DRF_THROTTLE_AUTH', '10/min'),
+        'otp': os.getenv('DRF_THROTTLE_OTP', '5/min'),
+        'password_reset': os.getenv('DRF_THROTTLE_PASSWORD_RESET', '5/hour'),
+        'contact': os.getenv('DRF_THROTTLE_CONTACT', '5/hour'),
+        'review': os.getenv('DRF_THROTTLE_REVIEW', '5/hour'),
+        'checkout': os.getenv('DRF_THROTTLE_CHECKOUT', '20/hour'),
+        'analytics': os.getenv('DRF_THROTTLE_ANALYTICS', '120/min'),
+        'media_upload': os.getenv('DRF_THROTTLE_MEDIA_UPLOAD', '30/hour'),
+    },
 }
 
-# Staff RBAC enforcement. Defaults ON in production (DEBUG=False) and OFF in
-# development. Override with the RBAC_ENFORCED env var (e.g. to harden staging
-# or to troubleshoot a production permission gap). When ON, every admin endpoint
-# requires an authenticated staff user whose roles grant the required permission
-# key — see apps/users/permissions.py.
-_RBAC_DEFAULT = 'False' if DEBUG else 'True'
-RBAC_ENFORCED = os.getenv('RBAC_ENFORCED', _RBAC_DEFAULT) == 'True'
+# Staff RBAC fails closed in every environment. A developer may explicitly set
+# RBAC_ENFORCED=False for isolated fixture work, but DEBUG must never silently
+# expose customer/order/payment administration APIs.
+RBAC_ENFORCED = env_bool('RBAC_ENFORCED', True)
 
 # Email / SMTP Settings (overridable per environment, and at runtime via
 # SystemSetting(key='SMTP_SETTINGS') in the admin panel)
@@ -293,13 +370,31 @@ EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'False') == 'True'
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@scleroproteins.co.uk')
 SITE_URL = os.getenv('SITE_URL', '')
+GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', os.getenv('NEXT_PUBLIC_GOOGLE_CLIENT_ID', '')).strip()
+COMPANY_REGISTRATION_NUMBER = os.getenv('COMPANY_REGISTRATION_NUMBER', '').strip()
+UK_VAT_NUMBER = os.getenv('UK_VAT_NUMBER', '').strip()
+IN_GSTIN = os.getenv('IN_GSTIN', '').strip()
+if not DEBUG and not _BUILDING_STATIC and not SITE_URL.startswith('https://'):
+    raise ImproperlyConfigured('SITE_URL must be an absolute https:// URL in production.')
+if not DEBUG and not _BUILDING_STATIC:
+    missing_legal = [
+        name for name, value in {
+            'COMPANY_REGISTRATION_NUMBER': COMPANY_REGISTRATION_NUMBER,
+            'UK_VAT_NUMBER': UK_VAT_NUMBER,
+            'IN_GSTIN': IN_GSTIN,
+        }.items() if not value or value.startswith('CHANGE_ME')
+    ]
+    if missing_legal:
+        raise ImproperlyConfigured(
+            f"Production legal identifiers are missing: {', '.join(missing_legal)}"
+        )
 
 # Simple JWT Settings
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=int(os.getenv('JWT_ACCESS_MINUTES', '15'))),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=int(os.getenv('JWT_REFRESH_DAYS', '7'))),
     'ROTATE_REFRESH_TOKENS': True,
-    'BLACKLIST_AFTER_ROTATION': False,
+    'BLACKLIST_AFTER_ROTATION': True,
     'ALGORITHM': 'HS256',
     'SIGNING_KEY': SECRET_KEY,
     'AUTH_HEADER_TYPES': ('Bearer',),

@@ -10,7 +10,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import Link from 'next/link';
 import {
   LogOut, User as UserIcon, Mail, Phone, Award, MapPin, Package, Plus, Trash2,
-  Globe, Bell, LayoutDashboard, Calendar, Heart, ShieldCheck, Check
+  Globe, Bell, LayoutDashboard, Calendar, Heart, ShieldCheck, Check, Info, ChevronDown
 } from 'lucide-react';
 import StoreShell from '../../components/StoreShell';
 import {
@@ -18,6 +18,7 @@ import {
   completeLogin, fetch2faStatus, setup2fa, verify2fa, disable2fa, requestMagicLink,
 } from '../../store/authSlice';
 import { getApiUrl } from '../../lib/api';
+import { authenticatedFetch } from '../../lib/authFetch';
 import { addToCart } from '../../store/cartSlice';
 
 function OtpLogin() {
@@ -42,7 +43,9 @@ function OtpLogin() {
 
   return stage === 'request' ? (
     <form onSubmit={requestCode} className="space-y-3">
+      <label htmlFor="otp-email" className="sr-only">Email address</label>
       <input
+        id="otp-email"
         type="email" required placeholder="Email" autoComplete="email" value={identifier}
         onChange={(e) => setIdentifier(e.target.value)}
         className="w-full rounded-lg border border-slate-200 p-3 text-sm focus:border-brand-purple focus:outline-none"
@@ -63,7 +66,9 @@ function OtpLogin() {
           Sandbox code: <span className="font-mono font-bold">{sandboxCode}</span>
         </p>
       )}
+      <label htmlFor="otp-code" className="sr-only">6-digit code</label>
       <input
+        id="otp-code"
         type="text" inputMode="numeric" autoComplete="one-time-code" required placeholder="6-digit code" value={otp}
         onChange={(e) => setOtp(e.target.value)}
         className="w-full rounded-lg border border-slate-200 p-3 text-center text-lg tracking-[0.4em] focus:border-brand-purple focus:outline-none"
@@ -119,7 +124,9 @@ function MagicLinkLogin() {
 
   return (
     <form onSubmit={send} className="space-y-3">
+      <label htmlFor="magic-email" className="sr-only">Email address</label>
       <input
+        id="magic-email"
         type="email" required placeholder="Email" autoComplete="email" value={email}
         onChange={(e) => setEmail(e.target.value)}
         className="w-full rounded-lg border border-slate-200 p-3 text-sm focus:border-brand-purple focus:outline-none"
@@ -138,11 +145,12 @@ function AuthForms() {
   const { status, error, twoFactorRequired, sandboxOtp, twoFactorEmail, requiresTotp, pendingEmail } = useSelector((s) => s.auth);
   const [mode, setMode] = useState('login');
   const [form, setForm] = useState({
-    email: '', password: '', first_name: '', last_name: '', phone_number: '',
+    email: '', password: '', first_name: '', last_name: '',
   });
   const [otp, setOtp] = useState('');
   const [totpCode, setTotpCode] = useState('');
   const [useBackup, setUseBackup] = useState(false);
+  const [showMoreSignIn, setShowMoreSignIn] = useState(false);
 
   const update = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
@@ -162,7 +170,11 @@ function AuthForms() {
     dispatch(completeLogin({ totpCode }));
   };
 
-  const switchMode = (m) => { setMode(m); dispatch(clearAuthError()); };
+  const switchMode = (m) => {
+    setMode(m);
+    setShowMoreSignIn(false);
+    dispatch(clearAuthError());
+  };
 
   if (requiresTotp) {
     return (
@@ -177,7 +189,9 @@ function AuthForms() {
           </p>
         </div>
         <form onSubmit={submitTotp} className="space-y-3">
+          <label htmlFor="totp-code" className="sr-only">{useBackup ? 'Backup code' : 'Authenticator code'}</label>
           <input
+            id="totp-code"
             type="text"
             inputMode={useBackup ? 'text' : 'numeric'}
             autoComplete="one-time-code"
@@ -224,7 +238,9 @@ function AuthForms() {
               Sandbox code: <span className="font-mono font-bold">{sandboxOtp}</span>
             </p>
           )}
+          <label htmlFor="2fa-code" className="sr-only">2FA Verification Code</label>
           <input
+            id="2fa-code"
             type="text" inputMode="numeric" autoComplete="one-time-code" required placeholder="6-digit code" value={otp}
             onChange={(e) => setOtp(e.target.value)}
             className="w-full rounded-lg border border-slate-200 p-3 text-center text-lg tracking-[0.4em] focus:border-brand-purple focus:outline-none"
@@ -264,6 +280,7 @@ function AuthForms() {
         {['login', 'register'].map((m) => (
           <button
             key={m}
+            type="button"
             onClick={() => switchMode(m)}
             className={`flex-1 rounded-md py-2 text-sm font-semibold transition-colors ${
               mode === m ? 'bg-brand-purple text-white' : 'text-brand-navy hover:bg-slate-50'
@@ -276,26 +293,33 @@ function AuthForms() {
 
       <form onSubmit={submit} className="space-y-3">
         {mode === 'register' && (
-          <div className="grid grid-cols-2 gap-3">
-            <input type="text" autoComplete="given-name" placeholder="First name" value={form.first_name}
-              onChange={update('first_name')}
-              className="rounded-lg border border-slate-200 p-3 text-sm focus:border-brand-purple focus:outline-none" />
-            <input type="text" autoComplete="family-name" placeholder="Last name" value={form.last_name}
-              onChange={update('last_name')}
-              className="rounded-lg border border-slate-200 p-3 text-sm focus:border-brand-purple focus:outline-none" />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label htmlFor="register-first-name" className="sr-only">First name</label>
+              <input id="register-first-name" type="text" autoComplete="given-name" placeholder="First name" value={form.first_name}
+                onChange={update('first_name')}
+                className="w-full rounded-lg border border-slate-200 p-3 text-sm focus:border-brand-purple focus:outline-none" />
+            </div>
+            <div>
+              <label htmlFor="register-last-name" className="sr-only">Last name</label>
+              <input id="register-last-name" type="text" autoComplete="family-name" placeholder="Last name" value={form.last_name}
+                onChange={update('last_name')}
+                className="w-full rounded-lg border border-slate-200 p-3 text-sm focus:border-brand-purple focus:outline-none" />
+            </div>
           </div>
         )}
-        <input type="email" autoComplete="email" required placeholder="Email" value={form.email}
-          onChange={update('email')}
-          className="w-full rounded-lg border border-slate-200 p-3 text-sm focus:border-brand-purple focus:outline-none" />
-        {mode === 'register' && (
-          <input type="tel" autoComplete="tel" placeholder="Phone (optional)" value={form.phone_number}
-            onChange={update('phone_number')}
+        <div>
+          <label htmlFor="auth-email" className="sr-only">Email address</label>
+          <input id="auth-email" type="email" autoComplete="email" required placeholder="Email" value={form.email}
+            onChange={update('email')}
             className="w-full rounded-lg border border-slate-200 p-3 text-sm focus:border-brand-purple focus:outline-none" />
-        )}
-        <input type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required placeholder="Password" value={form.password}
-          onChange={update('password')}
-          className="w-full rounded-lg border border-slate-200 p-3 text-sm focus:border-brand-purple focus:outline-none" />
+        </div>
+        <div>
+          <label htmlFor="auth-password" className="sr-only">Password</label>
+          <input id="auth-password" type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required placeholder="Password" value={form.password}
+            onChange={update('password')}
+            className="w-full rounded-lg border border-slate-200 p-3 text-sm focus:border-brand-purple focus:outline-none" />
+        </div>
 
         {error && (
           <p className="rounded-lg bg-brand-danger/10 px-3 py-2 text-xs font-semibold text-brand-danger">{error}</p>
@@ -314,31 +338,33 @@ function AuthForms() {
             </span>
             <span className="absolute left-0 top-1/2 h-px w-full bg-slate-200" />
           </div>
-          <GoogleSignInButton />
+          <GoogleSignInButton key={mode} text={mode === 'login' ? 'signin_with' : 'continue_with'} />
         </div>
       )}
 
       {mode === 'login' && (
-        <>
-          <div className="mt-6">
-            <div className="relative mb-4 text-center">
-              <span className="relative z-10 bg-white px-3 text-[11px] font-semibold uppercase tracking-wide text-brand-muted">
-                or get a magic link
-              </span>
-              <span className="absolute left-0 top-1/2 h-px w-full bg-slate-200" />
+        <div className="mt-6 border-t border-slate-100 pt-4">
+          <button
+            type="button"
+            onClick={() => setShowMoreSignIn((value) => !value)}
+            className="flex w-full items-center justify-center gap-1.5 text-xs font-semibold text-brand-muted hover:text-brand-navy"
+          >
+            More sign-in options
+            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showMoreSignIn ? 'rotate-180' : ''}`} />
+          </button>
+          {showMoreSignIn && (
+            <div className="mt-4 space-y-5">
+              <div>
+                <p className="mb-3 text-center text-[11px] font-semibold uppercase tracking-wide text-brand-muted">Magic link</p>
+                <MagicLinkLogin />
+              </div>
+              <div>
+                <p className="mb-3 text-center text-[11px] font-semibold uppercase tracking-wide text-brand-muted">Email code</p>
+                <OtpLogin />
+              </div>
             </div>
-            <MagicLinkLogin />
-          </div>
-          <div className="mt-6">
-            <div className="relative mb-4 text-center">
-              <span className="relative z-10 bg-white px-3 text-[11px] font-semibold uppercase tracking-wide text-brand-muted">
-                or log in with a code
-              </span>
-              <span className="absolute left-0 top-1/2 h-px w-full bg-slate-200" />
-            </div>
-            <OtpLogin />
-          </div>
-        </>
+          )}
+        </div>
       )}
       </div>
     </div>
@@ -496,12 +522,35 @@ function OrdersTab({ authFetch }) {
 function WishlistTab() {
   const dispatch = useDispatch();
   const { currentRegion, currencySymbol, session_id } = useSelector((state) => state.region);
-  const [wishlist, setWishlist] = useState([
-    { id: 101, name: 'OvoMatrix ESC Eggshell Membrane', sku: 'OVOMATRIX-ESC', price: 29.99, image: 'https://images.unsplash.com/photo-1607619056574-7b8f30413636?w=100&auto=format&fit=crop&q=60' },
-  ]);
+  const accessToken = useSelector((state) => state.auth?.access);
+  const [wishlist, setWishlist] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-  const handleRemove = (id) => {
-    setWishlist(wishlist.filter((w) => w.id !== id));
+  useEffect(() => {
+    if (!accessToken) return;
+    setLoading(true);
+    authenticatedFetch(`/api/wishlist/?region=${currentRegion}`, {}, accessToken)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => {
+        const items = Array.isArray(data) ? data : (data.results || []);
+        setWishlist(items);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [accessToken, currentRegion]);
+
+  const handleRemove = async (itemId) => {
+    if (!accessToken) return;
+    try {
+      const res = await authenticatedFetch(`/api/wishlist/${itemId}/`, {
+        method: 'DELETE',
+      }, accessToken);
+      if (res.ok) {
+        setWishlist(wishlist.filter((w) => w.id !== itemId));
+      }
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const handleAdd = (item) => {
@@ -509,11 +558,15 @@ function WishlistTab() {
       addToCart({
         session_id,
         region: currentRegion,
-        product_id: item.id,
+        product_id: item.product_id,
         quantity: 1,
       })
     );
   };
+
+  if (loading) {
+    return <p className="text-sm text-brand-muted">Loading wishlist…</p>;
+  }
 
   if (wishlist.length === 0) {
     return <p className="text-sm text-brand-muted">Your wishlist is currently empty.</p>;
@@ -524,22 +577,30 @@ function WishlistTab() {
       {wishlist.map((item) => (
         <div key={item.id} className="rounded-2xl border border-slate-200 bg-white p-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="h-14 w-14 bg-slate-50 rounded-xl overflow-hidden shrink-0 border border-slate-100">
-              <img src={item.image} alt={item.name} className="h-full w-full object-cover" />
+            <div className="h-14 w-14 bg-slate-50 rounded-xl overflow-hidden shrink-0 border border-slate-100 flex items-center justify-center">
+              {item.thumbnail ? (
+                <img src={item.thumbnail} alt={item.product_name} className="h-full w-full object-cover" />
+              ) : (
+                <Info className="h-6 w-6 text-slate-300" />
+              )}
             </div>
             <div>
-              <h3 className="text-xs font-bold text-brand-navy line-clamp-1 max-w-[200px]">{item.name}</h3>
-              <p className="text-xs font-black text-brand-purple mt-0.5">{currencySymbol}{item.price.toFixed(2)}</p>
+              <h3 className="text-xs font-bold text-brand-navy line-clamp-1 max-w-[200px]">{item.product_name}</h3>
+              <p className="text-xs font-black text-brand-purple mt-0.5">
+                {currencySymbol}{item.promotional_price ? parseFloat(item.promotional_price).toFixed(2) : item.price ? parseFloat(item.price).toFixed(2) : '0.00'}
+              </p>
             </div>
           </div>
           <div className="flex gap-2 shrink-0">
             <button
+              type="button"
               onClick={() => handleAdd(item)}
               className="rounded-lg bg-brand-purple px-3 py-1.5 text-xs font-bold text-white hover:bg-brand-purple/90"
             >
               Add to Cart
             </button>
             <button
+              type="button"
               onClick={() => handleRemove(item.id)}
               className="p-2 border border-slate-200 rounded-lg hover:border-brand-danger hover:text-brand-danger text-brand-muted transition-colors"
             >
@@ -744,14 +805,13 @@ export default function AccountPage() {
   // Authenticated fetch helper bound to the current access token.
   const authFetch = useCallback(
     (path, opts = {}) =>
-      fetch(getApiUrl(path), {
+      authenticatedFetch(path, {
         ...opts,
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${access}`,
           ...(opts.headers || {}),
         },
-      }),
+      }, access),
     [access]
   );
 

@@ -6,24 +6,6 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 
-# Company Address Definitions
-COMPANY_DETAILS = {
-    'IN': {
-        'name': 'Sclero Proteins (India)',
-        'address': 'Rajeshwar Farm & Hatchery, Samarkha Ajarpura Road,\nAjarpura, Anand, 388310, Gujarat, India',
-        'phone': '+91 84888 03622',
-        'email': 'india@scleroproteins.co.uk',
-        'tax_id': 'GSTIN: 24AFXFS9162D1ZG',
-    },
-    'UK': {
-        'name': 'Sclero Proteins Ltd',
-        'address': 'Unit B2A Horsted Keynes Business Park, Horsted Keynes,\nHaywards Heath, RH17 7BA, United Kingdom',
-        'phone': '01293 901941',
-        'email': 'support@scleroproteins.co.uk',
-        'tax_id': 'VAT Reg No: GB987654321', # Sandbox dummy VAT
-    }
-}
-
 def generate_invoice_pdf(order):
     """
     Generates a professional GST Tax Invoice or VAT Receipt PDF using ReportLab.
@@ -31,7 +13,23 @@ def generate_invoice_pdf(order):
     from django.conf import settings
     
     region_code = order.region.code
-    company = COMPANY_DETAILS.get(region_code, COMPANY_DETAILS['UK'])
+    company_details = {
+        'IN': {
+            'name': 'Sclero Proteins (India)',
+            'address': 'Rajeshwar Farm & Hatchery, Samarkha Ajarpura Road,\nAjarpura, Anand, 388310, Gujarat, India',
+            'phone': '+91 84888 03622',
+            'email': 'india@scleroproteins.co.uk',
+            'tax_id': f"GSTIN: {settings.IN_GSTIN}",
+        },
+        'UK': {
+            'name': 'Sclero Proteins Ltd',
+            'address': 'Unit B2A Horsted Keynes Business Park, Horsted Keynes,\nHaywards Heath, RH17 7BA, United Kingdom',
+            'phone': '01293 901941',
+            'email': 'support@scleroproteins.co.uk',
+            'tax_id': f"VAT Reg No: {settings.UK_VAT_NUMBER}",
+        },
+    }
+    company = company_details.get(region_code, company_details['UK'])
     
     # Establish file paths
     invoice_dir = Path(settings.MEDIA_ROOT) / 'invoices'
@@ -138,8 +136,8 @@ def generate_invoice_pdf(order):
                 f"<b>Invoice Number:</b> {invoice_num}<br/>"
                 f"<b>Order Date:</b> {order.created_at.strftime('%d-%b-%Y')}<br/>"
                 f"<b>Payment Method:</b> {order.payment_method}<br/>"
-                f"<b>Transaction ID:</b> {order.payment_id or 'Sandbox Mock'}<br/>"
-                f"<b>Status:</b> PAID",
+                f"<b>Transaction ID:</b> {order.payment_id or 'Not applicable'}<br/>"
+                f"<b>Status:</b> {order.payment_status}",
                 meta_style
             )
         ]

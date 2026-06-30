@@ -213,7 +213,9 @@ class PaymentGatewayViewSet(viewsets.ModelViewSet):
         gateways = PaymentGateway.objects.filter(
             region=region, is_enabled=True
         ).order_by('sort_order')
-        return Response(PaymentGatewayPublicSerializer(gateways, many=True).data)
+        from apps.orders.payments import gateway_is_checkout_ready
+        ready_gateways = [gateway for gateway in gateways if gateway_is_checkout_ready(gateway)]
+        return Response(PaymentGatewayPublicSerializer(ready_gateways, many=True).data)
 
     @action(detail=True, methods=['post'])
     def sync_status(self, request, pk=None):
@@ -329,23 +331,20 @@ class MarketingIntegrationViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def sync(self, request, pk=None):
-        """Trigger a catalog/feed sync for this integration. Records the sync
-        timestamp + status; the actual feed push runs server-side per channel."""
+        """Fail closed until a provider-backed catalog sync exists."""
         integration = self.get_object()
         if not integration.is_connected:
             return Response(
                 {'status': 'error', 'message': f'{integration.name} is not connected.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        integration.last_sync = timezone.now()
-        integration.sync_status = 'CONNECTED'
-        integration.save(update_fields=['last_sync', 'sync_status'])
         return Response({
-            'status': 'success',
-            'message': f'{integration.name} catalog sync completed.',
-            'last_sync': integration.last_sync,
-            'sync_status': integration.sync_status,
-        })
+            'status': 'error',
+            'message': (
+                f'{integration.name} sync is not implemented. No external data '
+                'was changed.'
+            ),
+        }, status=status.HTTP_501_NOT_IMPLEMENTED)
 
 
 class ContentPageViewSet(viewsets.ModelViewSet):
@@ -393,6 +392,72 @@ class BlogPostViewSet(viewsets.ModelViewSet):
             qs = qs.filter(Q(title__icontains=q) | Q(slug__icontains=q))
         return qs
 
+    def perform_create(self, serializer):
+        is_published = bool(serializer.validated_data.get('is_published'))
+        serializer.save(published_at=timezone.now() if is_published else None)
+
+    def perform_update(self, serializer):
+        instance = self.get_object()
+        is_published = bool(serializer.validated_data.get('is_published', instance.is_published))
+        published_at = instance.published_at
+        if is_published and not published_at:
+            published_at = timezone.now()
+        if not is_published:
+            published_at = None
+        serializer.save(published_at=published_at)
+
+    @action(detail=True, methods=['post'])
+    def publish(self, request, pk=None):
+        post = self.get_object()
+        post.is_published = True
+        if not post.published_at:
+            post.published_at = timezone.now()
+        post.save(update_fields=['is_published', 'published_at', 'updated_at'])
+        return Response(self.get_serializer(post).data)
+
+    @action(detail=True, methods=['post'])
+    def unpublish(self, request, pk=None):
+        post = self.get_object()
+        post.is_published = False
+        post.published_at = None
+        post.save(update_fields=['is_published', 'published_at', 'updated_at'])
+        return Response(self.get_serializer(post).data)
+
+
+class PublishedBlogPostListView(APIView):
+    """GET /api/blog-posts/ — published blog posts for the storefront."""
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        posts = BlogPost.objects.filter(is_published=True).order_by('-published_at', '-created_at')
+        return Response(BlogPostSerializer(posts, many=True).data)
+
+
+class PublishedBlogPostDetailView(APIView):
+    """GET /api/blog-posts/<slug>/ — one published blog post."""
+    permission_classes = [AllowAny]
+
+    def get(self, request, slug):
+        post = BlogPost.objects.filter(slug=slug, is_published=True).first()
+        if not post:
+            return Response({"error": "Post not found"}, status=status.HTTP_404_NOT_FOUND)
+        return Response(BlogPostSerializer(post).data)
+
+
+class PublicSiteSettingView(APIView):
+    """Public, whitelisted settings used to reflect CMS menu/footer changes."""
+    permission_classes = [AllowAny]
+    ALLOWED_KEYS = {'NAVIGATION_MENUS', 'FOOTER_SETTINGS'}
+
+    def get(self, request, key):
+        key = key.upper()
+        if key not in self.ALLOWED_KEYS:
+            return Response({"error": "Setting not public"}, status=status.HTTP_404_NOT_FOUND)
+        setting = SystemSetting.objects.filter(key=key).first()
+        if not setting:
+            return Response({"key": key, "value": None})
+        return Response({"key": setting.key, "value": setting.value, "updated_at": setting.updated_at})
+
 
 from rest_framework.views import APIView
 from django.http import HttpResponse
@@ -435,20 +500,21 @@ class ReportAnalyticsView(APIView):
         total_revenue = float(orders.aggregate(s=Sum('total'))['s'] or 0.0)
         aov = total_revenue / total_orders if total_orders > 0 else 0.0
 
-        # Scoped conversion rate calculation (using customer activities or fallback mock)
+        # Scoped conversion rate. Never fabricate traffic when analytics has no
+        # data; zero orders and missing page views are operationally distinct.
         activities = CustomerActivity.objects.filter(metadata__region=region.code)
         page_views = activities.filter(activity_type='PAGE_VIEW').count()
-        views_count = page_views if page_views > 0 else (total_orders * 35 or 100)
-        conversion_rate = (total_orders / views_count) * 100
+        conversion_rate = (total_orders / page_views) * 100 if page_views else None
 
         sales_data = {
             'total_orders': total_orders,
             'total_revenue': total_revenue,
             'aov': aov,
-            'conversion_rate': round(conversion_rate, 2),
+            'conversion_rate': round(conversion_rate, 2) if conversion_rate is not None else None,
+            'conversion_data_available': page_views > 0,
             'currency': region.currency_code,
             'currency_symbol': region.currency_symbol,
-            'gross_margin': 70.0
+            'gross_margin': None,
         }
 
         # 2. Inventory metrics for the region's warehouses

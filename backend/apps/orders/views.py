@@ -1,5 +1,6 @@
 from decimal import Decimal, InvalidOperation
 from rest_framework import viewsets, status, views, generics
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -44,6 +45,7 @@ class MyOrdersView(generics.ListAPIView):
 
 class CartViewSet(viewsets.ViewSet):
     permission_classes = [AllowAny]
+    throttle_scope = 'checkout'
 
     def get_cart(self, session_id, region_code):
         region = get_object_or_404(Region, code=region_code, is_active=True)
@@ -76,7 +78,12 @@ class CartViewSet(viewsets.ViewSet):
         session_id = request.data.get('session_id')
         region_code = request.data.get('region', 'UK').upper()
         product_id = request.data.get('product_id')
-        quantity = int(request.data.get('quantity', 1))
+        try:
+            quantity = int(request.data.get('quantity', 1))
+        except (TypeError, ValueError):
+            return Response({"error": "quantity must be a positive integer"}, status=status.HTTP_400_BAD_REQUEST)
+        if quantity <= 0:
+            return Response({"error": "quantity must be a positive integer"}, status=status.HTTP_400_BAD_REQUEST)
 
         if not session_id or not product_id:
             return Response({"error": "session_id and product_id are required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -114,7 +121,10 @@ class CartViewSet(viewsets.ViewSet):
         session_id = request.data.get('session_id')
         region_code = request.data.get('region', 'UK').upper()
         product_id = request.data.get('product_id')
-        quantity = int(request.data.get('quantity', 1))
+        try:
+            quantity = int(request.data.get('quantity', 1))
+        except (TypeError, ValueError):
+            return Response({"error": "quantity must be an integer"}, status=status.HTTP_400_BAD_REQUEST)
 
         if not session_id or not product_id:
             return Response({"error": "session_id and product_id are required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -161,6 +171,7 @@ class ApplyCouponView(views.APIView):
     Body: { "code": "SAVE10", "region": "IN", "subtotal": 5000 }
     """
     permission_classes = [AllowAny]
+    throttle_scope = 'checkout'
 
     def post(self, request):
         from decimal import Decimal, InvalidOperation
@@ -216,6 +227,7 @@ class ApplyCouponView(views.APIView):
 
 class CheckoutView(views.APIView):
     permission_classes = [AllowAny]
+    throttle_scope = 'checkout'
 
     @transaction.atomic
     def post(self, request):
@@ -414,7 +426,11 @@ class CheckoutView(views.APIView):
         
         # Save invoice record
         invoice_details = {
-            "tax_reg_number": "GSTIN: 24AFXFS9162D1ZG" if region_code == 'IN' else "VAT: GB987654321",
+            "tax_reg_number": (
+                f"GSTIN: {settings.IN_GSTIN}"
+                if region_code == 'IN'
+                else f"VAT: {settings.UK_VAT_NUMBER}"
+            ),
             "invoice_type": "GST Tax Invoice" if region_code == 'IN' else "VAT Receipt",
         }
         
@@ -628,6 +644,12 @@ class RefundView(views.APIView):
 
 # --- Admin ViewSets for Regional CRUD Operations --- #
 
+class AdminDashboardPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
 class OrderAdminViewSet(viewsets.ModelViewSet):
     """
     Admin CRUD operations for orders with regional filters.
@@ -635,6 +657,7 @@ class OrderAdminViewSet(viewsets.ModelViewSet):
     Supports regional filtering via ?region=IN,UK,US and status filtering via ?status=PENDING,PROCESSING
     """
     permission_classes = [require_permission('orders.manage')]
+    pagination_class = AdminDashboardPagination
 
     def get_queryset(self):
         queryset = Order.objects.select_related('user', 'region').prefetch_related('items', 'refunds', 'invoice', 'payment_logs')
@@ -652,10 +675,38 @@ class OrderAdminViewSet(viewsets.ModelViewSet):
 
         if region_code:
             queryset = queryset.filter(region__code=region_code.upper())
-        if status_filter:
+        if status_filter and status_filter.upper() != 'ALL':
             queryset = queryset.filter(status=status_filter.upper())
         if email_filter:
             queryset = queryset.filter(email__icontains=email_filter)
+
+        # Advanced Search parameters
+        search_query = self.request.query_params.get('search')
+        if search_query:
+            search_query = search_query.strip()
+            id_filter = Q()
+            if search_query.isdigit():
+                id_filter = Q(id=int(search_query))
+            queryset = queryset.filter(
+                id_filter |
+                Q(email__icontains=search_query) |
+                Q(shipping_name__icontains=search_query) |
+                Q(payment_id__icontains=search_query)
+            )
+
+        # Payment Status parameter
+        payment_status_filter = self.request.query_params.get('payment_status')
+        if payment_status_filter and payment_status_filter.upper() != 'ALL':
+            queryset = queryset.filter(payment_status=payment_status_filter.upper())
+
+        # Sort Ordering parameter
+        ordering = self.request.query_params.get('ordering')
+        if ordering == 'oldest':
+            queryset = queryset.order_by('created_at')
+        elif ordering == 'total':
+            queryset = queryset.order_by('-total')
+        else:
+            queryset = queryset.order_by('-created_at')
 
         return queryset
 
@@ -1182,19 +1233,21 @@ class StripeWebhookView(views.APIView):
 
         event_id = payload.get('id') or ''
         event_type = payload.get('type') or ''
+        if not event_id or not event_type:
+            return Response({"error": "Webhook event id and type are required."},
+                            status=status.HTTP_400_BAD_REQUEST)
 
-        if event_id and WebhookEvent.objects.filter(
-            gateway='STRIPE', event_id=event_id
-        ).exists():
-            return Response({"status": "duplicate"}, status=status.HTTP_200_OK)
-
-        we = WebhookEvent.objects.create(
+        we, created = WebhookEvent.objects.get_or_create(
             gateway='STRIPE',
             event_id=event_id,
-            event_type=event_type,
-            payload=payload,
-            status='PENDING',
+            defaults={
+                'event_type': event_type,
+                'payload': payload,
+                'status': 'PENDING',
+            },
         )
+        if not created:
+            return Response({"status": "duplicate"}, status=status.HTTP_200_OK)
         record_audit(
             'webhook.received', target_type='WebhookEvent', target_id=we.id,
             summary=f'Stripe {event_type}',
@@ -1250,19 +1303,21 @@ class RazorpayWebhookView(views.APIView):
         payment_entity = ((payload.get('payload') or {}).get('payment') or {}).get('entity') or {}
         event_id = payment_entity.get('id') or ''
         event_type = payload.get('event') or ''
+        if not event_id or not event_type:
+            return Response({"error": "Webhook event id and type are required."},
+                            status=status.HTTP_400_BAD_REQUEST)
 
-        if event_id and WebhookEvent.objects.filter(
-            gateway='RAZORPAY', event_id=event_id
-        ).exists():
-            return Response({"status": "duplicate"}, status=status.HTTP_200_OK)
-
-        we = WebhookEvent.objects.create(
+        we, created = WebhookEvent.objects.get_or_create(
             gateway='RAZORPAY',
             event_id=event_id,
-            event_type=event_type,
-            payload=payload,
-            status='PENDING',
+            defaults={
+                'event_type': event_type,
+                'payload': payload,
+                'status': 'PENDING',
+            },
         )
+        if not created:
+            return Response({"status": "duplicate"}, status=status.HTTP_200_OK)
         record_audit(
             'webhook.received', target_type='WebhookEvent', target_id=we.id,
             summary=f'Razorpay {event_type}',
@@ -1303,7 +1358,11 @@ class PaypalWebhookView(views.APIView):
 
         webhook_id = (gateway.extra_config or {}).get('webhook_id') \
             or _os.getenv('PAYPAL_WEBHOOK_ID', '')
-        if not verify_paypal_signature(request.META, raw, webhook_id):
+        client_id = gateway.publishable_key or _os.getenv('PAYPAL_CLIENT_ID', '')
+        client_secret = gateway.secret_key or _os.getenv('PAYPAL_CLIENT_SECRET', '')
+        if not verify_paypal_signature(
+            request.META, raw, webhook_id, client_id, client_secret, gateway.mode
+        ):
             return Response({"error": "Invalid signature."},
                             status=status.HTTP_400_BAD_REQUEST)
 
@@ -1315,19 +1374,21 @@ class PaypalWebhookView(views.APIView):
 
         event_id = payload.get('id') or ''
         event_type = payload.get('event_type') or ''
+        if not event_id or not event_type:
+            return Response({"error": "Webhook event id and type are required."},
+                            status=status.HTTP_400_BAD_REQUEST)
 
-        if event_id and WebhookEvent.objects.filter(
-            gateway='PAYPAL', event_id=event_id
-        ).exists():
-            return Response({"status": "duplicate"}, status=status.HTTP_200_OK)
-
-        we = WebhookEvent.objects.create(
+        we, created = WebhookEvent.objects.get_or_create(
             gateway='PAYPAL',
             event_id=event_id,
-            event_type=event_type,
-            payload=payload,
-            status='PENDING',
+            defaults={
+                'event_type': event_type,
+                'payload': payload,
+                'status': 'PENDING',
+            },
         )
+        if not created:
+            return Response({"status": "duplicate"}, status=status.HTTP_200_OK)
         record_audit(
             'webhook.received', target_type='WebhookEvent', target_id=we.id,
             summary=f'PayPal {event_type}',

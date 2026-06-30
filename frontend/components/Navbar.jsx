@@ -20,6 +20,7 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
 
   const [showDropdown, setShowDropdown] = useState(false);
   const [categories, setCategories] = useState([]);
+  const [cmsNavLinks, setCmsNavLinks] = useState(null);
   const [showShopMenu, setShowShopMenu] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -71,6 +72,15 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
       .then((data) => setCategories(Array.isArray(data) ? data : []))
       .catch(() => setCategories([]));
   }, [currentRegion]);
+
+  useEffect(() => {
+    fetch(getApiUrl('/api/site-settings/NAVIGATION_MENUS/'))
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (Array.isArray(data?.value)) setCmsNavLinks(data.value);
+      })
+      .catch(() => {});
+  }, []);
 
   // Only live regions are shown — no "coming soon" placeholders.
   const countries = [
@@ -141,6 +151,14 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
 
   const navLinkClass =
     'text-brand-muted transition-colors hover:text-brand-purple';
+  const fallbackNavLinks = [
+    { label: 'Products', url: '/products', mega_menu: true },
+    { label: 'Wholesale', url: '/bulk' },
+    { label: 'Insights', url: '/blog' },
+  ];
+  const navLinks = (cmsNavLinks && cmsNavLinks.length ? cmsNavLinks : fallbackNavLinks)
+    .filter((link) => !link.region_limit || String(link.region_limit).toUpperCase() === currentRegion)
+    .filter((link) => link.label && link.url);
 
   const formatRegionDisplay = (code) => {
     if (code === 'IN') return '🇮🇳 India';
@@ -161,51 +179,45 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
         </Link>
 
         <div className="hidden items-center gap-6 text-sm font-medium md:flex">
-          <div
-            className="relative"
-            onMouseEnter={() => setShowShopMenu(true)}
-            onMouseLeave={() => setShowShopMenu(false)}
-          >
-            <Link
-              href="/products"
-              className={`flex items-center gap-1 ${navLinkClass}`}
-            >
-              Products
-              {categories.length > 0 && <ChevronDown className="h-3.5 w-3.5" />}
-            </Link>
-
-            {showShopMenu && categories.length > 0 && (
-              <div className="absolute left-0 top-full pt-2">
-                <div className="w-60 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
-                  <Link
-                    href="/products"
-                    className="block rounded-lg px-3 py-2 text-xs font-bold uppercase tracking-wide text-brand-purple hover:bg-slate-50"
-                  >
-                    All products
+          {navLinks.map((link, index) => {
+            const isProducts = link.mega_menu || link.url === '/products';
+            if (isProducts) {
+              return (
+                <div
+                  key={`${link.label}-${index}`}
+                  className="relative"
+                  onMouseEnter={() => setShowShopMenu(true)}
+                  onMouseLeave={() => setShowShopMenu(false)}
+                >
+                  <Link href={link.url} className={`flex items-center gap-1 ${navLinkClass}`}>
+                    {link.label}
+                    {categories.length > 0 && <ChevronDown className="h-3.5 w-3.5" />}
                   </Link>
-                  <div className="my-1 border-t border-slate-100" />
-                  {categories.map((c) => (
-                    <Link
-                      key={c.slug}
-                      href={`/products?category=${c.slug}`}
-                      className="flex items-center justify-between rounded-lg px-3 py-2 text-sm text-brand-navy hover:bg-slate-50 hover:text-brand-purple"
-                    >
-                      <span>{c.name}</span>
-                      {typeof c.product_count === 'number' && (
-                        <span className="text-xs text-slate-400">{c.product_count}</span>
-                      )}
-                    </Link>
-                  ))}
+                  {showShopMenu && categories.length > 0 && (
+                    <div className="absolute left-0 top-full pt-2">
+                      <div className="w-60 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
+                        <Link href="/products" className="block rounded-lg px-3 py-2 text-xs font-bold uppercase tracking-wide text-brand-purple hover:bg-slate-50">
+                          All products
+                        </Link>
+                        <div className="my-1 border-t border-slate-100" />
+                        {categories.map((c) => (
+                          <Link key={c.slug} href={`/products?category=${c.slug}`} className="flex items-center justify-between rounded-lg px-3 py-2 text-sm text-brand-navy hover:bg-slate-50 hover:text-brand-purple">
+                            <span>{c.name}</span>
+                            {typeof c.product_count === 'number' && <span className="text-xs text-slate-400">{c.product_count}</span>}
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
-          </div>
-          <Link href="/bulk" className={navLinkClass}>
-            Wholesale
-          </Link>
-          <a href="/#blog" className={navLinkClass}>
-            Insights
-          </a>
+              );
+            }
+            return (
+              <Link key={`${link.label}-${index}`} href={link.url} className={navLinkClass}>
+                {link.label}
+              </Link>
+            );
+          })}
         </div>
 
         <div className="flex items-center gap-3">
@@ -405,10 +417,11 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
             <div className="border-b border-slate-100 px-5 py-4">
               <h4 className="mb-2 text-[10px] font-extrabold uppercase tracking-widest text-brand-muted">Browse</h4>
               <div className="flex flex-col gap-0.5 text-sm font-bold text-brand-navy">
-                <Link href="/about" onClick={closeMobile} className="rounded-lg px-2 py-2 hover:bg-slate-50">About</Link>
-                <Link href="/bulk" onClick={closeMobile} className="rounded-lg px-2 py-2 hover:bg-slate-50">Wholesale</Link>
-                <Link href="/#blog" onClick={closeMobile} className="rounded-lg px-2 py-2 hover:bg-slate-50">Insights</Link>
-                <Link href="/contact" onClick={closeMobile} className="rounded-lg px-2 py-2 hover:bg-slate-50">Contact</Link>
+                {navLinks.filter((link) => link.url !== '/products').map((link, index) => (
+                  <Link key={`${link.label}-${index}`} href={link.url} onClick={closeMobile} className="rounded-lg px-2 py-2 hover:bg-slate-50">
+                    {link.label}
+                  </Link>
+                ))}
               </div>
             </div>
 

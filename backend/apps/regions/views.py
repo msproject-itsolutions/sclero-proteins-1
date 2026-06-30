@@ -19,8 +19,10 @@ class RegionViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Region.objects.filter(is_active=True)
     serializer_name = RegionSerializer
     serializer_class = RegionSerializer
+    permission_classes = [AllowAny]
 
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def detect_region(request):
     """
     Detects user country from query parameters (timezone, locale, language),
@@ -112,6 +114,7 @@ class PostcodeLookupView(APIView):
     free. Returns {} on any miss so the UI simply falls back to manual entry.
     """
     permission_classes = [AllowAny]
+    throttle_scope = 'checkout'
 
     def get(self, request):
         country = (request.query_params.get('country') or '').upper().strip()
@@ -155,6 +158,7 @@ class ShippingCalculateView(APIView):
     """Return the shipping fee for a destination + order value (admin zones, else
     the regional default)."""
     permission_classes = [AllowAny]
+    throttle_scope = 'checkout'
 
     def post(self, request):
         region_code = (request.data.get('region') or '').upper().strip()
