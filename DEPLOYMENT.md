@@ -32,6 +32,42 @@ amount/currency binding, idempotency, reconciliation, sandbox, and live tests
 have been implemented. PayPal webhook verification itself is implemented and
 fails closed.
 
+## Automated installation
+
+The safe one-command path is available after cloning the repository:
+
+```bash
+cd /opt/sclero-proteins
+chmod +x deploy/*.sh
+./deploy/vps-install.sh --email operations@example.com
+```
+
+On its first run, the installer creates `.env` with random Django and database
+secrets and exits. Edit the remaining business, domain, and SMTP values, point
+all configured DNS names to the VPS, then run the same command again.
+
+The installer is idempotent and performs preflight checks, builds the images,
+starts the isolated Compose project, runs migrations and deployment checks,
+installs only the dedicated Sclero host-nginx site, obtains the SAN certificate,
+validates nginx before reload, verifies HTTPS, and installs a daily backup job.
+If host-nginx validation fails, it restores the previous Sclero site.
+
+To start only the application stack without touching nginx or TLS:
+
+```bash
+./deploy/vps-install.sh --app-only
+```
+
+For later releases:
+
+```bash
+./deploy/vps-update.sh
+```
+
+The update script takes a database/media backup before pulling, rebuilds the
+release, waits for health checks, and prints focused logs if deployment fails.
+It never automatically reverses database migrations.
+
 ## 1. Inventory the shared host
 
 Recommended baseline: Ubuntu 24.04 LTS, 4 GB RAM, 2 vCPU, Docker Engine with
