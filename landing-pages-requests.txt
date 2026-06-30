@@ -1,5 +1,0 @@
-48. [GET] http://localhost:8000/api/admin/product-landing-pages/ => [200] OK
-49. [GET] http://localhost:8000/api/admin/product-landing-pages/ => [200] OK
-57. [GET] http://localhost:8000/api/admin/product-landing-pages/ => [200] OK
-
-Note: 17 static requests not shown, run with "static" option to see them.
