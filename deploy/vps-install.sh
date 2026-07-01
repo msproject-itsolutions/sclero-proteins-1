@@ -139,7 +139,7 @@ fi
 
 chmod 600 .env
 
-if grep -q 'CHANGE_ME' .env; then
+if grep -Eq '(^|=)CHANGE_ME' .env; then
   die ".env still contains CHANGE_ME placeholders"
 fi
 
@@ -255,14 +255,14 @@ if [[ "$app_only" == false ]]; then
   server_names="${domains_csv//,/ }"
   sed \
     -e "s|^[[:space:]]*server_name scleroproteins.co.uk www.scleroproteins.co.uk$|    server_name ${server_names};|g" \
-    -e '/^[[:space:]]*scleroproteins\\.in www\\.scleroproteins\\.in$/d' \
-    -e '/^[[:space:]]*scleroproteins\\.com www\\.scleroproteins\\.com;/d' \
+    -e '/^[[:space:]]*scleroproteins\.in www\.scleroproteins\.in$/d' \
+    -e '/^[[:space:]]*scleroproteins\.com www\.scleroproteins\.com;$/d' \
     deploy/nginx/scleroproteins-bootstrap.conf > "${tmp_dir}/bootstrap.conf"
   sed \
     -e "s|127.0.0.1:18088|127.0.0.1:${port}|g" \
     -e "s|^[[:space:]]*server_name scleroproteins.co.uk www.scleroproteins.co.uk$|    server_name ${server_names};|g" \
-    -e '/^[[:space:]]*scleroproteins\\.in www\\.scleroproteins\\.in$/d' \
-    -e '/^[[:space:]]*scleroproteins\\.com www\\.scleroproteins\\.com;/d' \
+    -e '/^[[:space:]]*scleroproteins\.in www\.scleroproteins\.in$/d' \
+    -e '/^[[:space:]]*scleroproteins\.com www\.scleroproteins\.com;$/d' \
     -e "s|/etc/letsencrypt/live/scleroproteins.co.uk/|/etc/letsencrypt/live/${primary_domain}/|g" \
     deploy/nginx/scleroproteins-host.conf > "${tmp_dir}/host.conf"
 
