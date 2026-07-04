@@ -78,11 +78,12 @@ export default function Footer() {
   };
 
   const shopLinks = [
-    { name: 'Combo Collagen®', href: '/products?category=collagen' },
-    { name: 'BJC® Bone & Joint Care', href: '/products?category=bone-joint-care' },
-    { name: 'CalPure Calcium', href: '/products?category=calcium' },
-    { name: 'Whey Protein', href: '/products?category=protein' },
-    { name: 'Creatine', href: '/products?category=creatine' },
+    { name: 'Combo Collagen®', href: '/products/COMBO-COLLAGEN-60' },
+    { name: 'OvoShell Collagen™', href: '/products/OVOSHELL-COLLAGEN-60' },
+    { name: 'BJC® Bone & Joint Care', href: '/products/BJC-BONE-JOINT' },
+    { name: 'SoilPro™', href: '/products/SOILPRO-1KG' },
+    { name: 'LawnCal™', href: '/products/LAWNCAL-25KG' },
+    { name: 'OvoMatrix™ technology', href: '/pages/ovomatrix' },
     { name: 'Shop all products', href: '/products' },
     { name: 'Wholesale & bulk', href: '/bulk' },
   ];

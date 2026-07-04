@@ -269,17 +269,32 @@ STORAGES = {
 # A shared on-disk cache keeps rate-limit counters coherent across Gunicorn
 # workers in the single backend container. Use Redis before scaling to multiple
 # backend containers.
-CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
-        'LOCATION': os.getenv(
-            'DJANGO_CACHE_LOCATION',
-            str(Path(tempfile.gettempdir()) / 'sclero-django-cache'),
-        ),
-        'TIMEOUT': 300,
-        'OPTIONS': {'MAX_ENTRIES': 10000},
+#
+# On Windows dev servers the file-based backend races under concurrent
+# requests (pickle.load hits PermissionError on a file another thread holds),
+# surfacing as intermittent 500s from DRF throttling. Local dev runs a single
+# process, so an in-memory cache is both safe and race-free there.
+if DEBUG and os.name == 'nt':
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'sclero-dev-cache',
+            'TIMEOUT': 300,
+            'OPTIONS': {'MAX_ENTRIES': 10000},
+        }
     }
-}
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
+            'LOCATION': os.getenv(
+                'DJANGO_CACHE_LOCATION',
+                str(Path(tempfile.gettempdir()) / 'sclero-django-cache'),
+            ),
+            'TIMEOUT': 300,
+            'OPTIONS': {'MAX_ENTRIES': 10000},
+        }
+    }
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
