@@ -9,7 +9,7 @@ import { fetchCart, clearCartLocal } from '../store/cartSlice';
 import { getApiUrl } from '../lib/api';
 import { isProdHost, crossDomainUrl } from '../lib/region';
 import { ShoppingBag, Globe, Settings, ChevronDown, User, Search, X, Sparkles, Menu } from 'lucide-react';
-import Logo from './Logo';
+import { LogoLockup } from './Logo';
 
 export default function Navbar({ onOpenCart, onOpenAdmin }) {
   const dispatch = useDispatch();
@@ -171,12 +171,8 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
   return (
     <nav className="sticky top-0 z-40 w-full border-b border-edge bg-brand-bg/95 backdrop-blur-md">
       <div className="mx-auto flex h-[72px] max-w-container items-center justify-between px-3 sm:px-6 lg:px-10">
-        <Link href="/" className="flex items-center gap-2 sm:gap-2.5">
-          <Logo className="h-8 w-8" />
-          <span className="flex items-baseline gap-1.5 sm:gap-2">
-            <span className="font-display text-[19px] font-medium tracking-tight text-ink-primary sm:text-[22px]">Sclero</span>
-            <span className="kicker mt-1 hidden min-[400px]:inline">Proteins</span>
-          </span>
+        <Link href="/" aria-label="Sclero Proteins home">
+          <LogoLockup markClass="h-9 w-9" wordClass="h-[15px] sm:h-[17px]" />
         </Link>
 
         <div className="hidden items-center gap-8 text-[14px] md:flex">
@@ -350,12 +346,8 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
             `}</style>
 
             <div className="flex items-center justify-between border-b border-edge px-5 py-4">
-              <Link href="/" ref={firstMobileLinkRef} onClick={closeMobile} className="flex items-center gap-2.5">
-                <Logo className="h-8 w-8" />
-                <span className="flex items-baseline gap-2">
-                  <span className="font-display text-[19px] font-medium tracking-tight text-ink-primary">Sclero</span>
-                  <span className="kicker">Proteins</span>
-                </span>
+              <Link href="/" ref={firstMobileLinkRef} onClick={closeMobile} aria-label="Sclero Proteins home">
+                <LogoLockup markClass="h-8 w-8" wordClass="h-[14px]" />
               </Link>
               <button
                 type="button"

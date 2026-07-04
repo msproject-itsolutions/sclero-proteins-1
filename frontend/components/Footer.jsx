@@ -7,7 +7,7 @@ import {
   Mail, Phone, MapPin, Truck, Award, RefreshCw, ShieldCheck,
   Instagram, Facebook, Linkedin, Youtube, Send, CheckCircle2,
 } from 'lucide-react';
-import Logo from './Logo';
+import Logo, { LogoLockup } from './Logo';
 import { getApiUrl } from '../lib/api';
 
 const COMPANY_REGISTRATION_NUMBER =
@@ -173,12 +173,8 @@ export default function Footer() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-10 lg:grid-cols-12">
           {/* Brand + contact */}
           <div className="space-y-5 sm:col-span-2 lg:col-span-4">
-            <Link href="/" className="flex items-center gap-2.5">
-              <Logo className="h-9 w-9" />
-              <span className="flex items-baseline gap-2">
-                <span className="font-display text-[22px] font-medium tracking-tight text-white">Sclero</span>
-                <span className="text-[11px] font-medium uppercase tracking-luxe text-[#BFB9AE]">Proteins</span>
-              </span>
+            <Link href="/" aria-label="Sclero Proteins home">
+              <LogoLockup markClass="h-10 w-10" wordClass="h-[16px]" inverse />
             </Link>
             <p className="max-w-sm text-[13.5px] leading-[1.7] text-[#BFB9AE]">
               Clinically-formulated collagen, bone &amp; joint, and active-nutrition supplements —
