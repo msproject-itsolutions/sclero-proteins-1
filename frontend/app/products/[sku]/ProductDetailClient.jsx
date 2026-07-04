@@ -13,6 +13,7 @@ import ProductCard from '../../../components/ProductCard';
 import { addToCart } from '../../../store/cartSlice';
 import { getApiUrl } from '../../../lib/api';
 import { authenticatedFetch } from '../../../lib/authFetch';
+import { fetchWishlistOnce, invalidateWishlistCache } from '../../../lib/wishlistCache';
 import { jsonLdScriptProps } from '../../../lib/jsonLd';
 import { trackEvent } from '../../../utils/analytics';
 
@@ -89,10 +90,8 @@ export default function ProductDetailClient({ sku }) {
       return;
     }
 
-    authenticatedFetch(`/api/wishlist/?region=${currentRegion}`, {}, accessToken)
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data) => {
-        const items = Array.isArray(data) ? data : (data.results || []);
+    fetchWishlistOnce(currentRegion, accessToken)
+      .then((items) => {
         const found = items.find((item) => item.product_sku === product.sku);
         if (found) {
           setIsWishlisted(true);
@@ -123,6 +122,7 @@ export default function ProductDetailClient({ sku }) {
         if (res.ok) {
           setIsWishlisted(false);
           setWishlistItemId(null);
+          invalidateWishlistCache();
         }
       } else {
         // Add to wishlist
@@ -137,6 +137,7 @@ export default function ProductDetailClient({ sku }) {
           const data = await res.json();
           setIsWishlisted(true);
           setWishlistItemId(data.id);
+          invalidateWishlistCache();
         }
       }
     } catch (e) {
