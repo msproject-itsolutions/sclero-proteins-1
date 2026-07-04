@@ -35,7 +35,7 @@ const HEALTH_GOALS = [
 const TESTIMONIALS = [
   { name: 'Sarah Jenkins', role: 'Verified UK Buyer', rating: 5, text: 'The BJC joint care has been a lifesaver for my daily runs. My knees feel highly lubricated and recovery times are cut in half.', product: 'BJC® Bone & Joint Care' },
   { name: 'Rahul Mehta', role: 'Verified India Buyer', rating: 5, text: 'Absolutely love the label transparency. Unlike other brands in India, Sclero Proteins lists exact composition quantities.', product: 'OvoMatrix ESC' },
-  { name: 'James Foster', role: 'Amateur Athlete', rating: 5, text: 'Highest grade protein I have used. Cold-processed active whey makes a massive difference in muscle fullness and digestion.', product: 'Cold-Processed Active Whey' },
+  { name: 'James Foster', role: 'Amateur Athlete', rating: 5, text: 'Highest grade structural protein I have used. The single-ingredient membrane collagen makes a real difference in recovery and joint comfort.', product: 'OvoShell Collagen™' },
 ];
 
 export default function HomePageClient({ initialBlogs = [] }) {

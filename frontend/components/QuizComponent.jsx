@@ -127,7 +127,7 @@ const PRODUCT_RECOMMENDATIONS = {
     reason: 'Best vegan option for beauty & activity',
   },
   'joints-8-12weeks-active-none': {
-    sku: 'BJC-BONE-JOINT-60',
+    sku: 'BJC-BONE-JOINT',
     name: 'BJC® Bone & Joint Care',
     match: '98%',
     reason: 'Specifically designed for active joint support',
@@ -139,7 +139,7 @@ const PRODUCT_RECOMMENDATIONS = {
     reason: 'Comprehensive wellness formula for all-around health',
   },
   'recovery-8-12weeks-active-none': {
-    sku: 'BJC-BONE-JOINT-60',
+    sku: 'BJC-BONE-JOINT',
     name: 'BJC® Bone & Joint Care',
     match: '96%',
     reason: 'Ideal for post-workout recovery and muscle support',

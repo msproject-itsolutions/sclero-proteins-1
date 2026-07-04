@@ -1,13 +1,22 @@
 """
 Seed / refresh the full Sclero Proteins catalog from the brand product docs.
 
-Consumer nutrition: Combo Collagen, OvoShell Collagen, BJC, CalPure.
-OvoMatrix Solutions (soil & turf): SoilPro, LawnCal.
+The catalog is exactly these five sellable SKUs plus the OvoMatrix™ master
+technology ContentPage:
+
+  1. Combo Collagen®                  (COMBO-COLLAGEN-60)
+  2. OvoShell Collagen™               (OVOSHELL-COLLAGEN-60)
+  3. BJC® — Bone & Joint Care         (BJC-BONE-JOINT)
+  4. SoilPro™ (OvoMatrix)             (SOILPRO-1KG)
+  5. LawnCal™                         (LAWNCAL-25KG)
+  +  OvoMatrix™ technology page       (/pages/ovomatrix)
 
 Idempotent: safe to re-run. Updates content in place, (re)creates region
-pricing, stock, media images, and category links. The narrative sections from
-the brand docs (ECM, mechanism, sustainability, cautions, consistency, usage)
-are folded into the FAQ accordion so the product page surfaces all of them.
+pricing, stock, media images, and category links, then PRUNES the rest of the
+catalog — any product whose SKU is not listed above is archived (is_active
+False + is_archived True, region configs hidden) rather than deleted, so
+historical orders keep their references. Categories left with no active
+product are deactivated.
 
 NOTE: agri prices (SoilPro/LawnCal) are indicative placeholders — confirm with
 the business before go-live.
@@ -21,6 +30,7 @@ from django.db import transaction
 from apps.products.models import Product, ProductRegionConfig, ProductMedia, Category
 from apps.regions.models import Region, Warehouse
 from apps.inventory.models import StockLevel
+from apps.admin_dashboard.models import ContentPage
 
 
 CATEGORIES = [
@@ -70,6 +80,8 @@ PRODUCTS = [
         "sku": "COMBO-COLLAGEN-60",
         "name": "Combo Collagen®",
         "hsn_code": "21069099",
+        "short_benefit": "3-in-1: Beauty · Health · Anti-Ageing",
+        "dietary_tags": ["gmp_certified"],
         "categories": ["collagen", "skin-beauty", "bone-joint-care"],
         "description": (
             "Combo Collagen® — Beyond Collagen. A pure, single-ingredient collagen complex made "
@@ -163,6 +175,8 @@ PRODUCTS = [
         "sku": "OVOSHELL-COLLAGEN-60",
         "name": "OvoShell Collagen™",
         "hsn_code": "21069099",
+        "short_benefit": "Natural OvoShell membrane · Type I, V & X collagen",
+        "dietary_tags": ["gmp_certified"],
         "categories": ["collagen", "skin-beauty", "bone-joint-care"],
         "description": (
             "OvoShell Collagen™ — Beyond Collagen. A pure, single-ingredient collagen complex made "
@@ -226,6 +240,18 @@ PRODUCTS = [
              "Multi-type collagen, elastin + keratin + hyaluronic acid + GAGs, bioactive peptides, "
              "single-ingredient purity, ECM-support profile, a sustainable upcycled ingredient, and "
              "3-in-1 Beauty/Health/Anti-Ageing."),
+            ("Capsules or liquid collagen — which is better?",
+             "Capsules are cleaner and more convenient, avoiding the sugars, flavours and "
+             "preservatives often added to liquids. Absorption depends on digestion, not format, so "
+             "both work the same when taken consistently."),
+            ("Can it help with joint comfort?",
+             "It is not a medicine and does not treat joint pain, but it naturally contains Type X "
+             "collagen and glycosaminoglycans found in healthy cartilage, supporting normal joint "
+             "structure and comfort with consistent use. Consult a professional for ongoing issues."),
+            ("What visible benefits can I expect with consistent use?",
+             "With daily use, many users report improvements in skin smoothness, hydration and "
+             "overall appearance thanks to the natural collagen, elastin and hyaluronic-acid "
+             "precursors supporting the body's normal structural processes."),
         ),
         "price_gbp": ("34.00", "28.90"),
         "price_inr": ("2699.00", "2299.00"),
@@ -240,6 +266,8 @@ PRODUCTS = [
         "sku": "BJC-BONE-JOINT",
         "name": "BJC® — Bone & Joint Care",
         "hsn_code": "21069099",
+        "short_benefit": "Natural calcium + structural proteins for daily mobility",
+        "dietary_tags": ["gmp_certified"],
         "categories": ["bone-joint-care", "collagen", "calcium"],
         "description": (
             "BJC® — Bone & Joint Care. A natural structural-support supplement providing elemental "
@@ -311,63 +339,13 @@ PRODUCTS = [
             "https://images.unsplash.com/photo-1559757175-5700dde675bc?w=600",
         ],
     },
-    # ---------------------------------------------------------------- CALPURE
-    {
-        "sku": "CALPURE-60",
-        "name": "CalPure — Beyond Calcium",
-        "hsn_code": "21069099",
-        "categories": ["calcium", "bone-joint-care"],
-        "description": (
-            "CalPure — Beyond Calcium. A pure, natural calcium supplement derived from eggshell "
-            "(60 capsules). It contains clean, food-grade calcium supported by naturally occurring "
-            "peptide fractions inherent to the eggshell matrix — not added. A simple, minimally "
-            "processed daily mineral formula for those seeking a clean calcium source."
-        ),
-        "benefits": (
-            "Natural calcium source derived directly from eggshell; clean mineral profile with no "
-            "synthetic calcium or chalk fillers; naturally occurring peptide fractions from the "
-            "eggshell matrix; gentle processing (purified and micronized); a simple, minimal "
-            "daily-mineral formula with no additives or artificial fortification."
-        ),
-        "ingredients": (
-            "Per serving (2 capsules): Eggshell-Derived Calcium, Naturally Occurring Peptide "
-            "Fractions, Capsule Shell (HPMC or Gelatin). Source: purified eggshell."
-        ),
-        "nutrition_facts": {
-            "Serving Size": "2 capsules daily",
-            "Servings Per Pack": "30",
-            "Source": "Purified eggshell",
-            "Processing": "Purified, micronized",
-            "Shelf Life": "24 months",
-            "Storage": "Cool, dry place",
-            "Manufacturing": "Food-grade, GMP-compliant facility",
-        },
-        "faq": faq(
-            ("How it works",
-             "Eggshell provides calcium in its natural, unaltered form; the mineral matrix "
-             "dissolves steadily during digestion while naturally occurring peptide fractions "
-             "complement the mineral profile for a clean daily intake."),
-            ("What makes it different",
-             "Pure eggshell calcium — not synthetic carbonate — with inherent peptide fractions and "
-             "nothing else added; a minimal, single-source formula."),
-            ("Is CalPure a collagen supplement?",
-             "No — it is a calcium-first supplement with naturally occurring peptide fractions."),
-            ("How is CalPure different from Combo Collagen?",
-             "Combo Collagen is a multi-type collagen formula; CalPure is pure calcium with inherent peptides."),
-            ("Is the calcium natural?", "Yes — it is derived directly from eggshell."),
-        ),
-        "price_gbp": ("24.99", None),
-        "price_inr": ("1899.00", None),
-        "stock": 220,
-        "images": [
-            "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=600",
-        ],
-    },
     # ---------------------------------------------------------------- SOILPRO
     {
         "sku": "SOILPRO-1KG",
-        "name": "SoilPro™ — Natural Soil Improver",
+        "name": "SoilPro™ — Premium Natural Bio Mineral Soil Health Conditioner",
         "hsn_code": "31010099",
+        "short_benefit": "Powered by OvoMatrix™ · 1 kg pouch · chemical free",
+        "dietary_tags": [],
         "categories": ["soil-turf"],
         "description": (
             "SoilPro™ — a premium natural bio-mineral soil-health conditioner powered by "
@@ -415,6 +393,13 @@ PRODUCTS = [
             ("Can it be used with chemical fertilisers?",
              "Yes — it is compatible with all fertiliser programs."),
             ("How long until results are visible?", "Typically within 2–4 weeks."),
+            ("Does it improve water retention?",
+             "Yes. Its natural components enhance water retention and moisture balance."),
+            ("Does it help with soil pH?", "Yes. Its mineral base gently buffers acidity."),
+            ("Is it suitable for organic gardening?",
+             "Yes. It aligns fully with natural and organic gardening principles."),
+            ("Can SoilPro™ be used year round?",
+             "Yes. It is suitable for all seasons and climates, and for all soil types."),
             ("How is it different from LawnCal?",
              "LawnCal is a multi-mineral turf conditioner; SoilPro is a multi-component soil "
              "improver with organic matter and bioactives for beds, pots and nursery mixes."),
@@ -429,8 +414,10 @@ PRODUCTS = [
     # ---------------------------------------------------------------- LAWNCAL
     {
         "sku": "LAWNCAL-25KG",
-        "name": "LawnCal™ — Turf & Lawn Conditioner",
+        "name": "LawnCal™ — Premium Natural Soil Health Mineral Conditioner",
         "hsn_code": "31010099",
+        "short_benefit": "Powered by OvoMatrix™ · 25 kg turf system · chemical free",
+        "dietary_tags": [],
         "categories": ["soil-turf"],
         "description": (
             "LawnCal™ — a premium natural multi-mineral turf & lawn conditioner powered by "
@@ -478,6 +465,13 @@ PRODUCTS = [
              "Yes. It is 100% natural and safe for all home environments."),
             ("Can it be used with chemical fertilisers?",
              "Yes — it is compatible with all fertiliser programs."),
+            ("Does it change soil pH?",
+             "It provides mild pH correction without over-alkalising."),
+            ("Is it suitable for sports grounds?",
+             "Yes — ideal for high-traffic turf areas, golf fairways and public parks."),
+            ("Does it help with root development?",
+             "Yes. The soil bioactivation system supports deeper, stronger roots."),
+            ("Can it be used year round?", "Yes — suitable for all seasons, climates and turfgrass varieties."),
             ("How long until results are visible?", "Typically within 2–4 weeks."),
         ),
         "price_gbp": ("39.99", None),
@@ -490,8 +484,112 @@ PRODUCTS = [
 ]
 
 
+OVOMATRIX_PAGE = {
+    "slug": "ovomatrix",
+    "title": "OvoMatrix™ — Master Ingredient Technology",
+    "meta_title": "OvoMatrix™ — Master Ingredient Technology | Sclero Proteins",
+    "meta_description": (
+        "OvoMatrix™ is Sclero Proteins' proprietary eggshell-derived ingredient platform "
+        "powering SoilPro™, LawnCal™, OvoShell Collagen™, Combo Collagen® and B2B ingredient "
+        "solutions across soil health, turf conditioning, calcium nutrition and collagen innovation."
+    ),
+    "content": """# A next-generation ingredient platform
+
+OvoMatrix™ is a next generation ingredient platform engineered from purified eggshell and eggshell membrane. It powers soil conditioners, turf enhancement systems, calcium complexes, collagen blends, and B2B ingredient solutions across multiple industries.
+
+OvoMatrix™ forms the scientific foundation behind SoilPro™, LawnCal™, OvoShell Collagen™, Combo Collagen®, and all future Sclero Proteins™ innovations.
+
+# What is OvoMatrix™?
+
+OvoMatrix™ is a natural mineral–protein matrix derived from eggshell and eggshell membrane, transformed into a high performance functional ingredient platform. Its applications span:
+
+- Soil conditioning
+- Turf management
+- Calcium fortification
+- Collagen complexes
+- Bulk ingredient supply
+- OEM & private label formulations
+
+OvoMatrix™ is not a single product — it is a technology layer that powers multiple product lines with precision, consistency, and scientific integrity.
+
+# Technology pillars
+
+The eight scientific pillars that define OvoMatrix™:
+
+- **Mineral–Protein Matrix** — the foundational structure combining eggshell minerals with membrane proteins.
+- **Natural Calcium Lattice** — the micro-crystalline mineral architecture responsible for structural strength and bioavailability.
+- **Bioactive Protein Fraction** — functional membrane proteins that support biological activation and structural integrity.
+- **Bioactive Peptides** — short-chain peptides that influence cellular activity, regeneration, and nutrient signalling.
+- **Micro-Porous Architecture** — a naturally occurring pore network that enhances water movement, aeration, and microbial colonisation.
+- **High Bioavailability Pathways** — natural absorption pathways enabling efficient mineral and peptide utilisation.
+- **Multi-Class Collagen Synergy** — the combined functionality of Type I, V, and X collagen.
+- **Calcium–Collagen Interaction** — the synergistic interface between mineral and protein layers that enhances structural and biological performance.
+
+# Applications powered by OvoMatrix™
+
+## Soil & turf health
+
+**SoilPro™** (soil conditioner) and **LawnCal™** (turf conditioner) — powered by soil conditioning, soil biology, soil structure and porosity science, water infiltration and retention, root development, and turf density & resilience research.
+
+## Human nutrition
+
+**OvoShell Collagen™** (Type I/V/X) and **Combo Collagen®** (multi-class collagen) — powered by the natural calcium lattice, bioactive peptides, high-bioavailability pathways, multi-class collagen synergy, and calcium–collagen interaction.
+
+## B2B ingredient supply
+
+Bulk eggshell mineral matrix (ESC, 25 kg), collagen complexes (5–10 kg), custom blends, OEM support, private label, and distributor partnerships.
+
+# OEM & bulk supply
+
+OEM (Original Equipment Manufacturer) support means you use our ingredients, you create your own branded product, and we provide the science, documentation, and technical backbone — premium ingredients plus expert support, while keeping your own brand identity.
+
+## Bulk ingredients available
+
+- SoilPro™ Mineral Complex — 25 kg
+- LawnCal™ Turf Mineral — 25 kg
+- Eggshell Mineral Matrix (ESC) — 25 kg
+- OvoShell Collagen™ (Type I/V/X) — 5 kg / 10 kg
+- Combo Collagen® Multi-Class Complex — 5 kg / 10 kg
+
+## Who we supply
+
+Supplement brands, soil & turf companies, garden product manufacturers, cosmetic formulators, private label brands, distributors & wholesalers, and research & development teams.
+
+## Why brands choose OvoMatrix™
+
+- **Proven ingredient technology** — built on the mineral–protein matrix, bioactive protein fraction, and micro-porous architecture.
+- **Clean, natural, traceable** — eggshell derived, non-synthetic, processed under strict quality standards.
+- **High bioavailability & performance** — natural mineral and protein synergy for superior functional outcomes.
+- **Scalable supply** — consistent quality, reliable logistics, and export-ready documentation.
+
+## What OEM support includes
+
+Bulk ingredient supply, custom blend development, private label support, technical guidance, product positioning support, distributor partnerships, and access to the OvoMatrix™ knowledge base.
+
+## Documentation hub
+
+Product specification sheets, COA samples, safety & compliance sheets, white papers, the bulk ingredient catalogue, and the OEM support pack are available on request.
+
+## How to start an OEM partnership
+
+1. Share your product idea or requirement
+2. We recommend the right OvoMatrix™ ingredient
+3. You receive bulk pricing & MOQ
+4. We support your formulation & label development
+5. You launch your own branded product — simple, fast, and professional
+
+## Contact the OvoMatrix™ OEM team
+
+Email **oem@scleroproteins.com** for bulk pricing, samples, or OEM partnerships. MOQ: 25 kg (minerals) / 5–10 kg (collagen). Global shipping available.
+""",
+}
+
+# The catalog is exactly these SKUs — everything else gets archived.
+KEEP_SKUS = {p["sku"] for p in PRODUCTS}
+
+
 class Command(BaseCommand):
-    help = "Seed/refresh the full Sclero catalog (collagen, calcium, bone-joint, soil & turf)."
+    help = "Seed/refresh the Sclero catalog (5 OvoMatrix products + OvoMatrix page) and archive the rest."
 
     @transaction.atomic
     def handle(self, *args, **options):
@@ -518,6 +616,8 @@ class Command(BaseCommand):
                     "ingredients": p["ingredients"],
                     "nutrition_facts": p["nutrition_facts"],
                     "faq": p["faq"],
+                    "short_benefit": p.get("short_benefit", ""),
+                    "dietary_tags": p.get("dietary_tags", []),
                     "is_active": True,
                     "is_archived": False,
                 },
@@ -557,5 +657,36 @@ class Command(BaseCommand):
 
             self.stdout.write(self.style.SUCCESS(
                 f"{'Created' if created else 'Updated'} {p['sku']} — {p['name']}"))
+
+        # ---- Prune: archive everything that is not in the fixed catalog ----
+        # Archived (not deleted) so historical orders keep their product refs.
+        stale = Product.objects.exclude(sku__in=KEEP_SKUS).filter(is_archived=False)
+        for prod in stale:
+            prod.is_active = False
+            prod.is_archived = True
+            prod.save(update_fields=["is_active", "is_archived"])
+            ProductRegionConfig.objects.filter(product=prod).update(is_visible=False)
+            self.stdout.write(self.style.WARNING(f"Archived {prod.sku} — {prod.name}"))
+
+        # Deactivate categories that no longer hold any active product.
+        for cat in Category.objects.filter(is_active=True):
+            if not cat.products.filter(is_active=True, is_archived=False).exists():
+                cat.is_active = False
+                cat.save(update_fields=["is_active"])
+                self.stdout.write(self.style.WARNING(f"Deactivated empty category {cat.slug}"))
+
+        # ---- OvoMatrix™ master ingredient technology page ----
+        ContentPage.objects.update_or_create(
+            slug=OVOMATRIX_PAGE["slug"],
+            defaults={
+                "title": OVOMATRIX_PAGE["title"],
+                "content": OVOMATRIX_PAGE["content"],
+                "page_type": "LANDING",
+                "is_published": True,
+                "meta_title": OVOMATRIX_PAGE["meta_title"],
+                "meta_description": OVOMATRIX_PAGE["meta_description"],
+            },
+        )
+        self.stdout.write(self.style.SUCCESS("OvoMatrix™ technology page published at /pages/ovomatrix"))
 
         self.stdout.write(self.style.SUCCESS("Full catalog seed complete."))

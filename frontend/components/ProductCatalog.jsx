@@ -19,17 +19,9 @@ const CATEGORY_DETAILS = {
     title: 'BJC® Bone & Joint Care',
     intro: 'Support your mobility with clinically informed active nutrition. Our signature BJC® range combines bioactive eggshell membrane, highly soluble collagen peptides, and target mineral cofactors to support cartilage comfort and bone density retention.',
   },
-  protein: {
-    title: 'Active Bioactive Protein',
-    intro: 'Fuel muscle repair and joint recovery with pure, cold-processed bioactive proteins. Free from proprietary blends, fillers, or artificial sweeteners, these formulations are optimized for bioavailability and daily performance.',
-  },
-  creatine: {
-    title: 'Creatine',
-    intro: 'Support strength, power output, and high-intensity training with clean, transparent creatine formulations.',
-  },
-  recovery: {
-    title: 'Recovery',
-    intro: 'Target daily recovery with amino acids and active nutrition designed for soreness, repair, and training consistency.',
+  'soil-turf': {
+    title: 'Soil & Turf — Powered by OvoMatrix™',
+    intro: 'Natural bio-mineral soil and turf conditioners engineered from the OvoMatrix™ ingredient platform. SoilPro™ and LawnCal™ improve soil structure, microbial activity, and turf resilience — without chemicals, fertilisers, or pesticides.',
   },
   collagen: {
     title: 'Collagen',

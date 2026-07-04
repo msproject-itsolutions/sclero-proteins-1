@@ -18,7 +18,6 @@ const PRODUCTS = [
   'Combo Collagen®',
   'OvoShell Collagen™',
   'BJC® Bone & Joint Care',
-  'CalPure',
   'SoilPro™',
   'LawnCal™',
   'Other / not sure',
