@@ -257,7 +257,7 @@ PRODUCTS = [
         "price_inr": ("2699.00", "2299.00"),
         "stock": 250,
         "images": [
-            "https://images.unsplash.com/photo-1550572017-edd951aa8f7f?w=600",
+            "https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=600",
             "https://images.unsplash.com/photo-1607619056574-7b8d3ee536b2?w=600",
         ],
     },
@@ -487,7 +487,7 @@ PRODUCTS = [
 OVOMATRIX_PAGE = {
     "slug": "ovomatrix",
     "title": "OvoMatrix™ — Master Ingredient Technology",
-    "meta_title": "OvoMatrix™ — Master Ingredient Technology | Sclero Proteins",
+    "meta_title": "OvoMatrix™ — Master Ingredient Technology",
     "meta_description": (
         "OvoMatrix™ is Sclero Proteins' proprietary eggshell-derived ingredient platform "
         "powering SoilPro™, LawnCal™, OvoShell Collagen™, Combo Collagen® and B2B ingredient "

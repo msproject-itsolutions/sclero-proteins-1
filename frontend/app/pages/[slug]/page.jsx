@@ -1,10 +1,39 @@
-'use client';
-
-import React, { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import React from 'react';
 import StoreShell from '../../../components/StoreShell';
 import { getApiUrl } from '../../../lib/api';
 import { parseMarkdownBlocks, renderInlineMarkdown } from '../../../lib/markdown';
+
+// Server-rendered CMS page: crawlers get the real <title>, meta description,
+// and the full article HTML without executing JS — important for pages like
+// /pages/ovomatrix that carry SEO weight.
+
+async function fetchPage(slug) {
+  try {
+    const res = await fetch(getApiUrl(`/api/content-pages/${slug}/`), {
+      next: { revalidate: 300 }, // pick up CMS edits within 5 minutes
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function generateMetadata({ params }) {
+  const { slug } = await params;
+  const page = await fetchPage(slug);
+  if (!page) return { title: 'Page not found' };
+  return {
+    title: page.meta_title || page.title,
+    description: page.meta_description || undefined,
+    alternates: { canonical: `/pages/${slug}` },
+    openGraph: {
+      title: page.meta_title || page.title,
+      description: page.meta_description || undefined,
+      type: 'article',
+    },
+  };
+}
 
 function MarkdownContent({ content }) {
   const blocks = parseMarkdownBlocks(content);
@@ -27,24 +56,10 @@ function MarkdownContent({ content }) {
   );
 }
 
-export default function ContentPageView() {
-  const params = useParams();
-  const [page, setPage] = useState(null);
-  const [loading, setLoading] = useState(true);
+export default async function ContentPageView({ params }) {
+  const { slug } = await params;
+  const page = await fetchPage(slug);
 
-  useEffect(() => {
-    if (!params?.slug) return;
-    setLoading(true);
-    fetch(getApiUrl(`/api/content-pages/${params.slug}/`))
-      .then((r) => (r.ok ? r.json() : Promise.reject(r)))
-      .then(setPage)
-      .catch(() => setPage(null))
-      .finally(() => setLoading(false));
-  }, [params?.slug]);
-
-  if (loading) {
-    return <StoreShell><div className="mx-auto max-w-3xl p-10 text-sm text-ink-muted">Loading…</div></StoreShell>;
-  }
   if (!page) {
     return (
       <StoreShell>
