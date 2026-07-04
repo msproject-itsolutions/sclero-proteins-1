@@ -106,15 +106,15 @@ export default function FilterPanel({
     <div
       className={`${
         isMobileDrawer
-          ? 'fixed inset-0 bg-white z-40 overflow-y-auto flex flex-col'
+          ? 'fixed inset-0 bg-surface z-40 overflow-y-auto flex flex-col'
           : 'w-full max-w-xs'
       }`}
     >
       {/* Mobile Header */}
       {isMobileDrawer && (
-        <div className="sticky top-0 border-b border-slate-200 bg-white p-4 flex items-center justify-between">
-          <h2 className="font-bold text-brand-navy">Filters</h2>
-          <button onClick={onClose} className="p-1 text-brand-muted hover:text-brand-navy">
+        <div className="sticky top-0 border-b border-edge bg-surface p-4 flex items-center justify-between">
+          <h2 className="font-display text-lg font-semibold text-ink-primary">Filters</h2>
+          <button onClick={onClose} className="p-1 text-ink-muted hover:text-ink-primary">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -126,17 +126,17 @@ export default function FilterPanel({
         {hasActiveFilters && (
           <button
             onClick={resetFilters}
-            className="w-full mb-4 py-2 text-xs font-bold uppercase text-brand-purple hover:text-brand-purple/80 border-b border-slate-200"
+            className="w-full mb-4 py-2 text-xs font-medium uppercase tracking-luxe text-ink-accent hover:text-ink-accent/80 border-b border-edge"
           >
             Clear all filters
           </button>
         )}
 
         {/* Category Filter */}
-        <div className="border-b border-slate-200 py-4">
+        <div className="border-b border-edge py-4">
           <button
             onClick={() => toggleSection('category')}
-            className="w-full flex items-center justify-between text-sm font-bold text-brand-navy hover:text-brand-purple"
+            className="w-full flex items-center justify-between text-sm font-semibold text-ink-primary hover:text-ink-accent"
           >
             Category
             <ChevronDown
@@ -158,12 +158,12 @@ export default function FilterPanel({
                     name="category"
                     checked={selectedCategory === cat.slug}
                     onChange={() => handleCategoryChange(cat.slug)}
-                    className="w-4 h-4 rounded accent-brand-purple"
+                    className="w-4 h-4 rounded accent-brand-accent"
                   />
-                  <span className="text-xs text-brand-text group-hover:text-brand-purple">
+                  <span className="text-xs text-ink-secondary group-hover:text-ink-accent">
                     {cat.name}
                   </span>
-                  <span className="text-[10px] text-brand-muted">({cat.count})</span>
+                  <span className="text-[10px] text-ink-subtle">({cat.count})</span>
                 </label>
               ))}
             </div>
@@ -171,10 +171,10 @@ export default function FilterPanel({
         </div>
 
         {/* Health Goal Filter */}
-        <div className="border-b border-slate-200 py-4">
+        <div className="border-b border-edge py-4">
           <button
             onClick={() => toggleSection('healthGoal')}
-            className="w-full flex items-center justify-between text-sm font-bold text-brand-navy hover:text-brand-purple"
+            className="w-full flex items-center justify-between text-sm font-semibold text-ink-primary hover:text-ink-accent"
           >
             Health Goals
             <ChevronDown
@@ -195,12 +195,12 @@ export default function FilterPanel({
                     type="checkbox"
                     checked={selectedHealthGoals.includes(goal.slug)}
                     onChange={() => handleHealthGoalChange(goal.slug)}
-                    className="w-4 h-4 rounded accent-brand-purple"
+                    className="w-4 h-4 rounded accent-brand-accent"
                   />
-                  <span className="text-xs text-brand-text group-hover:text-brand-purple">
+                  <span className="text-xs text-ink-secondary group-hover:text-ink-accent">
                     {goal.name}
                   </span>
-                  <span className="text-[10px] text-brand-muted">({goal.count})</span>
+                  <span className="text-[10px] text-ink-subtle">({goal.count})</span>
                 </label>
               ))}
             </div>
@@ -208,10 +208,10 @@ export default function FilterPanel({
         </div>
 
         {/* Dietary Filter */}
-        <div className="border-b border-slate-200 py-4">
+        <div className="border-b border-edge py-4">
           <button
             onClick={() => toggleSection('dietary')}
-            className="w-full flex items-center justify-between text-sm font-bold text-brand-navy hover:text-brand-purple"
+            className="w-full flex items-center justify-between text-sm font-semibold text-ink-primary hover:text-ink-accent"
           >
             Dietary & Certifications
             <ChevronDown
@@ -232,12 +232,12 @@ export default function FilterPanel({
                     type="checkbox"
                     checked={selectedDietary.includes(flag.slug)}
                     onChange={() => handleDietaryChange(flag.slug)}
-                    className="w-4 h-4 rounded accent-brand-purple"
+                    className="w-4 h-4 rounded accent-brand-accent"
                   />
-                  <span className="text-xs text-brand-text group-hover:text-brand-purple">
+                  <span className="text-xs text-ink-secondary group-hover:text-ink-accent">
                     {flag.name}
                   </span>
-                  <span className="text-[10px] text-brand-muted">({flag.count})</span>
+                  <span className="text-[10px] text-ink-subtle">({flag.count})</span>
                 </label>
               ))}
             </div>
@@ -245,10 +245,10 @@ export default function FilterPanel({
         </div>
 
         {/* Price Range Filter */}
-        <div className="border-b border-slate-200 py-4">
+        <div className="border-b border-edge py-4">
           <button
             onClick={() => toggleSection('price')}
-            className="w-full flex items-center justify-between text-sm font-bold text-brand-navy hover:text-brand-purple"
+            className="w-full flex items-center justify-between text-sm font-semibold text-ink-primary hover:text-ink-accent"
           >
             Price Range
             <ChevronDown
@@ -262,7 +262,7 @@ export default function FilterPanel({
             <div className="mt-4 space-y-4">
               {/* Min Price Slider */}
               <div>
-                <label className="text-[10px] font-bold uppercase text-brand-muted">
+                <label className="text-[10px] font-medium uppercase tracking-wide text-ink-muted">
                   Minimum: £{priceMin.toFixed(2)}
                 </label>
                 <input
@@ -272,13 +272,13 @@ export default function FilterPanel({
                   step="0.50"
                   value={priceMin}
                   onChange={handlePriceMinChange}
-                  className="w-full accent-brand-purple"
+                  className="w-full accent-brand-accent"
                 />
               </div>
 
               {/* Max Price Slider */}
               <div>
-                <label className="text-[10px] font-bold uppercase text-brand-muted">
+                <label className="text-[10px] font-medium uppercase tracking-wide text-ink-muted">
                   Maximum: £{priceMax.toFixed(2)}
                 </label>
                 <input
@@ -288,13 +288,13 @@ export default function FilterPanel({
                   step="0.50"
                   value={priceMax}
                   onChange={handlePriceMaxChange}
-                  className="w-full accent-brand-purple"
+                  className="w-full accent-brand-accent"
                 />
               </div>
 
               {/* Price Display */}
-              <div className="flex items-center justify-between rounded-lg bg-slate-50 p-3">
-                <span className="text-sm font-bold text-brand-navy">
+              <div className="flex items-center justify-between rounded-sm bg-surface-muted p-3">
+                <span className="text-sm font-medium text-ink-primary">
                   £{priceMin.toFixed(2)} - £{priceMax.toFixed(2)}
                 </span>
               </div>
@@ -305,12 +305,12 @@ export default function FilterPanel({
 
       {/* Mobile Footer */}
       {isMobileDrawer && (
-        <div className="border-t border-slate-200 bg-white p-4 space-y-2">
+        <div className="border-t border-edge bg-surface p-4 space-y-2">
           <button
             onClick={() => {
               onClose();
             }}
-            className="w-full py-2.5 text-sm font-bold uppercase text-white bg-brand-purple rounded-lg hover:bg-brand-purple/90 transition-colors"
+            className="w-full btn-primary py-2.5 text-sm"
           >
             Apply Filters
           </button>

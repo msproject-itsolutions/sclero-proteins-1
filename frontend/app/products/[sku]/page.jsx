@@ -6,10 +6,10 @@ export async function generateMetadata({ params }) {
   const { sku } = await params;
   try {
     const res = await fetch(getApiUrl(`/api/products/${sku}/`));
-    if (!res.ok) return { title: 'Product Not Found | Sclero Proteins' };
+    if (!res.ok) return { title: 'Product Not Found' };
     const product = await res.json();
     return {
-      title: `${product.name} | Sclero Proteins`,
+      title: product.name,
       description: product.description?.substring(0, 160) || `${product.name} from Sclero Proteins.`,
       alternates: {
         canonical: `/products/${sku}`,
@@ -21,7 +21,7 @@ export async function generateMetadata({ params }) {
       },
     };
   } catch (e) {
-    return { title: 'Product | Sclero Proteins' };
+    return { title: 'Product' };
   }
 }
 

@@ -67,7 +67,7 @@ function SlideMedia({ slide, active, index }) {
   const media = slide.desktop_media_url || slide.tablet_media_url || slide.mobile_media_url;
   if (!media) {
     return (
-      <div className="absolute inset-0 bg-gradient-to-br from-brand-indigo via-brand-purple to-brand-plum" />
+      <div className="absolute inset-0 bg-gradient-to-br from-[#2A2A28] to-[#1A1A1A]" />
     );
   }
 
@@ -155,7 +155,7 @@ export default function HeroSection() {
   return (
     <section
       aria-label="Featured campaigns"
-      className="relative isolate min-h-[calc(100svh-73px)] overflow-hidden bg-brand-navy text-white"
+      className="relative isolate min-h-[calc(100svh-73px)] overflow-hidden bg-surface-inverse text-white"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       onFocus={() => setPaused(true)}
@@ -180,40 +180,40 @@ export default function HeroSection() {
       <div className="relative z-10 mx-auto flex min-h-[calc(100svh-73px)] max-w-7xl items-center px-4 py-16 sm:px-6 lg:px-8">
         <div className={`flex max-w-2xl flex-col ${contentClass}`}>
           {current?.eyebrow && (
-            <p className="mb-5 text-[11px] font-black uppercase tracking-[0.18em] text-white/80">
+            <p className="mb-6 text-[11px] font-medium uppercase tracking-luxe text-white/75">
               {current.eyebrow}
             </p>
           )}
 
-          <h1 className="max-w-3xl text-4xl font-black leading-[0.98] tracking-tight sm:text-5xl lg:text-7xl">
+          <h1 className="max-w-3xl font-display text-[42px] font-medium leading-[1.05] tracking-tight sm:text-[54px] lg:text-[68px]">
             {current?.heading}
           </h1>
 
           {current?.subheading && (
-            <p className="mt-6 max-w-xl text-sm leading-6 text-white/82 sm:text-base lg:text-lg">
+            <p className="mt-6 max-w-xl text-sm leading-[1.75] text-white/80 sm:text-[15px]">
               {current.subheading}
             </p>
           )}
 
-          <div className="mt-9 flex flex-wrap justify-center gap-3 lg:justify-start">
+          <div className="mt-10 flex flex-wrap justify-center gap-3 lg:justify-start">
             {current?.primary_cta_label && current?.primary_cta_url && (
-              <Link href={current.primary_cta_url} className="btn-primary px-7 py-3 text-sm">
+              <Link href={current.primary_cta_url} className="inline-flex items-center justify-center rounded-sm border border-white bg-white px-7 py-3.5 text-sm font-medium tracking-[0.02em] text-[#1A1A1A] transition-all duration-200 hover:bg-transparent hover:text-white">
                 {current.primary_cta_label}
               </Link>
             )}
             {current?.secondary_cta_label && current?.secondary_cta_url && (
-              <Link href={current.secondary_cta_url} className="inline-flex items-center justify-center rounded-full border border-white/40 bg-white/10 px-7 py-3 text-sm font-bold text-white backdrop-blur transition hover:bg-white/18">
+              <Link href={current.secondary_cta_url} className="inline-flex items-center justify-center rounded-sm border border-white/50 bg-transparent px-7 py-3.5 text-sm font-medium tracking-[0.02em] text-white backdrop-blur transition-all duration-200 hover:border-white hover:bg-white/10">
                 {current.secondary_cta_label}
               </Link>
             )}
           </div>
 
-          <div className="mt-10 flex flex-wrap justify-center gap-4 text-xs font-semibold text-white/78 lg:justify-start">
+          <div className="mt-12 flex flex-wrap justify-center gap-x-6 gap-y-3 text-[11px] font-medium uppercase tracking-[0.14em] text-white/70 lg:justify-start">
             {proofPoints.map((point) => {
               const Icon = point.icon;
               return (
                 <span key={point.label} className="inline-flex items-center gap-2">
-                  <Icon className="h-4 w-4 text-white" />
+                  <Icon className="h-4 w-4 text-white/85" />
                   {point.label}
                 </span>
               );

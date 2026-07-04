@@ -138,12 +138,12 @@ export default function Footer() {
   ];
 
   const LinkColumn = ({ title, links }) => (
-    <div className="space-y-3">
-      <h4 className="text-[11px] font-extrabold uppercase tracking-widest text-white">{title}</h4>
-      <ul className="space-y-2 text-[13px] text-white/70">
+    <div className="space-y-4">
+      <h4 className="text-[11px] font-medium uppercase tracking-luxe text-[#BFB9AE]">{title}</h4>
+      <ul className="space-y-2.5 text-[13.5px] text-[#EDEBE4]/80">
         {links.map((l) => (
           <li key={l.name}>
-            <Link href={l.href} className="transition-all duration-200 hover:text-brand-orange hover:translate-x-1 inline-block transform">{l.name}</Link>
+            <Link href={l.href} className="transition-colors duration-200 hover:text-white hover:underline underline-offset-4">{l.name}</Link>
           </li>
         ))}
       </ul>
@@ -151,16 +151,16 @@ export default function Footer() {
   );
 
   return (
-    <footer className="mt-auto bg-brand-navy text-white">
+    <footer className="mt-auto bg-surface-inverse text-[#EDEBE4]">
       {/* Trust strip */}
       <div className="border-b border-white/10">
-        <div className="container-page grid grid-cols-2 gap-4 py-6 md:grid-cols-4">
+        <div className="container-page grid grid-cols-2 gap-4 py-7 md:grid-cols-4">
           {trustBadges.map((b, i) => {
             const Icon = b.icon;
             return (
               <div key={i} className="flex items-center gap-2.5 text-xs">
-                <Icon className="h-5 w-5 shrink-0 text-brand-orange" />
-                <span className="font-semibold leading-tight text-white/90">{b.label}</span>
+                <Icon className="h-5 w-5 shrink-0 text-[#C89838]" />
+                <span className="font-medium leading-tight text-[#EDEBE4]/90">{b.label}</span>
               </div>
             );
           })}
@@ -168,35 +168,36 @@ export default function Footer() {
       </div>
 
       {/* Main grid: brand/contact block + link columns */}
-      <div className="container-page py-12">
+      <div className="container-page py-14 lg:py-16">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-10 lg:grid-cols-12">
           {/* Brand + contact */}
           <div className="space-y-5 sm:col-span-2 lg:col-span-4">
-            <Link href="/" className="flex items-center gap-2">
+            <Link href="/" className="flex items-center gap-2.5">
               <Logo className="h-9 w-9" />
-              <span className="text-lg font-black tracking-tight text-white">
-                Sclero <span className="text-brand-orange">Proteins</span>
+              <span className="flex items-baseline gap-2">
+                <span className="font-display text-[22px] font-medium tracking-tight text-white">Sclero</span>
+                <span className="text-[11px] font-medium uppercase tracking-luxe text-[#BFB9AE]">Proteins</span>
               </span>
             </Link>
-            <p className="max-w-sm text-[13px] leading-relaxed text-white/70">
+            <p className="max-w-sm text-[13.5px] leading-[1.7] text-[#BFB9AE]">
               Clinically-formulated collagen, bone &amp; joint, and active-nutrition supplements —
               manufactured to GMP standards and third-party tested for purity and potency.
             </p>
-            <ul className="space-y-2.5 text-[13px] text-white/80">
+            <ul className="space-y-2.5 text-[13px] text-[#EDEBE4]/80">
               <li>
-                <a href={`mailto:${copy.email}`} className="flex items-center gap-2.5 hover:text-brand-orange">
-                  <Mail className="h-4 w-4 shrink-0 text-brand-orange" /> {copy.email}
+                <a href={`mailto:${copy.email}`} className="flex items-center gap-2.5 transition-colors hover:text-white">
+                  <Mail className="h-4 w-4 shrink-0 text-[#C89838]" /> {copy.email}
                 </a>
               </li>
               <li>
-                <a href={copy.phoneHref} className="flex items-center gap-2.5 hover:text-brand-orange">
-                  <Phone className="h-4 w-4 shrink-0 text-brand-orange" /> {copy.phone}
+                <a href={copy.phoneHref} className="flex items-center gap-2.5 transition-colors hover:text-white">
+                  <Phone className="h-4 w-4 shrink-0 text-[#C89838]" /> {copy.phone}
                 </a>
               </li>
               {copy.address && (
                 <li className="flex items-start gap-2.5">
-                  <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-brand-orange" />
-                  <span className="text-white/70">{copy.address}</span>
+                  <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#C89838]" />
+                  <span className="text-[#BFB9AE]">{copy.address}</span>
                 </li>
               )}
             </ul>
@@ -206,7 +207,7 @@ export default function Footer() {
                 const Icon = s.icon;
                 return (
                   <a key={s.label} href={s.href} target="_blank" rel="noreferrer" aria-label={s.label}
-                    className="flex h-9 w-9 items-center justify-center rounded-full border border-white/20 text-white/70 transition-colors hover:border-brand-orange hover:text-brand-orange">
+                    className="flex h-9 w-9 items-center justify-center rounded-sm border border-white/15 text-[#EDEBE4]/70 transition-colors hover:border-[#C89838] hover:text-[#C89838]">
                     <Icon className="h-4 w-4" />
                   </a>
                 );
@@ -224,19 +225,19 @@ export default function Footer() {
 
       {/* Newsletter band */}
       <div className="border-y border-white/10 bg-white/[0.03]">
-        <div className="container-page py-10">
+        <div className="container-page py-12">
           <div className="flex flex-col items-center justify-between gap-6 md:flex-row">
             <div className="max-w-md text-center md:text-left">
-              <h3 className="text-xl font-black tracking-tight text-white sm:text-2xl">
+              <h3 className="font-display text-[26px] font-medium tracking-tight text-white sm:text-[30px]">
                 Get 10% off your first order
               </h3>
-              <p className="mt-1 text-[13px] text-white/70">
+              <p className="mt-1.5 text-[13.5px] leading-[1.7] text-[#BFB9AE]">
                 Join the Sclero community for science-backed wellness tips, new-product drops, and members-only offers.
               </p>
             </div>
             <div className="w-full md:w-auto md:min-w-[380px]">
               {status === 'success' ? (
-                <div className="flex items-center justify-center gap-2 rounded-2xl border border-brand-success/30 bg-brand-success/10 px-4 py-3 text-center text-sm font-bold text-brand-success">
+                <div className="flex items-center justify-center gap-2 rounded-sm border border-brand-success/30 bg-brand-success/10 px-4 py-3 text-center text-sm font-medium text-emerald-300">
                   <CheckCircle2 className="h-4 w-4" /> You&apos;re subscribed — check your inbox.
                 </div>
               ) : (
@@ -245,16 +246,16 @@ export default function Footer() {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="Enter your email"
+                    placeholder="you@example.com"
                     autoComplete="email"
                     required
                     aria-label="Email address"
-                    className="flex-1 rounded-xl border border-white/20 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-white/40 focus:border-brand-orange focus:outline-none"
+                    className="flex-1 rounded-sm border border-white/20 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-white/40 focus:border-[#C89838] focus:outline-none"
                   />
                   <button
                     type="submit"
                     disabled={status === 'pending'}
-                    className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-brand-orange px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-brand-navy transition-all hover:bg-brand-gold disabled:opacity-50"
+                    className="inline-flex items-center justify-center gap-1.5 rounded-sm border border-white bg-white px-5 py-2.5 text-[13px] font-medium tracking-[0.02em] text-[#1A1A1A] transition-all hover:bg-transparent hover:text-white disabled:opacity-50"
                   >
                     <Send className="h-4 w-4" />
                     {status === 'pending' ? 'Subscribing…' : 'Subscribe'}
@@ -264,8 +265,8 @@ export default function Footer() {
               {status === 'error' && errorMsg && (
                 <p className="mt-2 text-xs text-red-300">{errorMsg}</p>
               )}
-              <p className="mt-2 text-[11px] text-white/40">
-                By subscribing you agree to our <Link href="/policies/privacy" className="underline hover:text-white/70">Privacy Policy</Link>. Unsubscribe anytime.
+              <p className="mt-2 text-[11px] text-[#8F8A80]">
+                By subscribing you agree to our <Link href="/policies/privacy" className="underline underline-offset-4 hover:text-[#EDEBE4]">Privacy Policy</Link>. Unsubscribe anytime.
               </p>
             </div>
           </div>
@@ -277,7 +278,7 @@ export default function Footer() {
         <div className="flex flex-col items-center justify-between gap-4 md:flex-row">
           <div className="flex items-center gap-3">
             <Logo className="h-7 w-7" />
-            <div className="text-[11px] leading-relaxed text-white/60">
+            <div className="text-[11.5px] leading-relaxed text-[#8F8A80]">
               <p>© 2026 Sclero Proteins Ltd. All rights reserved.</p>
               {(COMPANY_REGISTRATION_NUMBER || INDIA_GSTIN) && (
                 <p>
@@ -293,10 +294,10 @@ export default function Footer() {
           </div>
 
           {/* Accepted payment methods */}
-          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-white/50">
+          <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-luxe text-[#8F8A80]">
             <span className="hidden sm:inline">We accept</span>
             {['Visa', 'Mastercard', 'Amex', currentRegion === 'IN' ? 'UPI' : 'PayPal'].map((m) => (
-              <span key={m} className="rounded-md border border-white/15 bg-white/5 px-2 py-1 text-white/70">{m}</span>
+              <span key={m} className="rounded-xs border border-white/15 bg-white/5 px-2 py-1 text-[#EDEBE4]/70">{m}</span>
             ))}
           </div>
         </div>

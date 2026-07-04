@@ -48,9 +48,9 @@ function OtpLogin() {
         id="otp-email"
         type="email" required placeholder="Email" autoComplete="email" value={identifier}
         onChange={(e) => setIdentifier(e.target.value)}
-        className="w-full rounded-lg border border-slate-200 p-3 text-sm focus:border-brand-purple focus:outline-none"
+        className="w-full rounded-sm border border-edge bg-surface p-3 text-sm focus:border-ink-primary focus:outline-none"
       />
-      {error && <p className="rounded-lg bg-brand-danger/10 px-3 py-2 text-xs font-semibold text-brand-danger">{error}</p>}
+      {error && <p className="rounded-sm bg-surface-muted px-3 py-2 text-xs font-semibold text-ink-danger">{error}</p>}
       <button type="submit" disabled={status === 'loading'}
         className="btn-primary w-full py-3 text-sm uppercase tracking-wider disabled:opacity-60">
         {status === 'loading' ? 'Sending…' : 'Email me a code'}
@@ -58,8 +58,8 @@ function OtpLogin() {
     </form>
   ) : (
     <form onSubmit={verify} className="space-y-3">
-      <p className="text-center text-xs text-brand-muted">
-        We sent a 6-digit code to <span className="font-semibold text-brand-navy">{identifier}</span>
+      <p className="text-center text-xs text-ink-secondary">
+        We sent a 6-digit code to <span className="font-semibold text-ink-primary">{identifier}</span>
       </p>
       {sandboxCode && (
         <p className="rounded-lg bg-amber-50 px-3 py-2 text-center text-xs text-amber-700">
@@ -71,15 +71,15 @@ function OtpLogin() {
         id="otp-code"
         type="text" inputMode="numeric" autoComplete="one-time-code" required placeholder="6-digit code" value={otp}
         onChange={(e) => setOtp(e.target.value)}
-        className="w-full rounded-lg border border-slate-200 p-3 text-center text-lg tracking-[0.4em] focus:border-brand-purple focus:outline-none"
+        className="w-full rounded-sm border border-edge bg-surface p-3 text-center text-lg tracking-[0.4em] focus:border-ink-primary focus:outline-none"
       />
-      {error && <p className="rounded-lg bg-brand-danger/10 px-3 py-2 text-xs font-semibold text-brand-danger">{error}</p>}
+      {error && <p className="rounded-sm bg-surface-muted px-3 py-2 text-xs font-semibold text-ink-danger">{error}</p>}
       <button type="submit" disabled={status === 'loading'}
         className="btn-primary w-full py-3 text-sm uppercase tracking-wider disabled:opacity-60">
         {status === 'loading' ? 'Verifying…' : 'Verify & log in'}
       </button>
       <button type="button" onClick={() => setStage('request')}
-        className="w-full text-xs font-semibold text-brand-muted hover:text-brand-navy">
+        className="w-full text-xs font-semibold text-ink-secondary hover:text-ink-primary">
         Use a different email
       </button>
     </form>
@@ -105,17 +105,17 @@ function MagicLinkLogin() {
 
   if (sent) {
     return (
-      <div className="rounded-xl border border-brand-success/20 bg-brand-success/5 p-4 text-center">
-        <p className="text-xs font-semibold text-brand-navy">
+      <div className="rounded-md border border-ink-success/20 bg-surface-muted p-4 text-center">
+        <p className="text-xs font-semibold text-ink-primary">
           Check <span className="font-bold">{email}</span> for your sign-in link.
         </p>
         {sandboxLink && (
-          <a href={sandboxLink} className="mt-2 block break-all text-[11px] font-bold text-brand-purple underline">
+          <a href={sandboxLink} className="mt-2 block break-all text-[11px] font-bold text-ink-accent underline">
             Sandbox: open magic link
           </a>
         )}
         <button type="button" onClick={() => { setSent(false); setSandboxLink(''); }}
-          className="mt-2 text-[11px] font-semibold text-brand-muted hover:text-brand-navy">
+          className="mt-2 text-[11px] font-semibold text-ink-secondary hover:text-ink-primary">
           Use a different email
         </button>
       </div>
@@ -129,9 +129,9 @@ function MagicLinkLogin() {
         id="magic-email"
         type="email" required placeholder="Email" autoComplete="email" value={email}
         onChange={(e) => setEmail(e.target.value)}
-        className="w-full rounded-lg border border-slate-200 p-3 text-sm focus:border-brand-purple focus:outline-none"
+        className="w-full rounded-sm border border-edge bg-surface p-3 text-sm focus:border-ink-primary focus:outline-none"
       />
-      {err && <p className="rounded-lg bg-brand-danger/10 px-3 py-2 text-xs font-semibold text-brand-danger">{err}</p>}
+      {err && <p className="rounded-sm bg-surface-muted px-3 py-2 text-xs font-semibold text-ink-danger">{err}</p>}
       <button type="submit" disabled={status === 'loading'}
         className="btn-primary w-full py-3 text-sm uppercase tracking-wider disabled:opacity-60">
         {status === 'loading' ? 'Sending…' : 'Email me a magic link'}
@@ -180,12 +180,12 @@ function AuthForms() {
     return (
       <div className="mx-auto max-w-md">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-brand-purple/10">
-            <ShieldCheck className="h-6 w-6 text-brand-purple" />
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-surface-muted">
+            <ShieldCheck className="h-6 w-6 text-brand-accent" />
           </div>
-          <h1 className="text-2xl font-black text-brand-navy">Authenticator code</h1>
-          <p className="mt-1 text-sm text-brand-muted">
-            Enter the {useBackup ? 'backup' : '6-digit'} code for <span className="font-semibold text-brand-navy">{pendingEmail}</span>.
+          <h1 className="text-heading-2">Authenticator code</h1>
+          <p className="mt-1 text-sm text-ink-secondary">
+            Enter the {useBackup ? 'backup' : '6-digit'} code for <span className="font-semibold text-ink-primary">{pendingEmail}</span>.
           </p>
         </div>
         <form onSubmit={submitTotp} className="space-y-3">
@@ -199,19 +199,19 @@ function AuthForms() {
             placeholder={useBackup ? 'Backup code' : '6-digit code'}
             value={totpCode}
             onChange={(e) => setTotpCode(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 p-3 text-center text-lg tracking-[0.4em] focus:border-brand-purple focus:outline-none"
+            className="w-full rounded-sm border border-edge bg-surface p-3 text-center text-lg tracking-[0.4em] focus:border-ink-primary focus:outline-none"
           />
-          {error && <p className="rounded-lg bg-brand-danger/10 px-3 py-2 text-xs font-semibold text-brand-danger">{error}</p>}
+          {error && <p className="rounded-sm bg-surface-muted px-3 py-2 text-xs font-semibold text-ink-danger">{error}</p>}
           <button type="submit" disabled={status === 'loading'}
             className="btn-primary w-full py-3 text-sm uppercase tracking-wider disabled:opacity-60">
             {status === 'loading' ? 'Verifying…' : 'Verify code'}
           </button>
           <button type="button" onClick={() => { setUseBackup((v) => !v); setTotpCode(''); }}
-            className="w-full text-xs font-semibold text-brand-purple hover:underline">
+            className="w-full text-xs font-semibold text-ink-accent hover:underline">
             {useBackup ? 'Use authenticator code instead' : 'Use a backup code instead'}
           </button>
           <button type="button" onClick={() => dispatch(logout())}
-            className="w-full text-xs font-semibold text-brand-muted hover:text-brand-navy">
+            className="w-full text-xs font-semibold text-ink-secondary hover:text-ink-primary">
             Cancel &amp; return to login
           </button>
         </form>
@@ -223,12 +223,12 @@ function AuthForms() {
     return (
       <div className="mx-auto max-w-md">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-brand-purple/10">
-            <ShieldCheck className="h-6 w-6 text-brand-purple" />
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-surface-muted">
+            <ShieldCheck className="h-6 w-6 text-brand-accent" />
           </div>
-          <h1 className="text-2xl font-black text-brand-navy">Two-Factor Authentication</h1>
-          <p className="mt-1 text-sm text-brand-muted">
-            For security, please enter the 6-digit verification code sent to <span className="font-semibold text-brand-navy">{twoFactorEmail}</span>.
+          <h1 className="text-heading-2">Two-Factor Authentication</h1>
+          <p className="mt-1 text-sm text-ink-secondary">
+            For security, please enter the 6-digit verification code sent to <span className="font-semibold text-ink-primary">{twoFactorEmail}</span>.
           </p>
         </div>
 
@@ -243,15 +243,15 @@ function AuthForms() {
             id="2fa-code"
             type="text" inputMode="numeric" autoComplete="one-time-code" required placeholder="6-digit code" value={otp}
             onChange={(e) => setOtp(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 p-3 text-center text-lg tracking-[0.4em] focus:border-brand-purple focus:outline-none"
+            className="w-full rounded-sm border border-edge bg-surface p-3 text-center text-lg tracking-[0.4em] focus:border-ink-primary focus:outline-none"
           />
-          {error && <p className="rounded-lg bg-brand-danger/10 px-3 py-2 text-xs font-semibold text-brand-danger">{error}</p>}
+          {error && <p className="rounded-sm bg-surface-muted px-3 py-2 text-xs font-semibold text-ink-danger">{error}</p>}
           <button type="submit" disabled={status === 'loading'}
             className="btn-primary w-full py-3 text-sm uppercase tracking-wider disabled:opacity-60">
             {status === 'loading' ? 'Verifying…' : 'Verify & log in'}
           </button>
           <button type="button" onClick={() => dispatch(logout())}
-            className="w-full text-xs font-semibold text-brand-muted hover:text-brand-navy">
+            className="w-full text-xs font-semibold text-ink-secondary hover:text-ink-primary">
             Cancel &amp; return to login
           </button>
         </form>
@@ -261,29 +261,29 @@ function AuthForms() {
 
   return (
     <div className="mx-auto max-w-md">
-      <div className="rounded-3xl border border-edge bg-white p-6 shadow-card sm:p-8">
+      <div className="rounded-lg border border-edge bg-surface p-6 shadow-card sm:p-8">
       <div className="mb-8 text-center">
-        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-purple/10">
-          <UserIcon className="h-6 w-6 text-brand-purple" />
+        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-md bg-surface-muted">
+          <UserIcon className="h-6 w-6 text-brand-accent" />
         </div>
-        <h1 className="text-2xl font-black text-brand-navy">
+        <h1 className="text-heading-2">
           {mode === 'login' ? 'Welcome back' : 'Create your account'}
         </h1>
-        <p className="mt-1 text-sm text-brand-muted">
+        <p className="mt-1 text-sm text-ink-secondary">
           {mode === 'login'
             ? 'Log in to track orders, manage addresses, and more.'
             : 'Join Sclero Proteins to checkout faster and track your orders.'}
         </p>
       </div>
 
-      <div className="mb-6 flex rounded-lg border border-slate-200 p-1">
+      <div className="mb-6 flex rounded-sm border border-edge p-1">
         {['login', 'register'].map((m) => (
           <button
             key={m}
             type="button"
             onClick={() => switchMode(m)}
-            className={`flex-1 rounded-md py-2 text-sm font-semibold transition-colors ${
-              mode === m ? 'bg-brand-purple text-white' : 'text-brand-navy hover:bg-slate-50'
+            className={`flex-1 rounded-sm py-2 text-sm font-medium transition-colors ${
+              mode === m ? 'bg-surface-inverse text-white' : 'text-ink-primary hover:bg-surface-muted'
             }`}
           >
             {m === 'login' ? 'Log in' : 'Sign up'}
@@ -298,13 +298,13 @@ function AuthForms() {
               <label htmlFor="register-first-name" className="sr-only">First name</label>
               <input id="register-first-name" type="text" autoComplete="given-name" placeholder="First name" value={form.first_name}
                 onChange={update('first_name')}
-                className="w-full rounded-lg border border-slate-200 p-3 text-sm focus:border-brand-purple focus:outline-none" />
+                className="w-full rounded-sm border border-edge bg-surface p-3 text-sm focus:border-ink-primary focus:outline-none" />
             </div>
             <div>
               <label htmlFor="register-last-name" className="sr-only">Last name</label>
               <input id="register-last-name" type="text" autoComplete="family-name" placeholder="Last name" value={form.last_name}
                 onChange={update('last_name')}
-                className="w-full rounded-lg border border-slate-200 p-3 text-sm focus:border-brand-purple focus:outline-none" />
+                className="w-full rounded-sm border border-edge bg-surface p-3 text-sm focus:border-ink-primary focus:outline-none" />
             </div>
           </div>
         )}
@@ -312,17 +312,17 @@ function AuthForms() {
           <label htmlFor="auth-email" className="sr-only">Email address</label>
           <input id="auth-email" type="email" autoComplete="email" required placeholder="Email" value={form.email}
             onChange={update('email')}
-            className="w-full rounded-lg border border-slate-200 p-3 text-sm focus:border-brand-purple focus:outline-none" />
+            className="w-full rounded-sm border border-edge bg-surface p-3 text-sm focus:border-ink-primary focus:outline-none" />
         </div>
         <div>
           <label htmlFor="auth-password" className="sr-only">Password</label>
           <input id="auth-password" type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required placeholder="Password" value={form.password}
             onChange={update('password')}
-            className="w-full rounded-lg border border-slate-200 p-3 text-sm focus:border-brand-purple focus:outline-none" />
+            className="w-full rounded-sm border border-edge bg-surface p-3 text-sm focus:border-ink-primary focus:outline-none" />
         </div>
 
         {error && (
-          <p className="rounded-lg bg-brand-danger/10 px-3 py-2 text-xs font-semibold text-brand-danger">{error}</p>
+          <p className="rounded-sm bg-surface-muted px-3 py-2 text-xs font-semibold text-ink-danger">{error}</p>
         )}
         <button type="submit" disabled={status === 'loading'}
           className="btn-primary w-full py-3 text-sm uppercase tracking-wider disabled:opacity-60">
@@ -333,21 +333,21 @@ function AuthForms() {
       {GOOGLE_ENABLED && (
         <div className="mt-6">
           <div className="relative mb-4 text-center">
-            <span className="relative z-10 bg-white px-3 text-[11px] font-semibold uppercase tracking-wide text-brand-muted">
+            <span className="relative z-10 bg-surface px-3 text-[11px] font-medium uppercase tracking-wide text-ink-muted">
               or continue with
             </span>
-            <span className="absolute left-0 top-1/2 h-px w-full bg-slate-200" />
+            <span className="absolute left-0 top-1/2 h-px w-full bg-edge" />
           </div>
           <GoogleSignInButton key={mode} text={mode === 'login' ? 'signin_with' : 'continue_with'} />
         </div>
       )}
 
       {mode === 'login' && (
-        <div className="mt-6 border-t border-slate-100 pt-4">
+        <div className="mt-6 border-t border-edge-subtle pt-4">
           <button
             type="button"
             onClick={() => setShowMoreSignIn((value) => !value)}
-            className="flex w-full items-center justify-center gap-1.5 text-xs font-semibold text-brand-muted hover:text-brand-navy"
+            className="flex w-full items-center justify-center gap-1.5 text-xs font-semibold text-ink-secondary hover:text-ink-primary"
           >
             More sign-in options
             <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showMoreSignIn ? 'rotate-180' : ''}`} />
@@ -355,11 +355,11 @@ function AuthForms() {
           {showMoreSignIn && (
             <div className="mt-4 space-y-5">
               <div>
-                <p className="mb-3 text-center text-[11px] font-semibold uppercase tracking-wide text-brand-muted">Magic link</p>
+                <p className="mb-3 text-center text-[11px] font-semibold uppercase tracking-wide text-ink-secondary">Magic link</p>
                 <MagicLinkLogin />
               </div>
               <div>
-                <p className="mb-3 text-center text-[11px] font-semibold uppercase tracking-wide text-brand-muted">Email code</p>
+                <p className="mb-3 text-center text-[11px] font-semibold uppercase tracking-wide text-ink-secondary">Email code</p>
                 <OtpLogin />
               </div>
             </div>
@@ -405,54 +405,54 @@ function AddressesTab({ authFetch }) {
 
   const upd = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  if (loading) return <p className="text-sm text-brand-muted">Loading addresses…</p>;
+  if (loading) return <p className="text-sm text-ink-secondary">Loading addresses…</p>;
 
   return (
     <div className="space-y-4">
       {addresses.length === 0 && !showForm && (
-        <p className="text-sm text-brand-muted">No saved addresses yet.</p>
+        <p className="text-sm text-ink-secondary">No saved addresses yet.</p>
       )}
       {addresses.map((a) => (
-        <div key={a.id} className="flex items-start justify-between rounded-xl border border-slate-200 bg-white p-4">
+        <div key={a.id} className="flex items-start justify-between rounded-md border border-edge bg-surface p-4 shadow-card">
           <div className="flex items-start gap-3">
-            <MapPin className="mt-0.5 h-5 w-5 text-brand-purple" />
+            <MapPin className="mt-0.5 h-5 w-5 text-brand-accent" />
             <div className="text-sm">
-              <p className="font-semibold text-brand-navy">{a.full_name} · {a.phone_number}</p>
-              <p className="text-brand-muted">
+              <p className="font-semibold text-ink-primary">{a.full_name} · {a.phone_number}</p>
+              <p className="text-ink-secondary">
                 {a.address_line1}{a.address_line2 ? `, ${a.address_line2}` : ''}, {a.city}, {a.state} {a.postal_code}, {a.country}
               </p>
-              {a.is_default && <span className="mt-1 inline-block rounded bg-brand-purple/10 px-2 py-0.5 text-[10px] font-bold text-brand-purple">DEFAULT</span>}
+              {a.is_default && <span className="mt-1 inline-block rounded bg-surface-muted px-2 py-0.5 text-[10px] font-semibold text-ink-accent">DEFAULT</span>}
             </div>
           </div>
-          <button onClick={() => remove(a.id)} className="text-brand-muted hover:text-brand-danger">
+          <button onClick={() => remove(a.id)} className="text-ink-muted hover:text-ink-danger">
             <Trash2 className="h-4 w-4" />
           </button>
         </div>
       ))}
 
       {showForm ? (
-        <form onSubmit={add} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+        <form onSubmit={add} className="space-y-3 rounded-md border border-edge bg-surface p-4 shadow-card">
           <div className="grid grid-cols-2 gap-3">
-            <input required autoComplete="name" placeholder="Full name" value={form.full_name} onChange={upd('full_name')} className="rounded-lg border border-slate-200 p-2.5 text-sm" />
-            <input required autoComplete="tel" placeholder="Phone" value={form.phone_number} onChange={upd('phone_number')} className="rounded-lg border border-slate-200 p-2.5 text-sm" />
+            <input required autoComplete="name" placeholder="Full name" value={form.full_name} onChange={upd('full_name')} className="rounded-sm border border-edge bg-surface p-2.5 text-sm text-ink-primary" />
+            <input required autoComplete="tel" placeholder="Phone" value={form.phone_number} onChange={upd('phone_number')} className="rounded-sm border border-edge bg-surface p-2.5 text-sm text-ink-primary" />
           </div>
-          <input required autoComplete="address-line1" placeholder="Address line 1" value={form.address_line1} onChange={upd('address_line1')} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" />
-          <input autoComplete="address-line2" placeholder="Address line 2 (optional)" value={form.address_line2} onChange={upd('address_line2')} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" />
+          <input required autoComplete="address-line1" placeholder="Address line 1" value={form.address_line1} onChange={upd('address_line1')} className="w-full rounded-sm border border-edge bg-surface p-2.5 text-sm text-ink-primary" />
+          <input autoComplete="address-line2" placeholder="Address line 2 (optional)" value={form.address_line2} onChange={upd('address_line2')} className="w-full rounded-sm border border-edge bg-surface p-2.5 text-sm text-ink-primary" />
           <div className="grid grid-cols-2 gap-3">
-            <input required autoComplete="address-level2" placeholder="City" value={form.city} onChange={upd('city')} className="rounded-lg border border-slate-200 p-2.5 text-sm" />
-            <input required autoComplete="address-level1" placeholder="State" value={form.state} onChange={upd('state')} className="rounded-lg border border-slate-200 p-2.5 text-sm" />
+            <input required autoComplete="address-level2" placeholder="City" value={form.city} onChange={upd('city')} className="rounded-sm border border-edge bg-surface p-2.5 text-sm text-ink-primary" />
+            <input required autoComplete="address-level1" placeholder="State" value={form.state} onChange={upd('state')} className="rounded-sm border border-edge bg-surface p-2.5 text-sm text-ink-primary" />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <input required autoComplete="postal-code" placeholder="Postal code" value={form.postal_code} onChange={upd('postal_code')} className="rounded-lg border border-slate-200 p-2.5 text-sm" />
-            <input required autoComplete="country" placeholder="Country (e.g. GB / IN)" value={form.country} onChange={upd('country')} className="rounded-lg border border-slate-200 p-2.5 text-sm" />
+            <input required autoComplete="postal-code" placeholder="Postal code" value={form.postal_code} onChange={upd('postal_code')} className="rounded-sm border border-edge bg-surface p-2.5 text-sm text-ink-primary" />
+            <input required autoComplete="country" placeholder="Country (e.g. GB / IN)" value={form.country} onChange={upd('country')} className="rounded-sm border border-edge bg-surface p-2.5 text-sm text-ink-primary" />
           </div>
           <div className="flex gap-2">
             <button type="submit" className="btn-primary flex-1 py-2.5 text-xs uppercase">Save address</button>
-            <button type="button" onClick={() => setShowForm(false)} className="flex-1 rounded-lg border border-slate-200 py-2.5 text-xs font-bold uppercase text-brand-navy">Cancel</button>
+            <button type="button" onClick={() => setShowForm(false)} className="flex-1 rounded-sm border border-edge py-2.5 text-xs font-medium uppercase text-ink-primary">Cancel</button>
           </div>
         </form>
       ) : (
-        <button onClick={() => setShowForm(true)} className="inline-flex items-center gap-2 rounded-lg border border-dashed border-slate-300 px-4 py-2.5 text-sm font-semibold text-brand-navy hover:border-brand-purple hover:text-brand-purple">
+        <button onClick={() => setShowForm(true)} className="inline-flex items-center gap-2 rounded-sm border border-dashed border-edge-strong px-4 py-2.5 text-sm font-medium text-ink-primary hover:border-ink-primary hover:text-ink-accent">
           <Plus className="h-4 w-4" /> Add address
         </button>
       )}
@@ -472,8 +472,8 @@ function OrdersTab({ authFetch }) {
       .finally(() => setLoading(false));
   }, [authFetch]);
 
-  if (loading) return <p className="text-sm text-brand-muted">Loading orders…</p>;
-  if (orders.length === 0) return <p className="text-sm text-brand-muted">You have no orders yet.</p>;
+  if (loading) return <p className="text-sm text-ink-secondary">Loading orders…</p>;
+  if (orders.length === 0) return <p className="text-sm text-ink-secondary">You have no orders yet.</p>;
 
   const statusColor = {
     PENDING: 'bg-amber-100 text-amber-700',
@@ -481,31 +481,31 @@ function OrdersTab({ authFetch }) {
     SHIPPED: 'bg-indigo-100 text-indigo-700',
     DELIVERED: 'bg-green-100 text-green-700',
     REFUNDED: 'bg-red-100 text-red-700',
-    CANCELLED: 'bg-slate-100 text-slate-700',
+    CANCELLED: 'bg-surface-muted text-ink-secondary',
   };
 
   return (
     <div className="space-y-4">
       {orders.map((o) => (
-        <div key={o.id} className="rounded-xl border border-slate-200 bg-white p-4">
+        <div key={o.id} className="rounded-md border border-edge bg-surface p-4 shadow-card">
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm font-bold text-brand-navy">Order #{o.id}</span>
-            <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${statusColor[o.status] || 'bg-slate-100 text-slate-700'}`}>
+            <span className="text-sm font-bold text-ink-primary">Order #{o.id}</span>
+            <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${statusColor[o.status] || 'bg-surface-muted text-ink-secondary'}`}>
               {o.status}
             </span>
           </div>
-          <p className="mb-2 text-xs text-brand-muted">
+          <p className="mb-2 text-xs text-ink-secondary">
             {o.created_at ? new Date(o.created_at).toLocaleDateString() : ''} · {o.items?.length || 0} item(s)
           </p>
-          <ul className="mb-2 space-y-1 text-xs text-brand-muted">
+          <ul className="mb-2 space-y-1 text-xs text-ink-secondary">
             {(o.items || []).map((it) => (
               <li key={it.id}>{it.quantity}× {it.product_name}</li>
             ))}
           </ul>
-          <div className="flex items-center justify-between border-t border-slate-100 pt-2">
-            <span className="text-sm font-black text-brand-navy">{o.currency_code} {o.total}</span>
+          <div className="flex items-center justify-between border-t border-edge-subtle pt-2">
+            <span className="text-sm font-semibold text-ink-primary">{o.currency_code} {o.total}</span>
             {o.invoice?.pdf_url && (
-              <a href={getApiUrl(o.invoice.pdf_url)} target="_blank" rel="noreferrer" className="text-xs font-semibold text-brand-purple hover:underline">
+              <a href={getApiUrl(o.invoice.pdf_url)} target="_blank" rel="noreferrer" className="text-xs font-semibold text-ink-accent hover:underline">
                 Download invoice
               </a>
             )}
@@ -565,28 +565,28 @@ function WishlistTab() {
   };
 
   if (loading) {
-    return <p className="text-sm text-brand-muted">Loading wishlist…</p>;
+    return <p className="text-sm text-ink-secondary">Loading wishlist…</p>;
   }
 
   if (wishlist.length === 0) {
-    return <p className="text-sm text-brand-muted">Your wishlist is currently empty.</p>;
+    return <p className="text-sm text-ink-secondary">Your wishlist is currently empty.</p>;
   }
 
   return (
     <div className="space-y-3">
       {wishlist.map((item) => (
-        <div key={item.id} className="rounded-2xl border border-slate-200 bg-white p-4 flex items-center justify-between gap-4">
+        <div key={item.id} className="rounded-md border border-edge bg-surface p-4 shadow-card flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="h-14 w-14 bg-slate-50 rounded-xl overflow-hidden shrink-0 border border-slate-100 flex items-center justify-center">
+            <div className="h-14 w-14 bg-surface-muted rounded-md overflow-hidden shrink-0 border border-edge-subtle flex items-center justify-center">
               {item.thumbnail ? (
                 <img src={item.thumbnail} alt={item.product_name} className="h-full w-full object-cover" />
               ) : (
-                <Info className="h-6 w-6 text-slate-300" />
+                <Info className="h-6 w-6 text-ink-subtle" />
               )}
             </div>
             <div>
-              <h3 className="text-xs font-bold text-brand-navy line-clamp-1 max-w-[200px]">{item.product_name}</h3>
-              <p className="text-xs font-black text-brand-purple mt-0.5">
+              <h3 className="text-xs font-bold text-ink-primary line-clamp-1 max-w-[200px]">{item.product_name}</h3>
+              <p className="text-xs font-semibold text-ink-accent mt-0.5">
                 {currencySymbol}{item.promotional_price ? parseFloat(item.promotional_price).toFixed(2) : item.price ? parseFloat(item.price).toFixed(2) : '0.00'}
               </p>
             </div>
@@ -595,14 +595,14 @@ function WishlistTab() {
             <button
               type="button"
               onClick={() => handleAdd(item)}
-              className="rounded-lg bg-brand-purple px-3 py-1.5 text-xs font-bold text-white hover:bg-brand-purple/90"
+              className="rounded-sm bg-surface-inverse px-3 py-1.5 text-xs font-medium text-white hover:bg-ink-secondary"
             >
               Add to Cart
             </button>
             <button
               type="button"
               onClick={() => handleRemove(item.id)}
-              className="p-2 border border-slate-200 rounded-lg hover:border-brand-danger hover:text-brand-danger text-brand-muted transition-colors"
+              className="p-2 border border-edge rounded-sm hover:border-ink-danger hover:text-ink-danger text-ink-muted transition-colors"
             >
               <Trash2 className="h-4 w-4" />
             </button>
@@ -635,13 +635,13 @@ function ProfileTab({ user, authFetch, regions, onSaved }) {
   };
 
   const Toggle = ({ k, label, desc, locked }) => (
-    <label className={`flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 ${locked ? 'opacity-70' : 'cursor-pointer'}`}>
+    <label className={`flex items-start gap-3 rounded-md border border-edge bg-surface p-4 shadow-card ${locked ? 'opacity-70' : 'cursor-pointer'}`}>
       <input type="checkbox" checked={prefs[k]} disabled={locked}
         onChange={(e) => setPrefs((p) => ({ ...p, [k]: e.target.checked }))}
-        className="mt-0.5 accent-brand-purple" />
+        className="mt-0.5 accent-brand-accent" />
       <span>
-        <span className="block text-sm font-semibold text-brand-navy">{label}</span>
-        <span className="block text-xs text-brand-muted">{desc}</span>
+        <span className="block text-sm font-semibold text-ink-primary">{label}</span>
+        <span className="block text-xs text-ink-secondary">{desc}</span>
       </span>
     </label>
   );
@@ -651,35 +651,35 @@ function ProfileTab({ user, authFetch, regions, onSaved }) {
       
       {/* Identity */}
       <div className="space-y-3">
-        <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4">
-          <Mail className="h-5 w-5 text-brand-purple" />
-          <div><p className="text-[11px] uppercase tracking-wide text-brand-muted">Email</p>
-            <p className="text-sm font-semibold text-brand-navy">{user.email}</p></div>
+        <div className="flex items-center gap-3 rounded-md border border-edge bg-surface p-4 shadow-card">
+          <Mail className="h-5 w-5 text-brand-accent" />
+          <div><p className="text-[11px] uppercase tracking-wide text-ink-secondary">Email</p>
+            <p className="text-sm font-semibold text-ink-primary">{user.email}</p></div>
         </div>
       </div>
 
       {/* Home region */}
-      <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <div className="rounded-md border border-edge bg-surface p-4 shadow-card">
         <div className="mb-2 flex items-center gap-2">
-          <Globe className="h-4 w-4 text-brand-purple" />
-          <p className="text-sm font-bold text-brand-navy">Home region</p>
+          <Globe className="h-4 w-4 text-brand-accent" />
+          <p className="text-sm font-bold text-ink-primary">Home region</p>
         </div>
-        <p className="mb-3 text-xs text-brand-muted">
+        <p className="mb-3 text-xs text-ink-secondary">
           Where you’re based / billed. You can still browse and shop in another region using the
           selector in the header (your session region).
         </p>
         <select value={homeRegion} onChange={(e) => setHomeRegion(e.target.value ? Number(e.target.value) : '')}
-          className="w-full rounded-lg border border-slate-200 p-2.5 text-sm focus:border-brand-purple focus:outline-none">
+          className="w-full rounded-sm border border-edge bg-surface p-2.5 text-sm text-ink-primary focus:border-ink-primary focus:outline-none">
           <option value="">Not set</option>
           {regions.map((r) => <option key={r.id} value={r.id}>{r.name} ({r.code})</option>)}
         </select>
       </div>
 
       {/* Email preference centre */}
-      <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <div className="rounded-md border border-edge bg-surface p-4 shadow-card">
         <div className="mb-3 flex items-center gap-2">
-          <Bell className="h-4 w-4 text-brand-purple" />
-          <p className="text-sm font-bold text-brand-navy">Email preferences</p>
+          <Bell className="h-4 w-4 text-brand-accent" />
+          <p className="text-sm font-bold text-ink-primary">Email preferences</p>
         </div>
         <div className="space-y-2">
           <Toggle k="email_order_updates" label="Order & account updates"
@@ -696,7 +696,7 @@ function ProfileTab({ user, authFetch, regions, onSaved }) {
           className="btn-primary px-6 py-2.5 text-xs uppercase tracking-wider disabled:opacity-60">
           {saving ? 'Saving…' : 'Save preferences'}
         </button>
-        {savedMsg && <span className="text-xs font-semibold text-brand-success">{savedMsg}</span>}
+        {savedMsg && <span className="text-xs font-semibold text-ink-success">{savedMsg}</span>}
       </div>
 
       <PrivacyControls authFetch={authFetch} userEmail={user.email} />
@@ -744,37 +744,37 @@ function PrivacyControls({ authFetch, userEmail }) {
   };
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
-      <p className="text-sm font-bold text-brand-navy">Privacy & data (GDPR / DPDP)</p>
-      <p className="mt-1 text-xs text-brand-muted">
+    <div className="rounded-md border border-edge bg-surface p-4 shadow-card">
+      <p className="text-sm font-bold text-ink-primary">Privacy & data (GDPR / DPDP)</p>
+      <p className="mt-1 text-xs text-ink-secondary">
         Download a copy of everything we hold about you, or permanently delete your account.
         Tax-required records (invoices, order totals) are retained per UK / IN law.
       </p>
       <div className="mt-3 flex flex-wrap gap-3">
         <button onClick={downloadExport} disabled={busy}
-          className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-brand-navy hover:bg-slate-50 disabled:opacity-60">
+          className="rounded-sm border border-edge bg-surface px-4 py-2 text-xs font-semibold text-ink-primary hover:bg-surface-muted disabled:opacity-60">
           {busy ? 'Working…' : 'Download my data'}
         </button>
         {!confirmDelete ? (
           <button onClick={() => setConfirmDelete(true)}
-            className="rounded-lg border border-red-200 bg-white px-4 py-2 text-xs font-semibold text-red-600 hover:bg-red-50">
+            className="rounded-sm border border-red-200 bg-surface px-4 py-2 text-xs font-semibold text-red-600 hover:bg-red-50">
             Delete my account
           </button>
         ) : (
-          <div className="flex w-full flex-col gap-2 rounded-lg border border-red-200 bg-red-50 p-3">
+          <div className="flex w-full flex-col gap-2 rounded-sm border border-red-200 bg-red-50 p-3">
             <p className="text-xs font-semibold text-red-700">
               Type your email <span className="font-mono">{userEmail}</span> to confirm. This cannot be undone.
             </p>
             <input value={typed} onChange={(e) => setTyped(e.target.value)}
               placeholder={userEmail}
-              className="rounded-lg border border-red-200 bg-white p-2 text-xs focus:border-red-400 focus:outline-none" />
+              className="rounded-sm border border-red-200 bg-surface p-2 text-xs focus:border-red-400 focus:outline-none" />
             <div className="flex gap-2">
               <button onClick={deleteAccount} disabled={busy}
-                className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-60">
+                className="rounded-sm bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-60">
                 {busy ? 'Deleting…' : 'Confirm deletion'}
               </button>
               <button onClick={() => { setConfirmDelete(false); setTyped(''); setError(''); }}
-                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-brand-navy">
+                className="rounded-sm border border-edge bg-surface px-3 py-1.5 text-xs font-semibold text-ink-primary">
                 Cancel
               </button>
             </div>
@@ -782,7 +782,7 @@ function PrivacyControls({ authFetch, userEmail }) {
         )}
       </div>
       {error && <p className="mt-2 text-xs font-semibold text-red-600">{error}</p>}
-      {done && <p className="mt-2 text-xs font-semibold text-brand-success">{done}</p>}
+      {done && <p className="mt-2 text-xs font-semibold text-ink-success">{done}</p>}
     </div>
   );
 }
@@ -837,13 +837,13 @@ export default function AccountPage() {
       <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8">
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-brand-purple">My account</p>
-            <h1 className="mt-1 text-3xl font-black text-brand-navy">
+            <p className="kicker">My account</p>
+            <h1 className="text-heading-1 mt-1">
               Hi, {user.first_name || user.email.split('@')[0]}
             </h1>
           </div>
           <button onClick={() => dispatch(logout())}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-brand-navy hover:border-brand-purple hover:bg-brand-purple/5">
+            className="inline-flex items-center gap-2 rounded-sm border border-edge px-4 py-2 text-sm font-medium text-ink-primary hover:border-ink-primary hover:bg-surface-muted">
             <LogOut className="h-4 w-4" /> Log out
           </button>
         </div>
@@ -851,26 +851,26 @@ export default function AccountPage() {
         {/* Admin console entry — prominent for staff so the dashboard is easy to find */}
         {(user.is_staff || user.is_superuser) && (
           <Link href="/admin"
-            className="mb-6 flex items-center justify-between rounded-2xl border border-brand-purple/30 bg-brand-purple/5 p-5 transition-colors hover:bg-brand-purple/10">
+            className="mb-6 flex items-center justify-between rounded-md border border-edge bg-surface p-5 shadow-card transition-all duration-300 hover:-translate-y-1 hover:border-edge-strong hover:shadow-elevated">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-purple text-white">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-surface-inverse text-white">
                 <LayoutDashboard className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-sm font-black text-brand-navy">Admin Console</p>
-                <p className="text-xs text-brand-muted">Manage products, collections, orders, payments &amp; shipping</p>
+                <p className="text-sm font-semibold text-ink-primary">Admin Console</p>
+                <p className="text-xs text-ink-muted">Manage products, collections, orders, payments &amp; shipping</p>
               </div>
             </div>
-            <span className="text-sm font-bold text-brand-purple">Open →</span>
+            <span className="text-sm font-medium text-ink-accent">Open →</span>
           </Link>
         )}
 
         {/* Tabs */}
-        <div className="mb-6 flex gap-1 border-b border-slate-200 overflow-x-auto scrollbar-none">
+        <div className="mb-6 flex gap-1 border-b border-edge overflow-x-auto scrollbar-none">
           {tabs.map((t) => (
             <button key={t.key} onClick={() => setTab(t.key)}
-              className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-colors shrink-0 ${
-                tab === t.key ? 'border-brand-purple text-brand-purple font-extrabold' : 'border-transparent text-brand-muted hover:text-brand-navy'
+              className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-medium uppercase tracking-wider transition-colors shrink-0 ${
+                tab === t.key ? 'border-ink-primary text-ink-primary' : 'border-transparent text-ink-muted hover:text-ink-primary'
               }`}>
               <t.icon className="h-4 w-4" /> {t.label}
             </button>
@@ -878,7 +878,7 @@ export default function AccountPage() {
         </div>
 
         {/* Tab panels */}
-        <div className="bg-white border border-slate-200 rounded-3xl p-6 lg:p-8">
+        <div className="bg-surface border border-edge rounded-lg shadow-card p-6 lg:p-8">
           {tab === 'profile' && (
             <ProfileTab user={user} authFetch={authFetch} regions={regions} onSaved={() => dispatch(fetchProfile())} />
           )}

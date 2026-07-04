@@ -325,27 +325,27 @@ export default function ProductCatalog({
   const SidebarFilters = () => (
     <div className="space-y-6">
       {/* Category radios */}
-      <div className="border-b border-slate-200 pb-5">
-        <h3 className="text-xs font-black uppercase tracking-wider text-brand-navy mb-3">Category</h3>
+      <div className="border-b border-edge pb-5">
+        <h3 className="kicker !text-ink-primary mb-3">Category</h3>
         <div className="space-y-2">
-          <label className="flex items-center gap-2.5 text-xs text-brand-muted hover:text-brand-navy cursor-pointer">
+          <label className="flex items-center gap-2.5 text-xs text-ink-secondary hover:text-ink-primary cursor-pointer">
             <input
               type="radio"
               name="category"
               checked={!activeCategory}
               onChange={() => setActiveCategory(null)}
-              className="accent-brand-purple"
+              className="accent-brand-accent"
             />
             <span>All Categories</span>
           </label>
           {categories.map((c) => (
-            <label key={c.slug} className="flex items-center gap-2.5 text-xs text-brand-muted hover:text-brand-navy cursor-pointer">
+            <label key={c.slug} className="flex items-center gap-2.5 text-xs text-ink-secondary hover:text-ink-primary cursor-pointer">
               <input
                 type="radio"
                 name="category"
                 checked={activeCategory === c.slug}
                 onChange={() => setActiveCategory(c.slug)}
-                className="accent-brand-purple"
+                className="accent-brand-accent"
               />
               <span className="capitalize">{c.name.replace(/-/g, ' ')}</span>
             </label>
@@ -354,11 +354,11 @@ export default function ProductCatalog({
       </div>
 
       {/* Health goals checkbox */}
-      <div className="border-b border-slate-200 pb-5">
-        <h3 className="text-xs font-black uppercase tracking-wider text-brand-navy mb-3">Health Goal</h3>
+      <div className="border-b border-edge pb-5">
+        <h3 className="kicker !text-ink-primary mb-3">Health Goal</h3>
         <div className="space-y-2">
           {HEALTH_GOALS.map((g) => (
-            <label key={g.slug} className="flex items-center gap-2.5 text-xs text-brand-muted hover:text-brand-navy cursor-pointer">
+            <label key={g.slug} className="flex items-center gap-2.5 text-xs text-ink-secondary hover:text-ink-primary cursor-pointer">
               <input
                 type="checkbox"
                 checked={selectedGoals.includes(g.slug)}
@@ -366,7 +366,7 @@ export default function ProductCatalog({
                   if (e.target.checked) setSelectedGoals([...selectedGoals, g.slug]);
                   else setSelectedGoals(selectedGoals.filter((item) => item !== g.slug));
                 }}
-                className="rounded accent-brand-purple"
+                className="rounded accent-brand-accent"
               />
               <span>{g.name}</span>
             </label>
@@ -375,11 +375,11 @@ export default function ProductCatalog({
       </div>
 
       {/* Form checkbox */}
-      <div className="border-b border-slate-200 pb-5">
-        <h3 className="text-xs font-black uppercase tracking-wider text-brand-navy mb-3">Supplement Form</h3>
+      <div className="border-b border-edge pb-5">
+        <h3 className="kicker !text-ink-primary mb-3">Supplement Form</h3>
         <div className="space-y-2">
           {FORMS.map((f) => (
-            <label key={f.slug} className="flex items-center gap-2.5 text-xs text-brand-muted hover:text-brand-navy cursor-pointer">
+            <label key={f.slug} className="flex items-center gap-2.5 text-xs text-ink-secondary hover:text-ink-primary cursor-pointer">
               <input
                 type="checkbox"
                 checked={selectedForms.includes(f.slug)}
@@ -387,7 +387,7 @@ export default function ProductCatalog({
                   if (e.target.checked) setSelectedForms([...selectedForms, f.slug]);
                   else setSelectedForms(selectedForms.filter((item) => item !== f.slug));
                 }}
-                className="rounded accent-brand-purple"
+                className="rounded accent-brand-accent"
               />
               <span>{f.name}</span>
             </label>
@@ -396,11 +396,11 @@ export default function ProductCatalog({
       </div>
 
       {/* Dietary preferences checkbox */}
-      <div className="border-b border-slate-200 pb-5">
-        <h3 className="text-xs font-black uppercase tracking-wider text-brand-navy mb-3">Dietary Preferences</h3>
+      <div className="border-b border-edge pb-5">
+        <h3 className="kicker !text-ink-primary mb-3">Dietary Preferences</h3>
         <div className="space-y-2">
           {DIETARY.map((d) => (
-            <label key={d.slug} className="flex items-center gap-2.5 text-xs text-brand-muted hover:text-brand-navy cursor-pointer">
+            <label key={d.slug} className="flex items-center gap-2.5 text-xs text-ink-secondary hover:text-ink-primary cursor-pointer">
               <input
                 type="checkbox"
                 checked={selectedDietary.includes(d.slug)}
@@ -408,7 +408,7 @@ export default function ProductCatalog({
                   if (e.target.checked) setSelectedDietary([...selectedDietary, d.slug]);
                   else setSelectedDietary(selectedDietary.filter((item) => item !== d.slug));
                 }}
-                className="rounded accent-brand-purple"
+                className="rounded accent-brand-accent"
               />
               <span>{d.name}</span>
             </label>
@@ -417,10 +417,10 @@ export default function ProductCatalog({
       </div>
 
       {/* Price Slider */}
-      <div className="border-b border-slate-200 pb-5">
+      <div className="border-b border-edge pb-5">
         <div className="flex justify-between items-center mb-2">
-          <h3 className="text-xs font-black uppercase tracking-wider text-brand-navy">Max Price</h3>
-          <span className="text-xs font-bold text-brand-purple">{currencySymbol}{priceMax}</span>
+          <h3 className="kicker !text-ink-primary">Max Price</h3>
+          <span className="text-xs font-medium text-ink-accent">{currencySymbol}{priceMax}</span>
         </div>
         <input
           type="range"
@@ -429,35 +429,35 @@ export default function ProductCatalog({
           step={currentRegion === 'IN' ? 100 : 1}
           value={priceMax}
           onChange={(e) => setPriceMax(Number(e.target.value))}
-          className="w-full accent-brand-purple"
+          className="w-full accent-brand-accent"
         />
       </div>
 
       {/* Star ratings */}
       <div className="pb-5">
-        <h3 className="text-xs font-black uppercase tracking-wider text-brand-navy mb-3">Customer Rating</h3>
+        <h3 className="kicker !text-ink-primary mb-3">Customer Rating</h3>
         <div className="space-y-2">
           {[4, 3, 2].map((stars) => (
-            <label key={stars} className="flex items-center gap-2.5 text-xs text-brand-muted hover:text-brand-navy cursor-pointer">
+            <label key={stars} className="flex items-center gap-2.5 text-xs text-ink-secondary hover:text-ink-primary cursor-pointer">
               <input
                 type="radio"
                 name="rating-filter"
                 checked={selectedRating === stars}
                 onChange={() => setSelectedRating(stars)}
-                className="accent-brand-purple"
+                className="accent-brand-accent"
               />
               <span className="flex items-center gap-1">
                 {stars} Stars &amp; Above
               </span>
             </label>
           ))}
-          <label className="flex items-center gap-2.5 text-xs text-brand-muted hover:text-brand-navy cursor-pointer">
+          <label className="flex items-center gap-2.5 text-xs text-ink-secondary hover:text-ink-primary cursor-pointer">
             <input
               type="radio"
               name="rating-filter"
               checked={selectedRating === 0}
               onChange={() => setSelectedRating(0)}
-              className="accent-brand-purple"
+              className="accent-brand-accent"
             />
             <span>All Ratings</span>
           </label>
@@ -471,41 +471,41 @@ export default function ProductCatalog({
       
       {/* Category Intro Content Box */}
       {filterable && categoryInfo && (
-        <div className="mb-10 rounded-3xl border border-brand-purple/10 bg-brand-purple/[0.02] p-6 lg:p-8 flex flex-col md:flex-row gap-6 items-center shadow-xs">
+        <div className="reveal mb-10 rounded-md border border-edge bg-surface p-6 lg:p-8 flex flex-col md:flex-row gap-6 items-center shadow-card">
           <div className="flex-1">
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-brand-purple mb-2">
-              <Sparkles className="h-4 w-4" />
+            <div className="kicker !text-ink-accent mb-2 flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-brand-accent" />
               <span>Sclero Formulation Guide</span>
             </div>
-            <h2 className="text-2xl font-black text-brand-navy mb-3">
+            <h2 className="text-heading-3 mb-3">
               {categoryInfo.title}
             </h2>
-            <p className="text-xs md:text-sm text-brand-muted leading-relaxed">
+            <p className="text-xs md:text-sm text-ink-secondary leading-relaxed">
               {categoryInfo.intro}
             </p>
           </div>
-          <div className="rounded-2xl bg-white border border-slate-200 p-4 text-center shrink-0 w-full md:w-56 shadow-xs">
-            <ShieldCheck className="h-8 w-8 text-brand-success mx-auto mb-2" />
-            <h4 className="text-xs font-bold text-brand-navy uppercase mb-1">Standard Assured</h4>
-            <p className="text-[10px] text-brand-muted">GMP Compliant, Third-Party Lab Verified Ingredients.</p>
+          <div className="rounded-md bg-surface border border-edge p-4 text-center shrink-0 w-full md:w-56 shadow-card">
+            <ShieldCheck className="h-8 w-8 text-ink-success mx-auto mb-2" />
+            <h4 className="kicker !text-ink-primary mb-1">Standard Assured</h4>
+            <p className="text-[10px] text-ink-muted">GMP Compliant, Third-Party Lab Verified Ingredients.</p>
           </div>
         </div>
       )}
 
       {(title || subtitle) && !categoryInfo && (
-        <div className="mb-10 text-center lg:text-left">
+        <div className="reveal mb-10 text-center lg:text-left">
           {title ? (
             <>
-              <h2 className="text-3xl font-black tracking-tight text-brand-navy sm:text-4xl">
+              <h2 className="text-heading-1">
                 {title}
               </h2>
-              <p className="mt-3 text-sm text-brand-muted">
+              <p className="mt-3 text-sm text-ink-secondary">
                 {subtitle ||
                   `Available in the ${currentRegion === 'IN' ? '🇮🇳 India' : '🇬🇧 United Kingdom'} region.`}
               </p>
             </>
           ) : subtitle ? (
-            <p className="text-sm text-brand-muted">{subtitle}</p>
+            <p className="text-sm text-ink-secondary">{subtitle}</p>
           ) : null}
         </div>
       )}
@@ -514,10 +514,10 @@ export default function ProductCatalog({
         
         {/* Left Column Sidebar Filters (Desktop) */}
         {filterable && (
-          <aside className="hidden lg:block w-64 shrink-0 bg-white border border-slate-200 rounded-3xl p-6 h-fit shadow-xs">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-              <h2 className="text-sm font-black text-brand-navy uppercase tracking-wider">Filters</h2>
-              <button onClick={clearAllFilters} className="text-[11px] font-bold text-brand-purple hover:underline">
+          <aside className="hidden lg:block w-64 shrink-0 bg-surface border border-edge rounded-md p-6 h-fit shadow-card">
+            <div className="flex items-center justify-between border-b border-edge-subtle pb-3 mb-4">
+              <h2 className="kicker !text-ink-primary">Filters</h2>
+              <button onClick={clearAllFilters} className="text-[11px] font-medium text-ink-accent underline-offset-4 hover:underline">
                 Reset
               </button>
             </div>
@@ -533,19 +533,19 @@ export default function ProductCatalog({
               
               {/* Search box */}
               <div className="relative w-full sm:max-w-sm">
-                <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-muted" />
+                <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" />
                 <input
                   type="text"
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
                   placeholder="Search brand products…"
-                  className="w-full rounded-2xl border border-slate-200 bg-white py-2.5 pl-10 pr-9 text-xs focus:border-brand-purple focus:outline-none"
+                  className="w-full rounded-sm border border-edge bg-surface py-2.5 pl-10 pr-9 text-xs focus:border-ink-primary focus:outline-none"
                 />
                 {searchInput && (
                   <button
                     type="button"
                     onClick={() => setSearchInput('')}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-brand-muted hover:text-brand-navy"
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink-primary"
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -557,7 +557,7 @@ export default function ProductCatalog({
                 <button
                   type="button"
                   onClick={() => setShowMobileFilters(true)}
-                  className="lg:hidden flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-brand-navy hover:border-brand-purple"
+                  className="lg:hidden flex items-center gap-1.5 rounded-sm border border-edge bg-surface px-4 py-2.5 text-xs font-medium text-ink-primary hover:border-edge-strong"
                 >
                   <SlidersHorizontal className="h-4 w-4" />
                   <span>Filters</span>
@@ -574,12 +574,12 @@ export default function ProductCatalog({
               <div className="loader" />
             </div>
           ) : visibleProducts.length === 0 ? (
-            <div className="py-20 text-center text-brand-muted">
+            <div className="py-20 text-center text-ink-muted">
               <p className="text-sm">No products match your active filters.</p>
               <button
                 type="button"
                 onClick={clearAllFilters}
-                className="mt-4 text-xs font-bold text-brand-purple hover:underline"
+                className="mt-4 text-xs font-medium text-ink-accent underline-offset-4 hover:underline"
               >
                 Clear all filters
               </button>
@@ -615,46 +615,46 @@ export default function ProductCatalog({
 
       {/* Collection Buying Guide & SEO FAQ accordion (Rendered at bottom of collections page) */}
       {filterable && (
-        <div className="mt-20 border-t border-slate-200 pt-16">
+        <div className="mt-20 border-t border-edge pt-16">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
-            
+
             {/* Buying guide */}
-            <div className="lg:col-span-5 space-y-4">
-              <span className="text-[10px] font-black uppercase tracking-widest text-brand-purple">Buying Guide</span>
-              <h2 className="text-2xl font-black text-brand-navy tracking-tight">How to choose your supplements</h2>
-              <p className="text-xs leading-relaxed text-brand-muted">
+            <div className="reveal lg:col-span-5 space-y-4">
+              <span className="kicker !text-ink-accent">Buying Guide</span>
+              <h2 className="text-heading-2">How to choose your supplements</h2>
+              <p className="text-xs leading-relaxed text-ink-secondary">
                 Selecting high-quality supplements requires examining ingredient delivery, clean labeling, and manufacturing certifications. At Sclero Proteins, we ensure all materials undergo cold-extraction to prevent bioavailability decay. Check our regional labels to review active compounds per dose and select your health goals on the sidebar filters to identify your ideal formulation matches.
               </p>
-              <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <h4 className="text-xs font-bold text-brand-navy mb-1 flex items-center gap-1.5">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-purple/10 text-brand-purple text-[10px]">1</span>
+              <div className="rounded-md border border-edge bg-surface p-4">
+                <h4 className="text-xs font-semibold text-ink-primary mb-1 flex items-center gap-1.5">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-surface-muted text-ink-accent text-[10px]">1</span>
                   Understand the active matrix
                 </h4>
-                <p className="text-[10px] text-brand-muted pl-6">Review elements such as glycosaminoglycans or type-specific collagen forms rather than plain bulk proteins.</p>
+                <p className="text-[10px] text-ink-muted pl-6">Review elements such as glycosaminoglycans or type-specific collagen forms rather than plain bulk proteins.</p>
               </div>
             </div>
 
             {/* FAQs Accordion */}
-            <div className="lg:col-span-7 space-y-4">
-              <span className="text-[10px] font-black uppercase tracking-widest text-brand-purple">FAQ Schema</span>
-              <h2 className="text-2xl font-black text-brand-navy tracking-tight">Collection FAQ</h2>
-              
+            <div className="reveal lg:col-span-7 space-y-4">
+              <span className="kicker !text-ink-accent">FAQ Schema</span>
+              <h2 className="text-heading-2">Collection FAQ</h2>
+
               <div className="space-y-2">
                 {faqs.map((f, i) => (
-                  <div key={i} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                  <div key={i} className="overflow-hidden rounded-md border border-edge bg-surface">
                     <button
                       onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                      className="flex w-full items-center justify-between px-5 py-4 text-left font-bold text-xs text-brand-navy hover:text-brand-purple transition-colors"
+                      className="flex w-full items-center justify-between px-5 py-4 text-left font-semibold text-xs text-ink-primary hover:text-ink-accent transition-colors"
                     >
                       <span>{f.q}</span>
                       <ChevronDown
-                        className={`h-4 w-4 shrink-0 text-brand-muted transition-transform ${
+                        className={`h-4 w-4 shrink-0 text-ink-muted transition-transform ${
                           openFaq === i ? 'rotate-180' : ''
                         }`}
                       />
                     </button>
                     {openFaq === i && (
-                      <p className="border-t border-slate-100 px-5 py-4 text-xs leading-relaxed text-brand-muted bg-slate-50/50">
+                      <p className="border-t border-edge-subtle px-5 py-4 text-xs leading-relaxed text-ink-secondary bg-surface-muted/50">
                         {f.a}
                       </p>
                     )}
@@ -669,14 +669,14 @@ export default function ProductCatalog({
 
       {/* Mobile Filters Drawer Modal */}
       {showMobileFilters && (
-        <div className="fixed inset-0 z-50 flex bg-brand-navy/30 backdrop-blur-xs justify-end">
-          <div className="w-full max-w-xs bg-white h-full flex flex-col p-6 overflow-y-auto">
-            <div className="flex justify-between items-center border-b border-slate-100 pb-3 mb-5">
-              <h2 className="text-sm font-black text-brand-navy uppercase tracking-wider">Filters</h2>
+        <div className="fixed inset-0 z-50 flex bg-surface-overlay backdrop-blur-xs justify-end">
+          <div className="w-full max-w-xs bg-surface h-full flex flex-col p-6 overflow-y-auto">
+            <div className="flex justify-between items-center border-b border-edge-subtle pb-3 mb-5">
+              <h2 className="kicker !text-ink-primary">Filters</h2>
               <button
                 type="button"
                 onClick={() => setShowMobileFilters(false)}
-                className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-50 border border-slate-200 text-brand-text"
+                className="flex h-7 w-7 items-center justify-center rounded-full bg-surface-muted border border-edge text-ink-primary"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -684,7 +684,7 @@ export default function ProductCatalog({
             <SidebarFilters />
             <button
               onClick={() => setShowMobileFilters(false)}
-              className="mt-6 w-full btn-primary py-3 text-xs uppercase"
+              className="mt-6 w-full btn-primary py-3 text-xs"
             >
               Apply Filters
             </button>

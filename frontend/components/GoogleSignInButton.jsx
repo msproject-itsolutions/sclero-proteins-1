@@ -71,7 +71,7 @@ export default function GoogleSignInButton({ onError, text = 'continue_with' }) 
         size: 'large',
         width: 320,
         text,
-        shape: 'pill',
+        shape: 'rectangular',
       });
     };
 

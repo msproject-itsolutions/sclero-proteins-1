@@ -59,10 +59,10 @@ export function TrustpilotBadge({
       href="https://www.trustpilot.com/review/scleroproteins.co.uk"
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-2 rounded-full border border-brand-success/20 bg-brand-success/10 px-4 py-2"
+      className="inline-flex items-center gap-2 rounded-xs border border-edge bg-surface-muted px-4 py-2 transition-all duration-300 hover:border-edge-strong"
     >
-      <Star className="h-3 w-3 text-yellow-500" />
-      <span className="text-xs font-bold text-brand-success">
+      <Star className="h-3 w-3 text-brand-accent" />
+      <span className="text-xs font-semibold text-ink-secondary">
         Read verified Trustpilot reviews
       </span>
     </a>

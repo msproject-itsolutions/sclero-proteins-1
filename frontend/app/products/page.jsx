@@ -16,15 +16,15 @@ export default function ProductsPage() {
       />
       <meta property="og:title" content="All products | Sclero Proteins" />
       <meta property="og:type" content="website" />
-      <div className="border-b border-slate-200/80 bg-white">
-        <div className="container-page py-12">
-          <p className="text-xs font-semibold uppercase tracking-widest text-brand-purple">
+      <div className="border-b border-edge bg-surface">
+        <div className="reveal container-page py-12">
+          <span className="kicker !text-ink-accent">
             Catalog
-          </p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-brand-navy sm:text-4xl">
+          </span>
+          <h1 className="mt-3 text-heading-1">
             All products
           </h1>
-          <p className="mt-3 max-w-2xl text-sm text-brand-muted">
+          <p className="mt-3 max-w-2xl text-sm text-ink-secondary">
             BJC® bone & joint care, proteins, and active nutrition — priced and
             fulfilled for your region with transparent labelling.
           </p>

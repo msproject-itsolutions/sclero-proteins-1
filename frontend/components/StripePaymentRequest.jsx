@@ -86,7 +86,7 @@ export default function StripePaymentRequest({
   if (!publishableKey || !paymentRequest) return null;
 
   return (
-    <div className="my-2">
+    <div className="my-2 overflow-hidden rounded-sm">
       <PaymentRequestButtonElement
         options={{
           paymentRequest,

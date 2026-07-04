@@ -1,5 +1,5 @@
 import './globals.css';
-import { Inter, Outfit } from 'next/font/google';
+import { Inter, Cormorant_Garamond } from 'next/font/google';
 import Providers from '../components/Providers';
 import { jsonLdScriptProps } from '../lib/jsonLd';
 
@@ -7,10 +7,13 @@ import { jsonLdScriptProps } from '../lib/jsonLd';
 // inlines the font-face declarations, and serves them from same-origin.
 // `display: 'swap'` shows the fallback immediately so text never invisibly
 // blocks the first paint. `preload` is true by default.
-const outfit = Outfit({
+// Cormorant Garamond is the display serif (headings, editorial accents);
+// Inter carries all UI and body copy.
+const cormorant = Cormorant_Garamond({
   subsets: ['latin'],
-  weight: ['400', '500', '600', '700', '800', '900'],
-  variable: '--font-outfit',
+  weight: ['400', '500', '600', '700'],
+  style: ['normal', 'italic'],
+  variable: '--font-display',
   display: 'swap',
 });
 const inter = Inter({
@@ -75,7 +78,7 @@ const ORG_SCHEMA = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={`${outfit.variable} ${inter.variable}`}>
+    <html lang="en" className={`${cormorant.variable} ${inter.variable}`}>
       <head>
         <script
           type="application/ld+json"

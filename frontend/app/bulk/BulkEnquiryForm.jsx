@@ -56,12 +56,12 @@ export default function BulkEnquiryForm() {
   return (
     <div>
       {done ? (
-        <div className="mx-auto max-w-lg rounded-3xl border border-brand-success/20 bg-brand-success/5 p-8 text-center animate-fade-in">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-success text-white">
+        <div className="mx-auto max-w-lg rounded-md border border-ink-success/20 bg-surface p-8 text-center shadow-card animate-fade-in">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-ink-success text-white">
             <Check className="h-7 w-7" />
           </div>
-          <h2 className="mb-2 text-xl font-black text-brand-navy">Enquiry received</h2>
-          <p className="text-sm text-brand-muted">
+          <h2 className="text-heading-3 mb-2">Enquiry received</h2>
+          <p className="text-sm text-ink-secondary">
             Thank you. Our OvoMatrix™ team will be in touch shortly at {form.email}.
           </p>
         </div>
@@ -69,7 +69,7 @@ export default function BulkEnquiryForm() {
         <form onSubmit={submit} className="grid gap-6 lg:grid-cols-3">
           {/* Enquiry type selector */}
           <div className="lg:col-span-1">
-            <h2 className="mb-2 block text-xs font-bold uppercase tracking-widest text-brand-muted">
+            <h2 className="kicker mb-2 block">
               Enquiry type
             </h2>
             <div className="space-y-2">
@@ -78,14 +78,14 @@ export default function BulkEnquiryForm() {
                   type="button"
                   key={t.value}
                   onClick={() => setForm((f) => ({ ...f, enquiry_type: t.value }))}
-                  className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors ${
+                  className={`flex w-full items-center gap-3 rounded-md border p-3 text-left transition-colors ${
                     form.enquiry_type === t.value
-                      ? 'border-brand-purple bg-brand-purple/10'
-                      : 'border-slate-200 bg-white hover:border-brand-purple/40'
+                      ? 'border-ink-primary bg-surface-muted'
+                      : 'border-edge bg-surface hover:border-edge-strong'
                   }`}
                 >
-                  <t.icon className="h-5 w-5 text-brand-purple" />
-                  <span className="text-sm font-semibold text-brand-navy">{t.label}</span>
+                  <t.icon className="h-5 w-5 text-brand-accent" />
+                  <span className="text-sm font-semibold text-ink-primary">{t.label}</span>
                 </button>
               ))}
             </div>
@@ -103,7 +103,7 @@ export default function BulkEnquiryForm() {
                   placeholder="Your name"
                   value={form.name}
                   onChange={upd('name')}
-                  className="w-full rounded-lg border border-slate-200 p-3 text-sm focus:border-brand-purple focus:outline-none"
+                  className="w-full rounded-sm border border-edge bg-surface p-3 text-sm text-ink-primary focus:border-ink-primary focus:outline-none"
                 />
               </div>
               <div>
@@ -114,7 +114,7 @@ export default function BulkEnquiryForm() {
                   placeholder="Company"
                   value={form.company}
                   onChange={upd('company')}
-                  className="w-full rounded-lg border border-slate-200 p-3 text-sm focus:border-brand-purple focus:outline-none"
+                  className="w-full rounded-sm border border-edge bg-surface p-3 text-sm text-ink-primary focus:border-ink-primary focus:outline-none"
                 />
               </div>
             </div>
@@ -129,7 +129,7 @@ export default function BulkEnquiryForm() {
                   placeholder="Business email"
                   value={form.email}
                   onChange={upd('email')}
-                  className="w-full rounded-lg border border-slate-200 p-3 text-sm focus:border-brand-purple focus:outline-none"
+                  className="w-full rounded-sm border border-edge bg-surface p-3 text-sm text-ink-primary focus:border-ink-primary focus:outline-none"
                 />
               </div>
               <div>
@@ -140,7 +140,7 @@ export default function BulkEnquiryForm() {
                   placeholder="Phone"
                   value={form.phone}
                   onChange={upd('phone')}
-                  className="w-full rounded-lg border border-slate-200 p-3 text-sm focus:border-brand-purple focus:outline-none"
+                  className="w-full rounded-sm border border-edge bg-surface p-3 text-sm text-ink-primary focus:border-ink-primary focus:outline-none"
                 />
               </div>
             </div>
@@ -151,7 +151,7 @@ export default function BulkEnquiryForm() {
                   id="bulk-product"
                   value={form.product_interest}
                   onChange={upd('product_interest')}
-                  className="w-full rounded-lg border border-slate-200 bg-white p-3 text-sm focus:border-brand-purple focus:outline-none"
+                  className="w-full rounded-sm border border-edge bg-surface p-3 text-sm text-ink-primary focus:border-ink-primary focus:outline-none"
                 >
                   {PRODUCTS.map((p) => <option key={p} value={p}>{p}</option>)}
                 </select>
@@ -164,7 +164,7 @@ export default function BulkEnquiryForm() {
                   placeholder="Country"
                   value={form.country}
                   onChange={upd('country')}
-                  className="w-full rounded-lg border border-slate-200 p-3 text-sm focus:border-brand-purple focus:outline-none"
+                  className="w-full rounded-sm border border-edge bg-surface p-3 text-sm text-ink-primary focus:border-ink-primary focus:outline-none"
                 />
               </div>
             </div>
@@ -175,7 +175,7 @@ export default function BulkEnquiryForm() {
                 placeholder="Estimated volume / MOQ (e.g. 500 kg per month)"
                 value={form.quantity}
                 onChange={upd('quantity')}
-                className="w-full rounded-lg border border-slate-200 p-3 text-sm focus:border-brand-purple focus:outline-none"
+                className="w-full rounded-sm border border-edge bg-surface p-3 text-sm text-ink-primary focus:border-ink-primary focus:outline-none"
               />
             </div>
             <div>
@@ -186,12 +186,12 @@ export default function BulkEnquiryForm() {
                 placeholder="Tell us about your requirement…"
                 value={form.message}
                 onChange={upd('message')}
-                className="w-full rounded-lg border border-slate-200 p-3 text-sm focus:border-brand-purple focus:outline-none"
+                className="w-full rounded-sm border border-edge bg-surface p-3 text-sm text-ink-primary focus:border-ink-primary focus:outline-none"
               />
             </div>
 
             {error && (
-              <p className="rounded-lg bg-brand-danger/10 px-3 py-2 text-xs font-semibold text-brand-danger">{error}</p>
+              <p className="rounded-sm border border-ink-danger/20 bg-surface-muted px-3 py-2 text-xs font-semibold text-ink-danger">{error}</p>
             )}
 
             <button

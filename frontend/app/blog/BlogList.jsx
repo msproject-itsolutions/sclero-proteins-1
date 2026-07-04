@@ -20,12 +20,12 @@ export default function BlogList() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <p className="text-sm text-brand-muted">Loading insights...</p>;
+  if (loading) return <p className="text-sm text-ink-muted">Loading insights...</p>;
 
   if (posts.length === 0) {
     return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center">
-        <p className="text-sm font-semibold text-brand-navy">No articles are published yet.</p>
+      <div className="rounded-md border border-edge bg-surface p-8 text-center shadow-card">
+        <p className="text-sm font-semibold text-ink-primary">No articles are published yet.</p>
       </div>
     );
   }
@@ -33,17 +33,17 @@ export default function BlogList() {
   return (
     <div className="grid gap-6 md:grid-cols-3">
       {posts.map((post) => (
-        <article key={post.slug} className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        <article key={post.slug} className="reveal flex flex-col overflow-hidden rounded-md border border-edge bg-surface shadow-card transition-all duration-300 hover:-translate-y-1 hover:border-edge-strong hover:shadow-elevated">
           {post.cover_image_url && (
             <img src={post.cover_image_url} alt={post.title} className="h-44 w-full object-cover" loading="lazy" />
           )}
           <div className="flex flex-1 flex-col justify-between p-5">
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-brand-purple">{post.author}</p>
-              <h2 className="mt-2 text-base font-black text-brand-navy">{post.title}</h2>
-              <p className="mt-2 line-clamp-3 text-xs leading-6 text-brand-muted">{post.meta_description || post.content}</p>
+              <p className="kicker !text-ink-accent">{post.author}</p>
+              <h2 className="mt-2 font-display text-lg font-semibold text-ink-primary">{post.title}</h2>
+              <p className="mt-2 line-clamp-3 text-xs leading-6 text-ink-secondary">{post.meta_description || post.content}</p>
             </div>
-            <Link href={`/blog/${post.slug}`} className="mt-5 inline-flex items-center gap-1 text-xs font-bold text-brand-purple hover:underline">
+            <Link href={`/blog/${post.slug}`} className="mt-5 inline-flex items-center gap-1 text-xs font-medium text-ink-accent hover:underline">
               Read article <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </div>

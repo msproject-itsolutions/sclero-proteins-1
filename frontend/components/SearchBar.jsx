@@ -132,7 +132,7 @@ export default function SearchBar({ onSearch = null, showFullResults = false }) 
     <div className="relative w-full max-w-md">
       {/* Search Input */}
       <div className="relative flex items-center">
-        <Search className="absolute left-3 h-4 w-4 text-brand-muted pointer-events-none" />
+        <Search className="absolute left-3 h-4 w-4 text-ink-muted pointer-events-none" />
         <input
           ref={inputRef}
           type="text"
@@ -141,7 +141,7 @@ export default function SearchBar({ onSearch = null, showFullResults = false }) 
           onKeyDown={handleKeyDown}
           onFocus={() => query.length >= 2 && suggestions.length > 0 && setShowDropdown(true)}
           placeholder="Search products, benefits, SKU..."
-          className="w-full pl-10 pr-10 py-2.5 text-sm border border-slate-200 rounded-lg bg-white focus:border-brand-purple focus:outline-none focus:ring-1 focus:ring-brand-purple/20"
+          className="w-full pl-10 pr-10 py-2.5 text-sm border border-edge rounded-sm bg-surface focus:border-ink-primary focus:outline-none focus:ring-1 focus:ring-ink-primary/10"
         />
         {query && (
           <button
@@ -150,13 +150,13 @@ export default function SearchBar({ onSearch = null, showFullResults = false }) 
               setSuggestions([]);
               setShowDropdown(false);
             }}
-            className="absolute right-3 p-1 text-brand-muted hover:text-brand-navy"
+            className="absolute right-3 p-1 text-ink-muted hover:text-ink-primary"
           >
             <X className="h-4 w-4" />
           </button>
         )}
         {isLoading && (
-          <Loader className="absolute right-3 h-4 w-4 animate-spin text-brand-purple" />
+          <Loader className="absolute right-3 h-4 w-4 animate-spin text-brand-accent" />
         )}
       </div>
 
@@ -164,7 +164,7 @@ export default function SearchBar({ onSearch = null, showFullResults = false }) 
       {showDropdown && suggestions.length > 0 && (
         <div
           ref={dropdownRef}
-          className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 overflow-hidden"
+          className="absolute top-full left-0 right-0 mt-1 bg-surface border border-edge rounded-md shadow-overlay z-50 overflow-hidden"
         >
           <div className="max-h-72 overflow-y-auto">
             {suggestions.map((suggestion, index) => (
@@ -172,16 +172,16 @@ export default function SearchBar({ onSearch = null, showFullResults = false }) 
                 key={suggestion.sku}
                 onClick={() => selectProduct(suggestion)}
                 onMouseEnter={() => setActiveIndex(index)}
-                className={`w-full flex items-start gap-3 px-4 py-3 text-left border-b border-slate-100 last:border-b-0 transition-colors ${
-                  activeIndex === index ? 'bg-brand-purple/10' : 'hover:bg-slate-50'
+                className={`w-full flex items-start gap-3 px-4 py-3 text-left border-b border-edge-subtle last:border-b-0 transition-colors ${
+                  activeIndex === index ? 'bg-surface-muted' : 'hover:bg-surface-muted/60'
                 }`}
               >
-                <Search className="h-4 w-4 mt-0.5 text-brand-muted shrink-0" />
+                <Search className="h-4 w-4 mt-0.5 text-ink-subtle shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium text-sm text-brand-navy truncate">
+                  <div className="font-medium text-sm text-ink-primary truncate">
                     {suggestion.name}
                   </div>
-                  <div className="text-xs text-brand-muted">
+                  <div className="text-xs text-ink-muted">
                     {suggestion.short_benefit || suggestion.sku}
                   </div>
                 </div>
@@ -193,11 +193,11 @@ export default function SearchBar({ onSearch = null, showFullResults = false }) 
 
       {/* No Results Message */}
       {showDropdown && query.length >= 2 && suggestions.length === 0 && !isLoading && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 p-4 text-center">
-          <p className="text-sm text-brand-muted">No products found for "{query}"</p>
+        <div className="absolute top-full left-0 right-0 mt-1 bg-surface border border-edge rounded-md shadow-overlay z-50 p-4 text-center">
+          <p className="text-sm text-ink-muted">No products found for "{query}"</p>
           <button
             onClick={handleSearch}
-            className="mt-2 text-xs font-medium text-brand-purple hover:text-brand-purple/80"
+            className="mt-2 text-xs font-medium text-ink-accent underline-offset-4 hover:underline"
           >
             Search anyway →
           </button>

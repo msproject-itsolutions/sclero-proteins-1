@@ -39,23 +39,23 @@ function MagicLinkContent() {
     <div className="mx-auto flex min-h-[60vh] max-w-md flex-col items-center justify-center px-4 text-center">
       {status === 'verifying' && (
         <>
-          <Loader2 className="mb-4 h-10 w-10 animate-spin text-brand-purple" />
-          <h1 className="text-xl font-black text-brand-navy">Signing you in…</h1>
-          <p className="mt-1 text-sm text-brand-muted">Verifying your magic link.</p>
+          <Loader2 className="mb-4 h-10 w-10 animate-spin text-brand-accent" />
+          <h1 className="text-heading-2">Signing you in…</h1>
+          <p className="mt-1 text-sm text-ink-secondary">Verifying your magic link.</p>
         </>
       )}
       {status === 'success' && (
         <>
-          <CheckCircle2 className="mb-4 h-10 w-10 text-brand-success" />
-          <h1 className="text-xl font-black text-brand-navy">You're in!</h1>
-          <p className="mt-1 text-sm text-brand-muted">Taking you to your account…</p>
+          <CheckCircle2 className="mb-4 h-10 w-10 text-ink-success" />
+          <h1 className="text-heading-2">You're in!</h1>
+          <p className="mt-1 text-sm text-ink-secondary">Taking you to your account…</p>
         </>
       )}
       {status === 'error' && (
         <>
-          <AlertCircle className="mb-4 h-10 w-10 text-brand-danger" />
-          <h1 className="text-xl font-black text-brand-navy">Link not valid</h1>
-          <p className="mt-1 text-sm text-brand-muted">{message}</p>
+          <AlertCircle className="mb-4 h-10 w-10 text-ink-danger" />
+          <h1 className="text-heading-2">Link not valid</h1>
+          <p className="mt-1 text-sm text-ink-secondary">{message}</p>
           <Link href="/account" className="btn-primary mt-5 px-5 py-2.5 text-xs uppercase tracking-wider">
             Back to sign in
           </Link>
@@ -70,8 +70,8 @@ export default function MagicLinkPage() {
     <StoreShell showFooter={false}>
       <Suspense fallback={
         <div className="mx-auto flex min-h-[60vh] max-w-md flex-col items-center justify-center px-4 text-center">
-          <Loader2 className="mb-4 h-10 w-10 animate-spin text-brand-purple" />
-          <h1 className="text-xl font-black text-brand-navy">Loading…</h1>
+          <Loader2 className="mb-4 h-10 w-10 animate-spin text-brand-accent" />
+          <h1 className="text-heading-2">Loading…</h1>
         </div>
       }>
         <MagicLinkContent />

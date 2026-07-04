@@ -45,15 +45,15 @@ function DietaryBadgeRow({ tags = [], max = 3 }) {
           <span
             key={slug}
             title={meta.label}
-            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-brand-muted"
+            className="inline-flex items-center gap-1 rounded-xs bg-surface-muted px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-luxe text-ink-accent"
           >
-            <Icon className="h-2.5 w-2.5 text-brand-success" />
+            <Icon className="h-2.5 w-2.5 text-brand-accent" />
             <span>{meta.label}</span>
           </span>
         );
       })}
       {extra > 0 && (
-        <span className="text-[9px] font-bold text-brand-muted">+{extra} more</span>
+        <span className="text-[9px] font-medium text-ink-muted">+{extra} more</span>
       )}
     </div>
   );
@@ -143,22 +143,22 @@ export default function ProductCard({
   if (variant === 'compact') {
     // Compact card for grid display
     return (
-      <div className="glass-panel glass-panel-hover relative flex flex-col justify-between overflow-hidden rounded-2xl p-4 group">
+      <div className="reveal group relative flex flex-col justify-between overflow-hidden rounded-md border border-edge bg-surface p-4 shadow-card transition-all duration-300 hover:-translate-y-1 hover:border-edge-strong hover:shadow-elevated">
         {/* Image */}
-        <div className="relative mb-3 flex h-40 w-full items-center justify-center overflow-hidden rounded-xl border border-slate-100 bg-slate-50">
+        <div className="relative mb-3 flex h-40 w-full items-center justify-center overflow-hidden rounded-sm border border-edge-subtle bg-surface-muted">
           {product.thumbnail ? (
             <img
               src={product.thumbnail}
               alt={product.name}
-              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+              className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
             />
           ) : (
-            <Info className="h-8 w-8 text-slate-300" />
+            <Info className="h-8 w-8 text-ink-subtle" />
           )}
 
           {/* Discount Badge */}
           {discountPercent > 0 && (
-            <div className="absolute right-2 top-2 rounded-full bg-brand-danger text-white px-2 py-1 text-[10px] font-bold">
+            <div className="absolute right-2 top-2 rounded-xs bg-white/90 px-2 py-1 text-[10px] font-medium uppercase tracking-luxe text-ink-accent">
               -{discountPercent}%
             </div>
           )}
@@ -166,45 +166,45 @@ export default function ProductCard({
           {/* Stock Badge */}
           {stock === 0 && (
             <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-              <span className="text-white font-bold text-sm">Out of Stock</span>
+              <span className="text-white font-medium text-sm">Out of Stock</span>
             </div>
           )}
         </div>
 
         {/* Rating & Reviews */}
         <div className="mb-2 flex items-center gap-1">
-          <Star className="h-3 w-3 fill-brand-orange text-brand-orange" />
-          <span className="text-[10px] font-bold text-brand-navy">
+          <Star className="h-3 w-3 fill-brand-accent text-brand-accent" />
+          <span className="text-[10px] font-medium text-ink-primary">
             {product.average_rating || 5.0}
           </span>
-          <span className="text-[9px] text-brand-muted">
+          <span className="text-[9px] text-ink-subtle">
             ({product.review_count || 0})
           </span>
         </div>
 
         {/* Name */}
-        <h3 className="mb-1 line-clamp-2 text-sm font-bold text-brand-navy">
+        <h3 className="mb-1 line-clamp-2 font-display text-[16px] font-semibold leading-tight text-ink-primary">
           {product.name}
         </h3>
 
         {/* Short benefit */}
         {product.short_benefit && (
-          <p className="mb-1.5 line-clamp-2 text-xs text-brand-muted">{product.short_benefit}</p>
+          <p className="mb-1.5 line-clamp-2 text-xs text-ink-secondary">{product.short_benefit}</p>
         )}
 
         {/* Price */}
         <div className="mb-2 flex items-baseline gap-2">
           {promoPriceVal ? (
             <>
-              <span className="text-lg font-black text-brand-purple">
+              <span className="font-display text-[17px] font-medium text-ink-accent">
                 {currencySymbol}{promoPriceVal.toFixed(2)}
               </span>
-              <span className="text-[10px] text-brand-muted line-through">
+              <span className="text-[10px] text-ink-subtle line-through">
                 {currencySymbol}{priceVal.toFixed(2)}
               </span>
             </>
           ) : (
-            <span className="text-lg font-black text-brand-navy">
+            <span className="font-display text-[17px] font-medium text-ink-primary">
               {currencySymbol}{priceVal.toFixed(2)}
             </span>
           )}
@@ -218,7 +218,7 @@ export default function ProductCard({
           <button
             onClick={() => onAddToCart(product)}
             disabled={stock === 0 || unavailable}
-            className="flex-1 btn-primary py-2 text-xs uppercase font-bold disabled:opacity-50"
+            className="flex-1 btn-primary py-2 text-xs disabled:opacity-50"
           >
             {unavailable ? 'Unavailable here' : 'Add to cart'}
           </button>
@@ -226,10 +226,10 @@ export default function ProductCard({
             onClick={handleWishlistToggle}
             disabled={wishlistLoading}
             aria-label={isWishlisted ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`}
-            className="px-3 py-2 rounded-lg border border-slate-200 hover:border-brand-purple hover:bg-brand-purple/5 transition-colors disabled:opacity-60"
+            className="px-3 py-2 rounded-sm border border-edge hover:border-edge-strong hover:bg-surface-muted transition-colors disabled:opacity-60"
           >
             <Heart
-              className={`h-4 w-4 ${isWishlisted ? 'fill-brand-purple text-brand-purple' : 'text-brand-muted'}`}
+              className={`h-4 w-4 ${isWishlisted ? 'fill-brand-accent text-brand-accent' : 'text-ink-muted'}`}
             />
           </button>
         </div>
@@ -239,26 +239,26 @@ export default function ProductCard({
 
   // Standard card
   return (
-    <div className="glass-panel glass-panel-hover relative flex flex-col justify-between overflow-hidden rounded-3xl p-5 group">
+    <div className="reveal group relative flex flex-col overflow-hidden rounded-md border border-edge bg-surface shadow-card transition-all duration-300 hover:-translate-y-1 hover:border-edge-strong hover:shadow-elevated">
       {/* Top Badges */}
-      <div className="absolute right-4 top-4 z-10 flex flex-col gap-2">
+      <div className="absolute right-4 top-4 z-10 flex flex-col items-end gap-2">
         {discountPercent > 0 && (
-          <span className="inline-flex items-center rounded-full bg-brand-danger text-white px-3 py-1 text-[10px] font-bold">
+          <span className="inline-flex items-center rounded-xs bg-white/90 px-2 py-1 text-[10px] font-medium uppercase tracking-luxe text-ink-accent">
             Save {discountPercent}%
           </span>
         )}
 
         {stock === 0 ? (
-          <span className="inline-flex items-center gap-1 rounded-full border border-brand-danger/20 bg-brand-danger/10 px-2.5 py-0.5 text-[10px] font-bold text-brand-danger">
+          <span className="inline-flex items-center gap-1 rounded-xs bg-white/90 px-2 py-1 text-[10px] font-medium uppercase tracking-luxe text-ink-danger">
             OUT OF STOCK
           </span>
         ) : stock <= 15 ? (
-          <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-bold text-amber-600">
+          <span className="inline-flex items-center gap-1 rounded-xs bg-white/90 px-2 py-1 text-[10px] font-medium uppercase tracking-luxe text-brand-warning">
             <AlertTriangle className="h-3 w-3" />
             LOW STOCK
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1 rounded-full border border-brand-success/20 bg-brand-success/10 px-2.5 py-0.5 text-[10px] font-bold text-brand-success">
+          <span className="inline-flex items-center gap-1 rounded-xs bg-white/90 px-2 py-1 text-[10px] font-medium uppercase tracking-luxe text-ink-success">
             <CheckCircle className="h-3 w-3" />
             IN STOCK
           </span>
@@ -266,106 +266,108 @@ export default function ProductCard({
       </div>
 
       {/* Image */}
-      <div className="relative mb-4 flex h-48 w-full items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-slate-50">
+      <div className="relative aspect-[4/5] w-full overflow-hidden bg-surface-muted">
         {product.thumbnail ? (
           <img
             src={product.thumbnail}
             alt={product.name}
-            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+            className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
           />
         ) : (
-          <div className="flex flex-col items-center justify-center text-slate-300">
+          <div className="flex h-full w-full flex-col items-center justify-center text-ink-subtle">
             <Info className="mb-2 h-10 w-10" />
             <span className="text-xs">No image available</span>
           </div>
         )}
       </div>
 
-      {/* Rating & Reviews */}
-      <div className="mb-2 flex items-center gap-2">
-        <div className="flex items-center gap-1">
-          <Star className="h-3.5 w-3.5 fill-brand-orange text-brand-orange" />
-          <span className="text-xs font-bold text-brand-navy">
-            {product.average_rating || 5.0}
+      <div className="flex flex-1 flex-col p-6">
+        {/* Rating & Reviews */}
+        <div className="mb-2 flex items-center gap-2">
+          <div className="flex items-center gap-1">
+            <Star className="h-3.5 w-3.5 fill-brand-accent text-brand-accent" />
+            <span className="text-xs font-medium text-ink-primary">
+              {product.average_rating || 5.0}
+            </span>
+          </div>
+          <span className="text-[10px] text-ink-subtle">
+            {product.review_count ? `${product.review_count} reviews` : 'New product'}
           </span>
         </div>
-        <span className="text-[10px] text-brand-muted">
-          {product.review_count ? `${product.review_count} reviews` : 'New product'}
-        </span>
-      </div>
 
-      {/* Name */}
-      <h3 className="mb-1 line-clamp-2 text-base font-bold text-brand-navy">
-        {product.name}
-      </h3>
+        {/* Name */}
+        <h3 className="mb-1 line-clamp-2 font-display text-[20px] font-semibold leading-tight text-ink-primary">
+          {product.name}
+        </h3>
 
-      {/* Short benefit */}
-      {product.short_benefit && (
-        <p className="mb-2 line-clamp-2 text-xs text-brand-muted">{product.short_benefit}</p>
-      )}
-
-      {/* SKU & Key Specs */}
-      <div className="mb-3 space-y-1">
-        <p className="font-mono text-[10px] uppercase text-brand-muted">
-          SKU: {product.sku}
-        </p>
-        {product.serving_size && (
-          <p className="text-[11px] text-brand-muted">
-            {product.serving_size} • {product.servings_per_container} servings
-          </p>
+        {/* Short benefit */}
+        {product.short_benefit && (
+          <p className="mb-2 line-clamp-2 text-[13px] text-ink-secondary">{product.short_benefit}</p>
         )}
-      </div>
 
-      {/* Trust Badges */}
-      {product.certifications && product.certifications.length > 0 && (
-        <div className="mb-3">
-          <CompactTrustBadges certifications={product.certifications} />
+        {/* SKU & Key Specs */}
+        <div className="mb-3 space-y-1">
+          <p className="font-mono text-[10px] uppercase text-ink-subtle">
+            SKU: {product.sku}
+          </p>
+          {product.serving_size && (
+            <p className="text-[11px] text-ink-muted">
+              {product.serving_size} • {product.servings_per_container} servings
+            </p>
+          )}
         </div>
-      )}
 
-      {/* Price */}
-      <div className="mb-4">
-        <div className="flex items-baseline gap-2">
-          {promoPriceVal ? (
-            <>
-              <span className="text-xl font-black text-brand-purple">
-                {currencySymbol}
-                {promoPriceVal.toFixed(2)}
-              </span>
-              <span className="text-xs text-brand-muted line-through">
+        {/* Trust Badges */}
+        {product.certifications && product.certifications.length > 0 && (
+          <div className="mb-3">
+            <CompactTrustBadges certifications={product.certifications} />
+          </div>
+        )}
+
+        {/* Price */}
+        <div className="mb-4">
+          <div className="flex items-baseline gap-2">
+            {promoPriceVal ? (
+              <>
+                <span className="font-display text-[17px] font-medium text-ink-accent">
+                  {currencySymbol}
+                  {promoPriceVal.toFixed(2)}
+                </span>
+                <span className="text-xs text-ink-subtle line-through">
+                  {currencySymbol}
+                  {priceVal.toFixed(2)}
+                </span>
+              </>
+            ) : (
+              <span className="font-display text-[17px] font-medium text-ink-primary">
                 {currencySymbol}
                 {priceVal.toFixed(2)}
               </span>
-            </>
-          ) : (
-            <span className="text-xl font-black text-brand-navy">
-              {currencySymbol}
-              {priceVal.toFixed(2)}
-            </span>
-          )}
+            )}
+          </div>
+          <span className="text-[10px] text-ink-subtle">{taxNote}</span>
+          {/* Dietary badges */}
+          <DietaryBadgeRow tags={product.dietary_tags} max={3} />
         </div>
-        <span className="text-[10px] text-brand-muted">{taxNote}</span>
-        {/* Dietary badges */}
-        <DietaryBadgeRow tags={product.dietary_tags} max={3} />
-      </div>
 
-      {/* CTAs */}
-      <div className="flex flex-col gap-2">
-        <button
-          type="button"
-          onClick={() => onAddToCart(product)}
-          disabled={stock === 0 || unavailable}
-          className="btn-primary w-full py-2.5 text-xs uppercase tracking-wider disabled:opacity-50"
-        >
-          {unavailable ? 'Not available in your region' : stock === 0 ? 'Out of stock' : 'Add to cart'}
-        </button>
-        <button
-          type="button"
-          onClick={() => onViewDetails(product.sku)}
-          className="btn-ghost w-full py-2.5 text-xs"
-        >
-          View details
-        </button>
+        {/* CTAs */}
+        <div className="mt-auto flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => onAddToCart(product)}
+            disabled={stock === 0 || unavailable}
+            className="btn-primary w-full py-2.5 text-xs disabled:opacity-50"
+          >
+            {unavailable ? 'Not available in your region' : stock === 0 ? 'Out of stock' : 'Add to cart'}
+          </button>
+          <button
+            type="button"
+            onClick={() => onViewDetails(product.sku)}
+            className="btn-ghost w-full py-2.5 text-xs"
+          >
+            View details
+          </button>
+        </div>
       </div>
     </div>
   );

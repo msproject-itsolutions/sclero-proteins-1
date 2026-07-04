@@ -61,18 +61,18 @@ const STATES_BY_COUNTRY = {
   ]
 };
 
-const LABEL = 'block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-1';
-const INPUT = 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400 transition';
-const CARD  = 'rounded-2xl border border-slate-200 bg-white overflow-hidden';
-const CH    = 'flex items-center justify-between px-5 py-3.5 border-b border-slate-100 bg-slate-50/60';
+const LABEL = 'kicker block mb-1';
+const INPUT = 'w-full rounded-sm border border-edge bg-white px-3 py-2.5 text-sm text-ink-primary placeholder:text-ink-subtle focus:outline-none focus:ring-2 focus:ring-edge-focus/30 focus:border-ink-primary transition';
+const CARD  = 'rounded-lg border border-edge bg-white shadow-card overflow-hidden';
+const CH    = 'flex items-center justify-between px-5 py-3.5 border-b border-edge-subtle bg-surface-muted';
 
 /* ─── Pill chip ─── */
 function Chip({ label, onRemove }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2.5 py-1 text-xs font-semibold text-violet-700">
+    <span className="inline-flex items-center gap-1 rounded-xs bg-surface-muted px-2.5 py-1 text-xs font-semibold text-ink-accent">
       {label}
       {onRemove && (
-        <button type="button" onClick={onRemove} className="ml-0.5 hover:text-red-500 transition">
+        <button type="button" onClick={onRemove} className="ml-0.5 hover:text-ink-danger transition">
           <X className="h-3 w-3" />
         </button>
       )}
@@ -85,12 +85,12 @@ function RateTypeBadge({ type }) {
   const t = RATE_TYPES.find(r => r.value === type) || RATE_TYPES[0];
   const Icon = t.icon;
   const colors = {
-    FLAT: 'bg-blue-50 text-blue-700', WEIGHT: 'bg-amber-50 text-amber-700',
-    PRICE: 'bg-green-50 text-green-700', QTY: 'bg-purple-50 text-purple-700',
-    FREE: 'bg-emerald-50 text-emerald-700', CUSTOM: 'bg-slate-100 text-slate-600',
+    FLAT: 'bg-blue-50 text-blue-700', WEIGHT: 'bg-amber-50 text-ink-accent',
+    PRICE: 'bg-brand-success/10 text-ink-success', QTY: 'bg-surface-muted text-ink-accent',
+    FREE: 'bg-brand-success/10 text-ink-success', CUSTOM: 'bg-surface-muted text-ink-secondary',
   };
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${colors[type] || colors.FLAT}`}>
+    <span className={`inline-flex items-center gap-1 rounded-xs px-2 py-0.5 text-[10px] font-semibold ${colors[type] || colors.FLAT}`}>
       <Icon className="h-3 w-3" />{t.label}
     </span>
   );
@@ -116,17 +116,17 @@ function RateEditorModal({ rate, zoneId, onSave, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 backdrop-blur-sm p-0 sm:p-4">
-      <div className="w-full sm:max-w-xl bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-surface-overlay backdrop-blur-sm p-0 sm:p-4">
+      <div className="w-full sm:max-w-xl bg-white rounded-t-lg sm:rounded-lg shadow-overlay border border-edge overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 flex-shrink-0">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-edge flex-shrink-0">
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-100">
-              <Truck className="h-4 w-4 text-violet-600" />
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-muted">
+              <Truck className="h-4 w-4 text-ink-accent" />
             </div>
-            <h3 className="text-base font-black text-slate-800">{r.id ? 'Edit Rate' : 'New Shipping Rate'}</h3>
+            <h3 className="text-base font-semibold text-ink-primary">{r.id ? 'Edit Rate' : 'New Shipping Rate'}</h3>
           </div>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 transition"><X className="h-4 w-4" /></button>
+          <button onClick={onClose} className="rounded-sm p-1.5 text-ink-subtle hover:bg-surface-muted transition"><X className="h-4 w-4" /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
@@ -155,10 +155,10 @@ function RateEditorModal({ rate, zoneId, onSave, onClose }) {
                 const active = r.rate_type === t.value;
                 return (
                   <button key={t.value} type="button" onClick={() => setR({...r, rate_type: t.value})}
-                    className={`flex flex-col items-start gap-1 rounded-xl border p-2.5 text-left transition
-                      ${active ? 'border-violet-500 bg-violet-50' : 'border-slate-200 bg-white hover:border-violet-300'}`}>
-                    <Icon className={`h-4 w-4 ${active ? 'text-violet-600' : 'text-slate-400'}`} />
-                    <span className={`text-[11px] font-bold ${active ? 'text-violet-700' : 'text-slate-600'}`}>{t.label}</span>
+                    className={`flex flex-col items-start gap-1 rounded-md border p-2.5 text-left transition
+                      ${active ? 'border-ink-primary bg-surface-muted' : 'border-edge bg-white hover:border-edge-strong'}`}>
+                    <Icon className={`h-4 w-4 ${active ? 'text-ink-accent' : 'text-ink-subtle'}`} />
+                    <span className={`text-[11px] font-semibold ${active ? 'text-ink-accent' : 'text-ink-secondary'}`}>{t.label}</span>
                   </button>
                 );
               })}
@@ -185,7 +185,7 @@ function RateEditorModal({ rate, zoneId, onSave, onClose }) {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Free Shipping Above (£) <span className="normal-case font-normal text-slate-400">optional</span></label>
+              <label className={LABEL}>Free Shipping Above (£) <span className="normal-case font-normal text-ink-subtle">optional</span></label>
               <input type="number" step="0.01" min="0" value={r.free_above || ''} onChange={e => setR({...r, free_above: e.target.value})} className={INPUT} placeholder="e.g. 50.00" />
             </div>
             <div>
@@ -195,7 +195,7 @@ function RateEditorModal({ rate, zoneId, onSave, onClose }) {
           </div>
 
           <div>
-            <label className={LABEL}>Remote/Surcharge Postcodes <span className="normal-case font-normal text-slate-400">comma-separated</span></label>
+            <label className={LABEL}>Remote/Surcharge Postcodes <span className="normal-case font-normal text-ink-subtle">comma-separated</span></label>
             <input value={r.surcharge_postcodes || ''} onChange={e => setR({...r, surcharge_postcodes: e.target.value})} className={INPUT} placeholder="e.g. AB10, IV1, KW1" />
           </div>
 
@@ -204,26 +204,26 @@ function RateEditorModal({ rate, zoneId, onSave, onClose }) {
             <textarea value={r.description || ''} onChange={e => setR({...r, description: e.target.value})} rows={2} className={INPUT + ' resize-none'} placeholder="Staff notes…" />
           </div>
 
-          <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 cursor-pointer">
-            <input type="checkbox" checked={r.is_active !== false} onChange={e => setR({...r, is_active: e.target.checked})} className="accent-violet-600 h-4 w-4" />
+          <label className="flex items-center gap-2 text-sm font-semibold text-ink-secondary cursor-pointer">
+            <input type="checkbox" checked={r.is_active !== false} onChange={e => setR({...r, is_active: e.target.checked})} className="accent-ink-primary h-4 w-4" />
             Rate is active
           </label>
 
           {err && (
-            <div className="flex items-center gap-2 rounded-xl bg-red-50 border border-red-200 px-3 py-2.5">
-              <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
-              <p className="text-xs text-red-700 font-medium">{err}</p>
+            <div className="flex items-center gap-2 rounded-md bg-red-50 border border-red-200 px-3 py-2.5">
+              <AlertCircle className="h-4 w-4 text-ink-danger flex-shrink-0" />
+              <p className="text-xs text-ink-danger font-medium">{err}</p>
             </div>
           )}
         </div>
 
-        <div className="flex gap-2 border-t border-slate-200 bg-white px-5 py-3.5 flex-shrink-0">
+        <div className="flex gap-2 border-t border-edge bg-white px-5 py-3.5 flex-shrink-0">
           <button onClick={handle} disabled={saving}
-            className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-violet-600 py-2.5 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-60 transition">
+            className="flex-1 inline-flex items-center justify-center gap-2 rounded-md bg-ink-primary py-2.5 text-sm font-semibold text-white hover:bg-ink-primary/90 disabled:opacity-60 transition">
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
             {saving ? 'Saving…' : r.id ? 'Update Rate' : 'Add Rate'}
           </button>
-          <button onClick={onClose} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">Cancel</button>
+          <button onClick={onClose} className="rounded-md border border-edge px-5 py-2.5 text-sm font-semibold text-ink-secondary hover:bg-surface-muted transition">Cancel</button>
         </div>
       </div>
     </div>
@@ -290,20 +290,20 @@ function ZoneEditorPanel({ zone, regions, onSave, onClose }) {
   };
 
   return (
-    <div className="fixed inset-y-0 right-0 left-0 md:left-[280px] lg:left-[288px] top-0 md:top-[65px] z-30 bg-slate-50 overflow-hidden flex flex-col">
+    <div className="fixed inset-y-0 right-0 left-0 md:left-[280px] lg:left-[288px] top-0 md:top-[65px] z-30 bg-surface-muted overflow-hidden flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 sm:px-6 flex-shrink-0">
+      <div className="flex items-center justify-between border-b border-edge bg-white px-4 py-3 sm:px-6 flex-shrink-0">
         <div className="flex items-center gap-3">
-          <button onClick={onClose} className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50 transition">
+          <button onClick={onClose} className="rounded-sm border border-edge p-2 text-ink-muted hover:bg-surface-muted transition">
             <ChevronLeft className="h-4 w-4" />
           </button>
           <div>
-            <p className="text-xs font-semibold uppercase text-slate-400 tracking-wide">Shipping</p>
-            <h2 className="text-base font-black text-slate-800">{isNew ? 'New Shipping Zone' : `Edit: ${zone.name}`}</h2>
+            <p className="text-xs font-semibold uppercase text-ink-subtle tracking-wide">Shipping</p>
+            <h2 className="text-base font-semibold text-ink-primary">{isNew ? 'New Shipping Zone' : `Edit: ${zone.name}`}</h2>
           </div>
         </div>
         <button onClick={handle} disabled={saving}
-          className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-60 transition">
+          className="inline-flex items-center gap-2 rounded-md bg-ink-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-ink-primary/90 disabled:opacity-60 transition">
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           {saving ? 'Saving…' : 'Save Zone'}
         </button>
@@ -311,8 +311,8 @@ function ZoneEditorPanel({ zone, regions, onSave, onClose }) {
 
       {err && (
         <div className="flex items-center gap-2 border-b border-red-200 bg-red-50 px-6 py-2.5 flex-shrink-0">
-          <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
-          <p className="text-xs text-red-700 font-medium">{err}</p>
+          <AlertCircle className="h-4 w-4 text-ink-danger flex-shrink-0" />
+          <p className="text-xs text-ink-danger font-medium">{err}</p>
         </div>
       )}
 
@@ -321,7 +321,7 @@ function ZoneEditorPanel({ zone, regions, onSave, onClose }) {
 
           {/* Basic info */}
           <div className={CARD}>
-            <div className={CH}><p className="text-xs font-bold uppercase text-slate-500 tracking-wide">Zone Details</p></div>
+            <div className={CH}><p className="text-xs font-semibold uppercase text-ink-muted tracking-wide">Zone Details</p></div>
             <div className="px-5 py-4 space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -338,11 +338,11 @@ function ZoneEditorPanel({ zone, regions, onSave, onClose }) {
                 </div>
               </div>
               <div>
-                <label className={LABEL}>Description <span className="normal-case font-normal text-slate-400">optional</span></label>
+                <label className={LABEL}>Description <span className="normal-case font-normal text-ink-subtle">optional</span></label>
                 <input value={z.description || ''} onChange={e => setZ({...z, description: e.target.value})} className={INPUT} placeholder="Staff-facing notes about this zone…" />
               </div>
-              <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 cursor-pointer select-none">
-                <input type="checkbox" checked={z.is_active} onChange={e => setZ({...z, is_active: e.target.checked})} className="accent-violet-600 h-4 w-4" />
+              <label className="flex items-center gap-2 text-sm font-semibold text-ink-secondary cursor-pointer select-none">
+                <input type="checkbox" checked={z.is_active} onChange={e => setZ({...z, is_active: e.target.checked})} className="accent-ink-primary h-4 w-4" />
                 Zone is active
               </label>
             </div>
@@ -352,11 +352,11 @@ function ZoneEditorPanel({ zone, regions, onSave, onClose }) {
           <div className={CARD}>
             <div className={CH}>
               <div className="flex items-center gap-2">
-                <Globe className="h-4 w-4 text-slate-400" />
-                <p className="text-xs font-bold uppercase text-slate-500 tracking-wide">Countries</p>
-                <span className="text-[10px] normal-case font-normal text-slate-400">(ISO-2 codes)</span>
+                <Globe className="h-4 w-4 text-ink-subtle" />
+                <p className="text-xs font-semibold uppercase text-ink-muted tracking-wide">Countries</p>
+                <span className="text-[10px] normal-case font-normal text-ink-subtle">(ISO-2 codes)</span>
               </div>
-              <label className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer transition">
+              <label className="inline-flex items-center gap-1.5 rounded-sm border border-edge bg-white px-3 py-1.5 text-xs font-semibold text-ink-secondary hover:bg-surface-muted cursor-pointer transition">
                 <Upload className="h-3.5 w-3.5" /> Import CSV
                 <input ref={fileRef} type="file" accept=".csv,.txt" onChange={handleCSV} className="hidden" />
               </label>
@@ -378,11 +378,11 @@ function ZoneEditorPanel({ zone, regions, onSave, onClose }) {
                   ))}
                 </datalist>
                 <button type="button" onClick={() => addChip('countries', countryInput, setCountryInput)}
-                  className="rounded-lg bg-violet-600 px-4 text-white text-sm font-bold hover:bg-violet-700 transition flex-shrink-0">Add</button>
+                  className="btn-primary px-4 text-sm flex-shrink-0">Add</button>
               </div>
               {z.countries.length > 0
                 ? <div className="flex flex-wrap gap-1.5">{z.countries.map((c, i) => <Chip key={i} label={c} onRemove={() => removeChip('countries', i)} />)}</div>
-                : <p className="text-xs text-slate-400 italic">No countries added — leave empty to match all countries (global fallback zone).</p>}
+                : <p className="text-xs text-ink-subtle italic">No countries added — leave empty to match all countries (global fallback zone).</p>}
             </div>
           </div>
 
@@ -390,9 +390,9 @@ function ZoneEditorPanel({ zone, regions, onSave, onClose }) {
           <div className={CARD}>
             <div className={CH}>
               <div className="flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-slate-400" />
-                <p className="text-xs font-bold uppercase text-slate-500 tracking-wide">States / Provinces</p>
-                <span className="text-[10px] normal-case font-normal text-slate-400">optional</span>
+                <MapPin className="h-4 w-4 text-ink-subtle" />
+                <p className="text-xs font-semibold uppercase text-ink-muted tracking-wide">States / Provinces</p>
+                <span className="text-[10px] normal-case font-normal text-ink-subtle">optional</span>
               </div>
             </div>
             <div className="px-5 py-4 space-y-3">
@@ -411,7 +411,7 @@ function ZoneEditorPanel({ zone, regions, onSave, onClose }) {
                   {STATES_BY_COUNTRY.US.map(s => <option key={s} value={s}>{s} (US)</option>)}
                 </datalist>
                 <button type="button" onClick={() => addChip('states', stateInput, setStateInput)}
-                  className="rounded-lg bg-violet-600 px-4 text-white text-sm font-bold hover:bg-violet-700 transition flex-shrink-0">Add</button>
+                  className="btn-primary px-4 text-sm flex-shrink-0">Add</button>
               </div>
               {z.states.length > 0 && <div className="flex flex-wrap gap-1.5">{z.states.map((s, i) => <Chip key={i} label={s} onRemove={() => removeChip('states', i)} />)}</div>}
             </div>
@@ -421,9 +421,9 @@ function ZoneEditorPanel({ zone, regions, onSave, onClose }) {
           <div className={CARD}>
             <div className={CH}>
               <div className="flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-slate-400" />
-                <p className="text-xs font-bold uppercase text-slate-500 tracking-wide">Cities</p>
-                <span className="text-[10px] normal-case font-normal text-slate-400">optional</span>
+                <MapPin className="h-4 w-4 text-ink-subtle" />
+                <p className="text-xs font-semibold uppercase text-ink-muted tracking-wide">Cities</p>
+                <span className="text-[10px] normal-case font-normal text-ink-subtle">optional</span>
               </div>
             </div>
             <div className="px-5 py-4 space-y-3">
@@ -432,7 +432,7 @@ function ZoneEditorPanel({ zone, regions, onSave, onClose }) {
                   onKeyDown={e => e.key === 'Enter' && addChip('cities', cityInput, setCityInput)}
                   className={INPUT} placeholder="City name, e.g. London, Mumbai, Manchester" />
                 <button type="button" onClick={() => addChip('cities', cityInput, setCityInput)}
-                  className="rounded-lg bg-violet-600 px-4 text-white text-sm font-bold hover:bg-violet-700 transition flex-shrink-0">Add</button>
+                  className="btn-primary px-4 text-sm flex-shrink-0">Add</button>
               </div>
               {z.cities.length > 0 && <div className="flex flex-wrap gap-1.5">{z.cities.map((c, i) => <Chip key={i} label={c} onRemove={() => removeChip('cities', i)} />)}</div>}
             </div>
@@ -442,8 +442,8 @@ function ZoneEditorPanel({ zone, regions, onSave, onClose }) {
           <div className={CARD}>
             <div className={CH}>
               <div className="flex items-center gap-2">
-                <Tag className="h-4 w-4 text-slate-400" />
-                <p className="text-xs font-bold uppercase text-slate-500 tracking-wide">PIN / Postal Code Ranges</p>
+                <Tag className="h-4 w-4 text-ink-subtle" />
+                <p className="text-xs font-semibold uppercase text-ink-muted tracking-wide">PIN / Postal Code Ranges</p>
               </div>
             </div>
             <div className="px-5 py-4 space-y-3">
@@ -452,29 +452,29 @@ function ZoneEditorPanel({ zone, regions, onSave, onClose }) {
                   <label className={LABEL}>Start Code</label>
                   <input value={postalStart} onChange={e => setPostalStart(e.target.value.toUpperCase())} className={INPUT} placeholder="e.g. SW1A" />
                 </div>
-                <div className="flex items-center justify-center pb-2.5 text-slate-400 font-bold">→</div>
+                <div className="flex items-center justify-center pb-2.5 text-ink-subtle font-semibold">→</div>
                 <div>
-                  <label className={LABEL}>End Code <span className="font-normal text-slate-400">(or same)</span></label>
+                  <label className={LABEL}>End Code <span className="font-normal text-ink-subtle">(or same)</span></label>
                   <input value={postalEnd} onChange={e => setPostalEnd(e.target.value.toUpperCase())} className={INPUT} placeholder="e.g. SW1Z" />
                 </div>
                 <button type="button" onClick={addPostal}
-                  className="rounded-lg bg-violet-600 px-4 py-2.5 text-white text-sm font-bold hover:bg-violet-700 transition flex-shrink-0">Add</button>
+                  className="btn-primary px-4 py-2.5 text-sm flex-shrink-0">Add</button>
               </div>
               {z.postal_ranges.length > 0 && (
                 <div className="space-y-1.5">
                   {z.postal_ranges.map((pr, i) => (
-                    <div key={i} className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                      <span className="text-xs font-mono font-semibold text-slate-700">
+                    <div key={i} className="flex items-center justify-between rounded-sm border border-edge bg-surface-muted px-3 py-2">
+                      <span className="text-xs font-mono font-semibold text-ink-secondary">
                         {pr.start}{pr.end && pr.end !== pr.start ? ` → ${pr.end}` : ''}
                       </span>
-                      <button type="button" onClick={() => removePostal(i)} className="text-slate-400 hover:text-red-500 transition">
+                      <button type="button" onClick={() => removePostal(i)} className="text-ink-subtle hover:text-ink-danger transition">
                         <X className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   ))}
                 </div>
               )}
-              <p className="text-[11px] text-slate-400">💡 Bulk import postcode lists via CSV using the Countries import button above.</p>
+              <p className="text-[11px] text-ink-subtle">💡 Bulk import postcode lists via CSV using the Countries import button above.</p>
             </div>
           </div>
 
@@ -509,25 +509,25 @@ export default function ShippingZonePanel({
       {/* Toolbar */}
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm font-bold text-slate-800">
+          <p className="text-sm font-semibold text-ink-primary">
             {zones.length} shipping zone{zones.length !== 1 ? 's' : ''} configured
           </p>
-          <p className="text-xs text-slate-500">Zones are evaluated top-to-bottom. First matching zone applies.</p>
+          <p className="text-xs text-ink-muted">Zones are evaluated top-to-bottom. First matching zone applies.</p>
         </div>
         <button onClick={onAddZone}
-          className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-violet-700 transition shadow-sm">
+          className="inline-flex items-center gap-2 rounded-md bg-ink-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-ink-primary/90 transition shadow-card">
           <Plus className="h-4 w-4" /> Add Zone
         </button>
       </div>
 
       {/* Empty state */}
       {zones.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-slate-200 py-16">
-          <Globe className="h-10 w-10 text-slate-300" />
-          <p className="text-sm font-semibold text-slate-500">No shipping zones yet</p>
-          <p className="text-xs text-slate-400">Create a zone to define where and how you ship.</p>
+        <div className="flex flex-col items-center gap-3 rounded-lg border-2 border-dashed border-edge py-16">
+          <Globe className="h-10 w-10 text-ink-subtle" />
+          <p className="text-sm font-semibold text-ink-muted">No shipping zones yet</p>
+          <p className="text-xs text-ink-subtle">Create a zone to define where and how you ship.</p>
           <button onClick={onAddZone}
-            className="mt-1 inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-violet-700 transition">
+            className="mt-1 inline-flex items-center gap-2 rounded-md bg-ink-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-ink-primary/90 transition">
             <Plus className="h-4 w-4" /> Create First Zone
           </button>
         </div>
@@ -542,21 +542,21 @@ export default function ShippingZonePanel({
             const postalRanges = Array.isArray(z.postal_ranges) ? z.postal_ranges : [];
 
             return (
-              <div key={z.id} className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+              <div key={z.id} className="rounded-lg border border-edge bg-white overflow-hidden shadow-card">
                 {/* Zone row */}
                 <div className="flex items-center gap-3 px-5 py-4">
-                  <button onClick={() => toggle(z.id)} className="flex-shrink-0 text-slate-400 hover:text-slate-600 transition">
+                  <button onClick={() => toggle(z.id)} className="flex-shrink-0 text-ink-subtle hover:text-ink-secondary transition">
                     {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                   </button>
                   <div className="flex-1 min-w-0 cursor-pointer" onClick={() => toggle(z.id)}>
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-sm font-black text-slate-800">{z.name}</h3>
-                      <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${z.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                      <h3 className="text-sm font-semibold text-ink-primary">{z.name}</h3>
+                      <span className={`rounded-xs px-2 py-0.5 text-[9px] font-semibold ${z.is_active ? 'bg-brand-success/10 text-ink-success' : 'bg-surface-muted text-ink-muted'}`}>
                         {z.is_active ? 'ACTIVE' : 'INACTIVE'}
                       </span>
-                      {z.region_code && <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[9px] font-bold text-violet-700">{z.region_code}</span>}
+                      {z.region_code && <span className="rounded-xs bg-surface-muted px-2 py-0.5 text-[9px] font-semibold text-ink-accent">{z.region_code}</span>}
                     </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500">
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-ink-muted">
                       {countries.length > 0 && <span><Globe className="inline h-3 w-3 mr-0.5" />{countries.slice(0,4).join(', ')}{countries.length > 4 ? ` +${countries.length-4}` : ''}</span>}
                       {states.length > 0 && <span><MapPin className="inline h-3 w-3 mr-0.5" />{states.length} state{states.length !== 1 ? 's' : ''}</span>}
                       {postalRanges.length > 0 && <span><Tag className="inline h-3 w-3 mr-0.5" />{postalRanges.length} postal range{postalRanges.length !== 1 ? 's' : ''}</span>}
@@ -565,39 +565,39 @@ export default function ShippingZonePanel({
                   </div>
                   {/* Actions */}
                   <div className="flex items-center gap-1 flex-shrink-0">
-                    <button onClick={() => onEditZone(z)} title="Edit zone" className="rounded-lg p-2 text-slate-400 hover:text-violet-600 hover:bg-violet-50 transition"><Pencil className="h-4 w-4" /></button>
-                    <button onClick={() => onDuplicateZone(z)} title="Clone zone" className="rounded-lg p-2 text-slate-400 hover:text-violet-600 hover:bg-violet-50 transition"><Copy className="h-4 w-4" /></button>
-                    <button onClick={() => onDeleteZone(z)} title="Delete zone" className="rounded-lg p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 transition"><Trash2 className="h-4 w-4" /></button>
+                    <button onClick={() => onEditZone(z)} title="Edit zone" className="rounded-sm p-2 text-ink-subtle hover:text-ink-accent hover:bg-surface-muted transition"><Pencil className="h-4 w-4" /></button>
+                    <button onClick={() => onDuplicateZone(z)} title="Clone zone" className="rounded-sm p-2 text-ink-subtle hover:text-ink-accent hover:bg-surface-muted transition"><Copy className="h-4 w-4" /></button>
+                    <button onClick={() => onDeleteZone(z)} title="Delete zone" className="rounded-sm p-2 text-ink-subtle hover:text-ink-danger hover:bg-red-50 transition"><Trash2 className="h-4 w-4" /></button>
                   </div>
                 </div>
 
                 {/* Expanded section */}
                 {isOpen && (
-                  <div className="border-t border-slate-100">
+                  <div className="border-t border-edge-subtle">
                     {/* Coverage chips */}
                     {(countries.length > 0 || states.length > 0 || cities.length > 0 || postalRanges.length > 0) && (
-                      <div className="bg-slate-50/60 px-5 py-3 space-y-2 border-b border-slate-100">
+                      <div className="bg-surface-muted px-5 py-3 space-y-2 border-b border-edge-subtle">
                         {countries.length > 0 && (
                           <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="text-[10px] font-bold uppercase text-slate-400 mr-1">Countries:</span>
+                            <span className="text-[10px] font-semibold uppercase text-ink-subtle mr-1">Countries:</span>
                             {countries.map((c, i) => <Chip key={i} label={c} />)}
                           </div>
                         )}
                         {states.length > 0 && (
                           <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="text-[10px] font-bold uppercase text-slate-400 mr-1">States:</span>
+                            <span className="text-[10px] font-semibold uppercase text-ink-subtle mr-1">States:</span>
                             {states.map((s, i) => <Chip key={i} label={s} />)}
                           </div>
                         )}
                         {cities.length > 0 && (
                           <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="text-[10px] font-bold uppercase text-slate-400 mr-1">Cities:</span>
+                            <span className="text-[10px] font-semibold uppercase text-ink-subtle mr-1">Cities:</span>
                             {cities.map((c, i) => <Chip key={i} label={c} />)}
                           </div>
                         )}
                         {postalRanges.length > 0 && (
                           <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="text-[10px] font-bold uppercase text-slate-400 mr-1">Postcodes:</span>
+                            <span className="text-[10px] font-semibold uppercase text-ink-subtle mr-1">Postcodes:</span>
                             {postalRanges.map((pr, i) => (
                               <Chip key={i} label={pr.start === pr.end ? pr.start : `${pr.start}–${pr.end}`} />
                             ))}
@@ -609,10 +609,10 @@ export default function ShippingZonePanel({
                     {/* Rates */}
                     <div className="px-5 py-4 space-y-3">
                       <div className="flex items-center justify-between">
-                        <p className="text-xs font-bold uppercase text-slate-500 tracking-wide">Shipping Rates &amp; Methods</p>
+                        <p className="text-xs font-semibold uppercase text-ink-muted tracking-wide">Shipping Rates &amp; Methods</p>
                         <button
                           onClick={() => onEditRate({ zone: z.id, name: '', method: 'Standard Shipping', rate_type: 'FLAT', price: '0.00', min_value: '0.00', max_value: '', free_above: '', estimated_days: '', is_active: true })}
-                          className="inline-flex items-center gap-1 rounded-lg bg-violet-50 border border-violet-200 px-3 py-1.5 text-xs font-bold text-violet-700 hover:bg-violet-100 transition">
+                          className="inline-flex items-center gap-1 rounded-sm bg-surface-muted border border-edge px-3 py-1.5 text-xs font-semibold text-ink-accent hover:bg-surface-muted transition">
                           <Plus className="h-3.5 w-3.5" /> Add Rate
                         </button>
                       </div>
@@ -620,34 +620,34 @@ export default function ShippingZonePanel({
                       {zRates.length > 0 ? (
                         <div className="space-y-2">
                           {zRates.map(rate => (
-                            <div key={rate.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+                            <div key={rate.id} className="flex items-center gap-3 rounded-md border border-edge bg-white px-4 py-3">
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <p className="text-sm font-bold text-slate-800">{rate.name}</p>
+                                  <p className="text-sm font-semibold text-ink-primary">{rate.name}</p>
                                   <RateTypeBadge type={rate.rate_type} />
-                                  {rate.is_active === false && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-bold text-slate-500">INACTIVE</span>}
+                                  {rate.is_active === false && <span className="rounded-xs bg-surface-muted px-2 py-0.5 text-[9px] font-semibold text-ink-muted">INACTIVE</span>}
                                 </div>
-                                <div className="mt-0.5 flex items-center gap-3 text-[11px] text-slate-500 flex-wrap">
-                                  {rate.rate_type !== 'FREE' && <span className="font-semibold text-slate-700">£{Number(rate.price || 0).toFixed(2)}</span>}
-                                  {rate.rate_type === 'FREE' && <span className="font-semibold text-emerald-600">Free</span>}
+                                <div className="mt-0.5 flex items-center gap-3 text-[11px] text-ink-muted flex-wrap">
+                                  {rate.rate_type !== 'FREE' && <span className="font-semibold text-ink-secondary">£{Number(rate.price || 0).toFixed(2)}</span>}
+                                  {rate.rate_type === 'FREE' && <span className="font-semibold text-ink-success">Free</span>}
                                   {Number(rate.min_value) > 0 && <span>Min: {rate.min_value}</span>}
                                   {rate.max_value && <span>Max: {rate.max_value}</span>}
-                                  {rate.free_above && <span className="text-emerald-600">Free above £{rate.free_above}</span>}
+                                  {rate.free_above && <span className="text-ink-success">Free above £{rate.free_above}</span>}
                                   {rate.estimated_days && <span className="flex items-center gap-0.5"><Clock className="h-3 w-3" />{rate.estimated_days} days</span>}
-                                  {rate.surcharge_postcodes && <span className="text-amber-600 flex items-center gap-0.5"><AlertTriangle className="h-3 w-3" />Surcharge postcodes</span>}
+                                  {rate.surcharge_postcodes && <span className="text-ink-accent flex items-center gap-0.5"><AlertTriangle className="h-3 w-3" />Surcharge postcodes</span>}
                                 </div>
                               </div>
                               <div className="flex items-center gap-1 flex-shrink-0">
-                                <button onClick={() => onEditRate({...rate})} className="rounded-lg p-1.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 transition"><Pencil className="h-3.5 w-3.5" /></button>
-                                <button onClick={() => onDeleteRate(rate)} className="rounded-lg p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 transition"><Trash2 className="h-3.5 w-3.5" /></button>
+                                <button onClick={() => onEditRate({...rate})} className="rounded-sm p-1.5 text-ink-subtle hover:text-ink-accent hover:bg-surface-muted transition"><Pencil className="h-3.5 w-3.5" /></button>
+                                <button onClick={() => onDeleteRate(rate)} className="rounded-sm p-1.5 text-ink-subtle hover:text-ink-danger hover:bg-red-50 transition"><Trash2 className="h-3.5 w-3.5" /></button>
                               </div>
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <div className="flex items-center gap-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4">
-                          <Truck className="h-5 w-5 text-slate-300 flex-shrink-0" />
-                          <p className="text-xs text-slate-400">No rates yet. Add a rate to define pricing for this zone.</p>
+                        <div className="flex items-center gap-3 rounded-md border border-dashed border-edge bg-surface-muted px-4 py-4">
+                          <Truck className="h-5 w-5 text-ink-subtle flex-shrink-0" />
+                          <p className="text-xs text-ink-subtle">No rates yet. Add a rate to define pricing for this zone.</p>
                         </div>
                       )}
                     </div>
