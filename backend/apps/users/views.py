@@ -728,7 +728,7 @@ class MagicLinkRequestView(APIView):
                 send_mail(
                     'Your Sclero Proteins sign-in link',
                     f'Click to sign in (valid 15 minutes):\n\n{link}\n\nIf you didn\'t request this, ignore this email.',
-                    getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@scleroproteins.co.uk'),
+                    getattr(settings, 'DEFAULT_FROM_EMAIL', 'support@scleroproteins.co.uk'),
                     [email], fail_silently=True,
                 )
             except Exception:

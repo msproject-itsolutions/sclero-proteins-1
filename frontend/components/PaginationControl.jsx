@@ -19,19 +19,19 @@ export default function PaginationControl({
       <div className="flex flex-col items-center gap-4 py-8">
         {currentPage < totalPages && (
           <>
-            <p className="text-xs text-brand-muted">
+            <p className="text-xs text-ink-muted">
               Showing {startItem}–{endItem} of {totalItems} products
             </p>
             <button
               onClick={() => onPageChange(currentPage + 1)}
-              className="px-6 py-2.5 rounded-lg border border-slate-200 bg-white text-sm font-semibold text-brand-navy hover:border-brand-purple hover:bg-brand-purple/5 transition-colors"
+              className="px-6 py-2.5 rounded-sm border border-edge bg-surface text-sm font-medium text-ink-primary hover:border-edge-strong hover:bg-surface-muted/60 transition-colors"
             >
               Load More Products
             </button>
           </>
         )}
         {currentPage >= totalPages && totalItems > 0 && (
-          <p className="text-sm text-brand-muted">All {totalItems} products loaded</p>
+          <p className="text-sm text-ink-muted">All {totalItems} products loaded</p>
         )}
       </div>
     );
@@ -41,7 +41,7 @@ export default function PaginationControl({
   return (
     <div className="flex flex-col items-center gap-6 py-8">
       {/* Info Text */}
-      <p className="text-xs text-brand-muted">
+      <p className="text-xs text-ink-muted">
         Showing {startItem}–{endItem} of {totalItems} products
       </p>
 
@@ -51,7 +51,7 @@ export default function PaginationControl({
         <button
           onClick={() => onPageChange(Math.max(1, currentPage - 1))}
           disabled={currentPage === 1}
-          className="flex items-center gap-1 px-3 py-2 rounded-lg border border-slate-200 text-sm font-semibold text-brand-navy hover:border-brand-purple hover:bg-brand-purple/5 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="flex items-center gap-1 px-3 py-2 rounded-sm border border-edge text-sm font-medium text-ink-primary hover:border-edge-strong hover:bg-surface-muted/60 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           <ChevronLeft className="h-4 w-4" />
           <span className="hidden sm:inline">Previous</span>
@@ -77,10 +77,10 @@ export default function PaginationControl({
               <button
                 key={pageNum}
                 onClick={() => onPageChange(pageNum)}
-                className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                className={`px-3 py-2 rounded-sm text-sm font-medium transition-colors ${
                   currentPage === pageNum
-                    ? 'bg-brand-purple text-white'
-                    : 'border border-slate-200 text-brand-navy hover:border-brand-purple hover:bg-brand-purple/5'
+                    ? 'bg-ink-primary text-white'
+                    : 'border border-edge text-ink-secondary hover:border-edge-strong hover:bg-surface-muted/60'
                 }`}
               >
                 {pageNum}
@@ -93,7 +93,7 @@ export default function PaginationControl({
         <button
           onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
           disabled={currentPage === totalPages}
-          className="flex items-center gap-1 px-3 py-2 rounded-lg border border-slate-200 text-sm font-semibold text-brand-navy hover:border-brand-purple hover:bg-brand-purple/5 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="flex items-center gap-1 px-3 py-2 rounded-sm border border-edge text-sm font-medium text-ink-primary hover:border-edge-strong hover:bg-surface-muted/60 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           <span className="hidden sm:inline">Next</span>
           <ChevronRight className="h-4 w-4" />
@@ -101,7 +101,7 @@ export default function PaginationControl({
       </div>
 
       {/* Page Info */}
-      <p className="text-[11px] text-brand-muted">
+      <p className="text-[11px] text-ink-subtle">
         Page {currentPage} of {totalPages}
       </p>
     </div>

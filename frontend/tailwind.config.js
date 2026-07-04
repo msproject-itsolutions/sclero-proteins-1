@@ -22,63 +22,66 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        /* ----- PRIMITIVE: brand palette (raw logo colours) ----- */
+        /* ----- PRIMITIVE: brand palette (essence — warm neutrals + ink + bronze) -----
+           The legacy purple/indigo names are kept as ALIASES so existing
+           components keep compiling, but they now resolve to the essence
+           palette. New code should use the semantic tiers below. */
         brand: {
-          bg: "#FAFAFB",
+          bg: "#FAFAF7",           // warm off-white canvas
           card: "#FFFFFF",
-          purple: "#6B46C1",
-          plum: "#7A1F6E",
-          indigo: "#1E2A78",
-          navy: "#1D3557",
-          orange: "#F59E0B",
-          gold: "#D4A017",
-          accent: "#6B46C1",
+          purple: "#6E4F13",       // legacy alias → bronze ink (accent text)
+          plum: "#A8791E",         // legacy alias → bronze
+          indigo: "#1A1A1A",       // legacy alias → ink
+          navy: "#1A1A1A",         // legacy alias → ink
+          orange: "#A8791E",
+          gold: "#A8791E",
+          accent: "#A8791E",       // bronze accent
           success: "#10B981",
           danger: "#EF4444",
-          warning: "#F59E0B",
+          warning: "#B45309",
           info: "#3B82F6",
-          text: "#0F172A",
-          muted: "#475569",
-          hairline: "#ECECEF",
+          text: "#1A1A1A",
+          muted: "#4A4A4A",
+          hairline: "#E8E6E1",
         },
         amber: {
-          50: "#FFFBEB",
-          100: "#FEF3C7",
-          400: "#FBBF24",
-          500: "#F59E0B",
-          600: "#D4A017",
+          50: "#FBF7EE",
+          100: "#F3EAD5",
+          400: "#C89838",
+          500: "#A8791E",
+          600: "#8A6318",
         },
         /* ----- SEMANTIC: surface tiers ----- */
         surface: {
           DEFAULT: "#FFFFFF",       // primary card / app body
-          subtle:  "#FAFAFB",       // page canvas
-          muted:   "#F4F6FB",       // input + form chips
-          inverse: "#1D3557",       // dark band header / footer
-          overlay: "rgba(15,23,42,0.55)", // modal / drawer backdrop
+          subtle:  "#FAFAF7",       // page canvas (warm off-white)
+          muted:   "#F3F1EA",       // input + form chips / secondary bands
+          inverse: "#1A1A1A",       // dark band header / footer
+          overlay: "rgba(20,20,20,0.5)", // modal / drawer backdrop
         },
         /* ----- SEMANTIC: text tiers (AA-compliant on white) ----- */
         ink: {
-          primary:   "#0F172A",     // body — 17.5:1 on white (AAA)
-          secondary: "#334155",     // 12.6:1 on white (AAA)
-          muted:     "#475569",     // 7.5:1 on white (AAA)
-          subtle:    "#64748B",     // 4.6:1 on white (AA for >=14px)
+          primary:   "#1A1A1A",     // body — near-black ink
+          secondary: "#4A4A4A",     // supporting copy
+          muted:     "#6E6A61",     // warm grey — captions, kickers
+          subtle:    "#8A857A",     // faint meta text
           inverse:   "#FFFFFF",     // text on dark surfaces
-          accent:    "#6B46C1",     // 5.74:1 on white (AA for >=14px)
+          accent:    "#6E4F13",     // bronze ink — 7:1 on white
           danger:    "#B91C1C",     // 7.1:1 on white
           success:   "#047857",     // 6.5:1 on white
         },
         /* ----- SEMANTIC: borders & dividers ----- */
         edge: {
-          subtle:  "#ECECEF",
-          DEFAULT: "#E6EAF2",
-          strong:  "#CBD5E1",
-          focus:   "#6B46C1",
+          subtle:  "#EFEDE8",
+          DEFAULT: "#E8E6E1",
+          strong:  "#D6D2C7",
+          focus:   "#A8791E",
         },
       },
       fontFamily: {
-        sans:    ["Outfit", "Inter", "system-ui", "sans-serif"],
-        display: ["Outfit", "Inter", "system-ui", "sans-serif"],
-        body:    ["Inter", "Outfit", "system-ui", "sans-serif"],
+        sans:    ["var(--font-inter)", "Inter", "system-ui", "sans-serif"],
+        display: ["var(--font-display)", "Cormorant Garamond", "Georgia", "serif"],
+        body:    ["var(--font-inter)", "Inter", "system-ui", "sans-serif"],
       },
       /* Modular type scale — 1.125 ratio anchored at 16px (1rem).
          Use the `.text-display/heading-N/body/caption` utilities in globals.css
@@ -97,36 +100,36 @@ module.exports = {
         '6xl': ['3.75rem',  { lineHeight: '3.875rem', letterSpacing: '-0.03em' }], // 60px
       },
       letterSpacing: {
-        luxe: "0.18em",
+        luxe: "0.22em",
       },
       borderRadius: {
-        /* Named radius scale — components reference these names instead of magic px. */
-        xs:   "4px",    // tags, mini-pills
-        sm:   "6px",    // inputs, small buttons
-        md:   "10px",   // cards, buttons
-        lg:   "14px",   // larger cards / modals
-        xl:   "18px",   // hero cards
-        '2xl': "22px",  // panels
-        '3xl': "28px",  // splash modals
+        /* Named radius scale — essence favours crisp, quiet corners. */
+        xs:   "3px",    // tags, mini-pills
+        sm:   "4px",    // inputs, small buttons
+        md:   "6px",    // cards, buttons
+        lg:   "8px",    // larger cards / modals
+        xl:   "10px",   // hero cards
+        '2xl': "12px",  // panels
+        '3xl': "16px",  // splash modals
         pill: "9999px",
       },
       boxShadow: {
-        /* Soft, purple-tinted elevation. Use only `card`/`elevated`/`overlay`
-           in components — the others are legacy. */
-        card:     "0 1px 2px rgba(15,23,42,0.04), 0 4px 12px -4px rgba(31,42,68,0.08)",
-        elevated: "0 1px 2px rgba(15,23,42,0.04), 0 12px 32px -12px rgba(107,70,193,0.14)",
-        overlay:  "0 8px 28px -8px rgba(15,23,42,0.18), 0 24px 60px -28px rgba(15,23,42,0.32)",
-        focus:    "0 0 0 3px rgba(107,70,193,0.32)",
-        luxe:     "0 1px 2px rgba(15,23,42,0.04), 0 12px 32px -12px rgba(107,70,193,0.14)",
-        "luxe-lg":"0 2px 4px rgba(15,23,42,0.04), 0 28px 60px -24px rgba(107,70,193,0.22)",
-        "amber-glow":"0 8px 24px -8px rgba(245,158,11,0.45)",
-        "purple-glow":"0 10px 30px -10px rgba(107,70,193,0.45)",
+        /* Soft, neutral elevation — no colour cast. Use only
+           `card`/`elevated`/`overlay` in components. */
+        card:     "0 1px 2px rgba(20,20,20,0.04), 0 8px 24px -12px rgba(20,20,20,0.08)",
+        elevated: "0 1px 2px rgba(20,20,20,0.04), 0 16px 40px -16px rgba(20,20,20,0.12)",
+        overlay:  "0 8px 28px -8px rgba(20,20,20,0.16), 0 24px 60px -28px rgba(20,20,20,0.3)",
+        focus:    "0 0 0 3px rgba(168,121,30,0.28)",
+        luxe:     "0 1px 2px rgba(20,20,20,0.04), 0 16px 40px -16px rgba(20,20,20,0.12)",
+        "luxe-lg":"0 2px 4px rgba(20,20,20,0.04), 0 28px 60px -24px rgba(20,20,20,0.16)",
+        "amber-glow":"0 8px 24px -8px rgba(168,121,30,0.3)",
+        "purple-glow":"0 10px 30px -10px rgba(20,20,20,0.2)",
       },
       backgroundImage: {
-        'brand-gradient':      'linear-gradient(135deg, #7A1F6E 0%, #6B46C1 45%, #1E2A78 100%)',
-        'brand-gradient-soft': 'linear-gradient(135deg, #6B46C1 0%, #1D3557 100%)',
-        'gold-gradient':       'linear-gradient(135deg, #FBBF24 0%, #D4A017 100%)',
-        'light-gradient':      'linear-gradient(180deg, #FAFAFB 0%, #FFFFFF 100%)',
+        'brand-gradient':      'linear-gradient(135deg, #2A2A28 0%, #1A1A1A 100%)',
+        'brand-gradient-soft': 'linear-gradient(135deg, #33312C 0%, #1A1A1A 100%)',
+        'gold-gradient':       'linear-gradient(135deg, #C89838 0%, #A8791E 100%)',
+        'light-gradient':      'linear-gradient(180deg, #FAFAF7 0%, #FFFFFF 100%)',
       },
       maxWidth: {
         /* Named container widths so every page wraps at the same column. */

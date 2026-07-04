@@ -21,23 +21,23 @@ import ShippingZonePanel from '../../components/admin/ShippingZonePanel';
 
 const ORDER_STATUSES = ['PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'REFUNDED'];
 const STATUS_COLOR = {
-  PENDING: 'bg-amber-100 text-amber-700', PROCESSING: 'bg-blue-100 text-blue-700',
-  SHIPPED: 'bg-indigo-100 text-indigo-700', DELIVERED: 'bg-green-100 text-green-700',
-  CANCELLED: 'bg-slate-100 text-slate-600', REFUNDED: 'bg-red-100 text-red-700',
+  PENDING: 'bg-amber-50 text-ink-accent', PROCESSING: 'bg-blue-50 text-blue-700',
+  SHIPPED: 'bg-surface-muted text-ink-accent', DELIVERED: 'bg-brand-success/10 text-ink-success',
+  CANCELLED: 'bg-surface-muted text-ink-secondary', REFUNDED: 'bg-red-50 text-ink-danger',
 };
 const PAYMENT_STATUS_COLOR = {
-  PENDING: 'bg-amber-100 text-amber-700',
-  AUTHORIZED: 'bg-indigo-100 text-indigo-700',
-  PARTIALLY_CAPTURED: 'bg-blue-100 text-blue-700',
-  PAID: 'bg-green-100 text-green-700',
-  FAILED: 'bg-red-100 text-red-700',
-  REFUNDED: 'bg-slate-100 text-slate-600',
+  PENDING: 'bg-amber-50 text-ink-accent',
+  AUTHORIZED: 'bg-surface-muted text-ink-accent',
+  PARTIALLY_CAPTURED: 'bg-blue-50 text-blue-700',
+  PAID: 'bg-brand-success/10 text-ink-success',
+  FAILED: 'bg-red-50 text-ink-danger',
+  REFUNDED: 'bg-surface-muted text-ink-secondary',
 };
 const RECOVERY_STATUS_COLOR = {
-  NOT_CONTACTED: 'bg-slate-100 text-slate-600',
-  CONTACTED: 'bg-blue-100 text-blue-700',
-  RECOVERED: 'bg-green-100 text-green-700',
-  DISMISSED: 'bg-slate-200 text-slate-600',
+  NOT_CONTACTED: 'bg-surface-muted text-ink-secondary',
+  CONTACTED: 'bg-blue-50 text-blue-700',
+  RECOVERED: 'bg-brand-success/10 text-ink-success',
+  DISMISSED: 'bg-edge text-ink-secondary',
 };
 
 const formatDateTime = (value) => (value ? new Date(value).toLocaleString() : '—');
@@ -103,7 +103,7 @@ function MiniBars({ series, height = 120 }) {
   const max = Math.max(1, ...series.map((s) => s.value));
   const barW = 100 / (series.length || 1);
   return (
-    <svg viewBox={`0 0 100 ${height}`} preserveAspectRatio="none" className="w-full text-brand-purple" style={{ height }}>
+    <svg viewBox={`0 0 100 ${height}`} preserveAspectRatio="none" className="w-full text-ink-accent" style={{ height }}>
       {series.map((s, i) => {
         const h = (s.value / max) * (height - 18);
         return (
@@ -120,15 +120,15 @@ function MiniBars({ series, height = 120 }) {
 function StatCard({ icon: Icon, label, value, sub, accent, onClick }) {
   return (
     <button onClick={onClick} disabled={!onClick}
-      className={`rounded-2xl border border-slate-200 bg-white p-5 text-left transition-all ${onClick ? 'hover:-translate-y-0.5 hover:shadow-md' : ''}`}>
+      className={`rounded-md border border-edge bg-white shadow-card p-5 text-left transition-all ${onClick ? 'hover:-translate-y-0.5 hover:shadow-elevated' : ''}`}>
       <div className="mb-3 flex items-center justify-between">
-        <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${accent || 'bg-brand-purple/10 text-brand-purple'}`}>
+        <span className={`flex h-9 w-9 items-center justify-center rounded-md ${accent || 'bg-surface-muted text-ink-accent'}`}>
           <Icon className="h-4.5 w-4.5" />
         </span>
       </div>
-      <p className="text-2xl font-black leading-none text-brand-navy">{value}</p>
-      <p className="mt-1.5 text-xs font-medium text-brand-muted">{label}</p>
-      {sub && <p className="mt-0.5 text-[11px] text-slate-400">{sub}</p>}
+      <p className="font-display text-[28px] font-medium leading-none text-ink-primary">{value}</p>
+      <p className="kicker mt-2">{label}</p>
+      {sub && <p className="mt-0.5 text-[11px] text-ink-subtle">{sub}</p>}
     </button>
   );
 }
@@ -141,8 +141,8 @@ function RevenueTrendCard({ authFetch }) {
     authFetch('/api/admin/reports/revenue-trend/?days=90')
       .then((r) => r.json()).then(setData).catch(() => setErr(true));
   }, [authFetch]);
-  if (err) return <div className="rounded-2xl border border-slate-200 bg-white p-5 text-xs text-brand-muted">Revenue trend unavailable.</div>;
-  if (!data) return <div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="h-6 w-40 mb-3 rounded bg-slate-100 animate-pulse" /><div className="h-28 rounded bg-slate-50 animate-pulse" /></div>;
+  if (err) return <div className="rounded-lg border border-edge bg-white shadow-card p-5 text-xs text-brand-muted">Revenue trend unavailable.</div>;
+  if (!data) return <div className="rounded-lg border border-edge bg-white shadow-card p-5"><div className="h-6 w-40 mb-3 rounded bg-surface-muted animate-pulse" /><div className="h-28 rounded bg-surface-muted animate-pulse" /></div>;
   // bucket by currency
   const byCcy = {};
   data.forEach((p) => {
@@ -157,9 +157,9 @@ function RevenueTrendCard({ authFetch }) {
   }
   const currencies = Object.keys(byCcy).length ? Object.keys(byCcy) : ['GBP', 'INR'];
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 lg:col-span-2">
+    <div className="rounded-lg border border-edge bg-white shadow-card p-5 lg:col-span-2">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-bold text-brand-navy">Revenue trend</h3>
+        <h3 className="text-sm font-semibold text-ink-primary">Revenue trend</h3>
         <span className="text-[11px] font-medium text-brand-muted">Last 90 days</span>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
@@ -169,8 +169,8 @@ function RevenueTrendCard({ authFetch }) {
           return (
             <div key={ccy}>
               <div className="mb-1 flex items-center justify-between">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-brand-muted">{ccy}</span>
-                <span className="text-xs font-bold text-brand-navy">{ccy} {total.toFixed(0)}</span>
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-brand-muted">{ccy}</span>
+                <span className="text-xs font-semibold text-ink-primary">{ccy} {total.toFixed(0)}</span>
               </div>
               <MiniBars series={series} />
             </div>
@@ -186,7 +186,7 @@ function FunnelCard({ authFetch }) {
   useEffect(() => {
     authFetch('/api/admin/reports/conversion-funnel/?days=30').then((r) => r.json()).then(setData).catch(() => setData({}));
   }, [authFetch]);
-  if (!data) return <div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="h-32 rounded bg-slate-50 animate-pulse" /></div>;
+  if (!data) return <div className="rounded-lg border border-edge bg-white shadow-card p-5"><div className="h-32 rounded bg-surface-muted animate-pulse" /></div>;
   const stages = [
     { k: 'pageviews', label: 'Page views' },
     { k: 'product_views', label: 'Product views' },
@@ -196,8 +196,8 @@ function FunnelCard({ authFetch }) {
   ];
   const max = Math.max(1, data.pageviews || 0);
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5">
-      <h3 className="mb-3 text-sm font-bold text-brand-navy">Conversion funnel</h3>
+    <div className="rounded-lg border border-edge bg-white shadow-card p-5">
+      <h3 className="mb-3 text-sm font-semibold text-ink-primary">Conversion funnel</h3>
       {(!data.pageviews && !data.orders) ? <p className="text-xs text-brand-muted">No traffic recorded yet (last 30 days).</p> : (
         <div className="space-y-2">
           {stages.map((s, idx) => {
@@ -208,11 +208,11 @@ function FunnelCard({ authFetch }) {
             return (
               <div key={s.k}>
                 <div className="flex items-center justify-between text-[11px] font-medium text-brand-muted">
-                  <span>{s.label}{pct != null && <span className="ml-1 text-slate-400">({pct}%)</span>}</span>
-                  <span className="text-brand-navy">{v}</span>
+                  <span>{s.label}{pct != null && <span className="ml-1 text-ink-subtle">({pct}%)</span>}</span>
+                  <span className="text-ink-primary">{v}</span>
                 </div>
-                <div className="h-2 rounded bg-slate-100">
-                  <div className="h-2 rounded bg-brand-purple" style={{ width: `${w}%` }} />
+                <div className="h-2 rounded bg-surface-muted">
+                  <div className="h-2 rounded bg-ink-primary" style={{ width: `${w}%` }} />
                 </div>
               </div>
             );
@@ -228,18 +228,18 @@ function TopCustomersCard({ authFetch }) {
   useEffect(() => {
     authFetch('/api/admin/reports/clv/?days=365').then((r) => r.json()).then((d) => setRows(Array.isArray(d) ? d.slice(0, 5) : [])).catch(() => setRows([]));
   }, [authFetch]);
-  if (rows === null) return <div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="h-28 rounded bg-slate-50 animate-pulse" /></div>;
+  if (rows === null) return <div className="rounded-lg border border-edge bg-white shadow-card p-5"><div className="h-28 rounded bg-surface-muted animate-pulse" /></div>;
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5">
-      <h3 className="mb-3 text-sm font-bold text-brand-navy">Top customers (CLV)</h3>
+    <div className="rounded-lg border border-edge bg-white shadow-card p-5">
+      <h3 className="mb-3 text-sm font-semibold text-ink-primary">Top customers (CLV)</h3>
       {rows.length === 0 ? <p className="text-xs text-brand-muted">No paid orders yet.</p> : (
         <div className="space-y-1.5">
           {rows.map((r) => (
             <div key={r.email + r.currency} className="flex items-center justify-between text-xs">
-              <span className="truncate font-medium text-brand-navy" title={r.email}>{r.email.length > 24 ? r.email.slice(0, 22) + '…' : r.email}</span>
+              <span className="truncate font-medium text-ink-primary" title={r.email}>{r.email.length > 24 ? r.email.slice(0, 22) + '…' : r.email}</span>
               <span className="flex items-center gap-2">
                 <span className="text-brand-muted">{r.orders}x</span>
-                <span className="font-bold text-brand-navy">{r.currency} {Number(r.total_spend).toFixed(0)}</span>
+                <span className="font-semibold text-ink-primary">{r.currency} {Number(r.total_spend).toFixed(0)}</span>
               </span>
             </div>
           ))}
@@ -254,18 +254,18 @@ function TopProductsCard({ authFetch }) {
   useEffect(() => {
     authFetch('/api/admin/reports/revenue-by-product/?days=90').then((r) => r.json()).then((d) => setRows(Array.isArray(d) ? d.slice(0, 5) : [])).catch(() => setRows([]));
   }, [authFetch]);
-  if (rows === null) return <div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="h-28 rounded bg-slate-50 animate-pulse" /></div>;
+  if (rows === null) return <div className="rounded-lg border border-edge bg-white shadow-card p-5"><div className="h-28 rounded bg-surface-muted animate-pulse" /></div>;
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5">
-      <h3 className="mb-3 text-sm font-bold text-brand-navy">Top products (revenue)</h3>
+    <div className="rounded-lg border border-edge bg-white shadow-card p-5">
+      <h3 className="mb-3 text-sm font-semibold text-ink-primary">Top products (revenue)</h3>
       {rows.length === 0 ? <p className="text-xs text-brand-muted">No sales recorded.</p> : (
         <div className="space-y-1.5">
           {rows.map((r) => (
             <div key={`${r.product_id}-${r.currency}`} className="flex items-center justify-between text-xs">
-              <span className="truncate font-medium text-brand-navy" title={r.name}>{(r.name || r.sku || '').slice(0, 28)}</span>
+              <span className="truncate font-medium text-ink-primary" title={r.name}>{(r.name || r.sku || '').slice(0, 28)}</span>
               <span className="flex items-center gap-2">
                 <span className="text-brand-muted">{r.units_sold}u</span>
-                <span className="font-bold text-brand-navy">{r.currency} {Number(r.revenue).toFixed(0)}</span>
+                <span className="font-semibold text-ink-primary">{r.currency} {Number(r.revenue).toFixed(0)}</span>
               </span>
             </div>
           ))}
@@ -298,10 +298,10 @@ function GeographicMap({ rows }) {
   // countries shown as circles at hard-coded centroids, sized by revenue.
   const maxRev = Math.max(1, ...rows.map((r) => Number(r.revenue || 0)));
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+    <div className="rounded-lg border border-edge bg-white shadow-card p-5">
       <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-sm font-bold text-brand-navy">Geographic sales map</h3>
-        <span className="text-[10px] text-slate-400">Illustrative — circles sized by revenue</span>
+        <h3 className="text-sm font-semibold text-ink-primary">Geographic sales map</h3>
+        <span className="text-[10px] text-ink-subtle">Illustrative — circles sized by revenue</span>
       </div>
       <svg viewBox="0 0 100 60" className="w-full" style={{ background: '#f8fafc', borderRadius: 8 }}>
         <rect x="0" y="0" width="100" height="60" fill="#f1f5f9" />
@@ -345,8 +345,8 @@ function GeoMapView({ authFetch }) {
   if (rows === null) return <p className="text-sm text-brand-muted">Loading geographic sales…</p>;
   if (rows.length === 0) {
     return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center">
-        <p className="text-sm font-semibold text-brand-navy">No country sales yet</p>
+      <div className="rounded-lg border border-edge bg-white shadow-card p-8 text-center">
+        <p className="text-sm font-semibold text-ink-primary">No country sales yet</p>
         <p className="mt-1 text-xs text-brand-muted">Once orders come in, revenue by country will appear here.</p>
       </div>
     );
@@ -356,23 +356,23 @@ function GeoMapView({ authFetch }) {
   return (
     <div className="space-y-4">
       <GeographicMap rows={rows} />
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+      <div className="overflow-hidden rounded-lg border border-edge bg-white">
         <table className="w-full text-xs">
-          <thead className="bg-slate-50 text-left text-[10px] uppercase tracking-wide text-slate-500">
+          <thead className="bg-surface-muted text-left text-[10px] font-medium uppercase tracking-wide text-ink-muted border-b border-edge">
             <tr>
               <th className="px-3 py-2">Country</th>
               <th className="px-3 py-2">Orders</th>
               <th className="px-3 py-2 text-right">Revenue</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-edge-subtle">
             {sorted.map((r, i) => (
               <tr key={(r.country || '') + (r.currency || '') + i}>
-                <td className="px-3 py-2 font-semibold text-brand-navy">
+                <td className="px-3 py-2 font-semibold text-ink-primary">
                   {(COUNTRY_COORDS[r.country]?.name) || r.country || '—'}
                 </td>
                 <td className="px-3 py-2 text-brand-muted">{r.orders ?? r.order_count ?? '—'}</td>
-                <td className="px-3 py-2 text-right font-bold text-brand-navy">
+                <td className="px-3 py-2 text-right font-semibold text-ink-primary">
                   {r.currency ? `${r.currency} ` : ''}{Number(r.revenue || 0).toLocaleString()}
                 </td>
               </tr>
@@ -437,27 +437,27 @@ function ReportsTab({ authFetch, initialTab }) {
   ];
 
   const renderTable = () => {
-    if (loading) return <div className="h-40 rounded bg-slate-50 animate-pulse" />;
+    if (loading) return <div className="h-40 rounded bg-surface-muted animate-pulse" />;
     if (!data) return <p className="text-xs text-brand-muted">No data.</p>;
 
     if (tab === 'repeat') {
       return (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <p className="text-[10px] uppercase font-bold text-brand-muted">Repeat rate</p>
-            <p className="text-2xl font-black text-brand-navy">{Math.round((data.repeat_rate || 0) * 100)}%</p>
+          <div className="rounded-md border border-edge bg-surface-muted p-3">
+            <p className="kicker">Repeat rate</p>
+            <p className="text-2xl font-semibold text-ink-primary">{Math.round((data.repeat_rate || 0) * 100)}%</p>
           </div>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <p className="text-[10px] uppercase font-bold text-brand-muted">One-time</p>
-            <p className="text-2xl font-black text-brand-navy">{data.one_time}</p>
+          <div className="rounded-md border border-edge bg-surface-muted p-3">
+            <p className="kicker">One-time</p>
+            <p className="text-2xl font-semibold text-ink-primary">{data.one_time}</p>
           </div>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <p className="text-[10px] uppercase font-bold text-brand-muted">Repeat</p>
-            <p className="text-2xl font-black text-brand-navy">{data.repeat}</p>
+          <div className="rounded-md border border-edge bg-surface-muted p-3">
+            <p className="kicker">Repeat</p>
+            <p className="text-2xl font-semibold text-ink-primary">{data.repeat}</p>
           </div>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <p className="text-[10px] uppercase font-bold text-brand-muted">3+ orders</p>
-            <p className="text-2xl font-black text-brand-navy">{data.three_plus}</p>
+          <div className="rounded-md border border-edge bg-surface-muted p-3">
+            <p className="kicker">3+ orders</p>
+            <p className="text-2xl font-semibold text-ink-primary">{data.three_plus}</p>
           </div>
         </div>
       );
@@ -465,10 +465,10 @@ function ReportsTab({ authFetch, initialTab }) {
     if (tab === 'abandoned') {
       return (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3"><p className="text-[10px] uppercase font-bold text-brand-muted">Carts</p><p className="text-2xl font-black text-brand-navy">{data.total_carts_with_items}</p></div>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3"><p className="text-[10px] uppercase font-bold text-brand-muted">Recovered</p><p className="text-2xl font-black text-brand-navy">{data.recovered}</p></div>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3"><p className="text-[10px] uppercase font-bold text-brand-muted">Abandoned</p><p className="text-2xl font-black text-brand-navy">{data.abandoned}</p></div>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3"><p className="text-[10px] uppercase font-bold text-brand-muted">Recovery</p><p className="text-2xl font-black text-brand-navy">{Math.round((data.recovery_rate || 0) * 100)}%</p></div>
+          <div className="rounded-md border border-edge bg-surface-muted p-3"><p className="kicker">Carts</p><p className="text-2xl font-semibold text-ink-primary">{data.total_carts_with_items}</p></div>
+          <div className="rounded-md border border-edge bg-surface-muted p-3"><p className="kicker">Recovered</p><p className="text-2xl font-semibold text-ink-primary">{data.recovered}</p></div>
+          <div className="rounded-md border border-edge bg-surface-muted p-3"><p className="kicker">Abandoned</p><p className="text-2xl font-semibold text-ink-primary">{data.abandoned}</p></div>
+          <div className="rounded-md border border-edge bg-surface-muted p-3"><p className="kicker">Recovery</p><p className="text-2xl font-semibold text-ink-primary">{Math.round((data.recovery_rate || 0) * 100)}%</p></div>
         </div>
       );
     }
@@ -483,34 +483,34 @@ function ReportsTab({ authFetch, initialTab }) {
         : ['SKU', 'Name', 'Currency', 'Units', 'Revenue'];
 
     return (
-      <div className="overflow-x-auto rounded-xl border border-slate-200">
+      <div className="overflow-x-auto rounded-md border border-edge">
         <table className="w-full text-xs">
-          <thead className="bg-slate-50 text-[10px] uppercase font-bold text-brand-muted">
+          <thead className="bg-surface-muted text-[10px] font-medium uppercase tracking-wide text-ink-muted border-b border-edge">
             <tr>{headers.map((h) => <th key={h} className="px-3 py-2 text-left">{h}</th>)}</tr>
           </thead>
           <tbody>
             {rows.map((r, i) => (
-              <tr key={i} className="border-t border-slate-100">
+              <tr key={i} className="border-t border-edge-subtle">
                 {tab === 'sales' && <>
                   <td className="px-3 py-2 font-mono">{r.country || '—'}</td>
                   <td className="px-3 py-2">{r.currency}</td>
                   <td className="px-3 py-2">{r.order_count}</td>
-                  <td className="px-3 py-2 font-bold">{r.currency} {Number(r.revenue).toFixed(2)}</td>
+                  <td className="px-3 py-2 font-semibold">{r.currency} {Number(r.revenue).toFixed(2)}</td>
                 </>}
                 {tab === 'clv' && <>
                   <td className="px-3 py-2">{r.email}</td>
                   <td className="px-3 py-2">{r.currency}</td>
                   <td className="px-3 py-2">{r.orders}</td>
-                  <td className="px-3 py-2 font-bold">{r.currency} {Number(r.total_spend).toFixed(2)}</td>
-                  <td className="px-3 py-2 text-slate-500">{r.first_order ? r.first_order.slice(0, 10) : ''}</td>
-                  <td className="px-3 py-2 text-slate-500">{r.last_order ? r.last_order.slice(0, 10) : ''}</td>
+                  <td className="px-3 py-2 font-semibold">{r.currency} {Number(r.total_spend).toFixed(2)}</td>
+                  <td className="px-3 py-2 text-ink-muted">{r.first_order ? r.first_order.slice(0, 10) : ''}</td>
+                  <td className="px-3 py-2 text-ink-muted">{r.last_order ? r.last_order.slice(0, 10) : ''}</td>
                 </>}
                 {tab === 'products' && <>
                   <td className="px-3 py-2 font-mono">{r.sku}</td>
                   <td className="px-3 py-2">{r.name}</td>
                   <td className="px-3 py-2">{r.currency}</td>
                   <td className="px-3 py-2">{r.units_sold}</td>
-                  <td className="px-3 py-2 font-bold">{r.currency} {Number(r.revenue).toFixed(2)}</td>
+                  <td className="px-3 py-2 font-semibold">{r.currency} {Number(r.revenue).toFixed(2)}</td>
                 </>}
               </tr>
             ))}
@@ -527,29 +527,29 @@ function ReportsTab({ authFetch, initialTab }) {
       <div className="flex flex-wrap items-center gap-2">
         {TABS.map((t) => (
           <button key={t.k} onClick={() => setTab(t.k)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${tab === t.k ? 'bg-brand-purple text-white' : 'border border-slate-200 bg-white text-brand-navy hover:border-brand-purple/40'}`}>
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${tab === t.k ? 'bg-ink-primary text-white' : 'border border-edge bg-white text-ink-primary hover:border-edge-strong'}`}>
             {t.label}
           </button>
         ))}
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <label className="text-[11px] font-bold text-brand-muted">Region</label>
-        <select value={region} onChange={(e) => setRegion(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1 text-xs">
+        <label className="text-[11px] font-semibold text-brand-muted">Region</label>
+        <select value={region} onChange={(e) => setRegion(e.target.value)} className="rounded-sm border border-edge px-2 py-1 text-xs">
           <option value="all">All</option>
           <option value="UK">UK</option>
           <option value="IN">IN</option>
         </select>
-        <label className="text-[11px] font-bold text-brand-muted ml-2">Days</label>
-        <select value={days} onChange={(e) => setDays(Number(e.target.value))} className="rounded-lg border border-slate-200 px-2 py-1 text-xs">
+        <label className="text-[11px] font-semibold text-brand-muted ml-2">Days</label>
+        <select value={days} onChange={(e) => setDays(Number(e.target.value))} className="rounded-sm border border-edge px-2 py-1 text-xs">
           {[7, 30, 90, 180, 365].map((n) => <option key={n} value={n}>{n}</option>)}
         </select>
         {canDownload && (
-          <button onClick={downloadCsv} className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-brand-navy hover:border-brand-purple/40">
+          <button onClick={downloadCsv} className="ml-auto inline-flex items-center gap-1.5 rounded-sm border border-edge bg-white px-3 py-1.5 text-xs font-semibold text-ink-primary hover:border-edge-strong">
             <Download className="h-3.5 w-3.5" /> Download CSV
           </button>
         )}
       </div>
-      <div className="rounded-2xl border border-slate-200 bg-white p-5">{renderTable()}</div>
+      <div className="rounded-lg border border-edge bg-white shadow-card p-5">{renderTable()}</div>
       {tab === 'sales' && Array.isArray(data) && data.length > 0 && <GeographicMap rows={data} />}
     </div>
   );
@@ -600,63 +600,63 @@ function HomeTab({ authFetch, go }) {
         <StatCard icon={ShoppingCart} label="Total orders" value={stats?.total_orders ?? '—'}
           sub={`${stats?.processing_orders ?? 0} processing · ${pending} pending`} onClick={() => go('orders')} />
         <StatCard icon={TrendingUp} label="Revenue" value={revenueChips[0] || '—'}
-          sub={revenueChips.slice(1).join(' · ') || 'across all orders'} accent="bg-green-100 text-green-700" />
+          sub={revenueChips.slice(1).join(' · ') || 'across all orders'} accent="bg-brand-success/10 text-ink-success" />
         <StatCard icon={UsersIcon} label="Customers" value={customers}
-          sub="unique buyers" accent="bg-indigo-100 text-indigo-700" />
+          sub="unique buyers" accent="bg-surface-muted text-ink-accent" />
         <StatCard icon={Package} label="Low stock" value={lowStock.length}
-          sub={`≤ ${LOW} units in a region`} accent={lowStock.length ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}
+          sub={`≤ ${LOW} units in a region`} accent={lowStock.length ? 'bg-amber-50 text-ink-accent' : 'bg-surface-muted text-ink-muted'}
           onClick={() => go('products')} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <RevenueTrendCard authFetch={authFetch} />
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-5">
-          <h3 className="mb-3 text-sm font-bold text-brand-navy">Needs attention</h3>
+        <div className="rounded-lg border border-edge bg-white shadow-card p-5">
+          <h3 className="mb-3 text-sm font-semibold text-ink-primary">Needs attention</h3>
           <div className="space-y-2">
-            <button onClick={() => go('orders')} className="flex w-full items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 text-left hover:border-brand-purple/40">
-              <span className="text-xs font-medium text-brand-navy">Pending orders</span>
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${pending ? 'bg-amber-100 text-amber-700' : 'bg-slate-200 text-slate-500'}`}>{pending}</span>
+            <button onClick={() => go('orders')} className="flex w-full items-center justify-between rounded-md border border-edge-subtle bg-surface-muted px-3 py-2.5 text-left hover:border-edge-strong">
+              <span className="text-xs font-medium text-ink-primary">Pending orders</span>
+              <span className={`rounded-xs px-2 py-0.5 text-[10px] font-semibold ${pending ? 'bg-amber-50 text-ink-accent' : 'bg-edge text-ink-muted'}`}>{pending}</span>
             </button>
-            <button onClick={() => go('abandoned')} className="flex w-full items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 text-left hover:border-brand-purple/40">
-              <span className="text-xs font-medium text-brand-navy">Abandoned checkouts</span>
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${abandoned ? 'bg-amber-100 text-amber-700' : 'bg-slate-200 text-slate-500'}`}>{abandoned}</span>
+            <button onClick={() => go('abandoned')} className="flex w-full items-center justify-between rounded-md border border-edge-subtle bg-surface-muted px-3 py-2.5 text-left hover:border-edge-strong">
+              <span className="text-xs font-medium text-ink-primary">Abandoned checkouts</span>
+              <span className={`rounded-xs px-2 py-0.5 text-[10px] font-semibold ${abandoned ? 'bg-amber-50 text-ink-accent' : 'bg-edge text-ink-muted'}`}>{abandoned}</span>
             </button>
-            <button onClick={() => go('products')} className="flex w-full items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 text-left hover:border-brand-purple/40">
-              <span className="text-xs font-medium text-brand-navy">Low-stock products</span>
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${lowStock.length ? 'bg-red-100 text-red-700' : 'bg-slate-200 text-slate-500'}`}>{lowStock.length}</span>
+            <button onClick={() => go('products')} className="flex w-full items-center justify-between rounded-md border border-edge-subtle bg-surface-muted px-3 py-2.5 text-left hover:border-edge-strong">
+              <span className="text-xs font-medium text-ink-primary">Low-stock products</span>
+              <span className={`rounded-xs px-2 py-0.5 text-[10px] font-semibold ${lowStock.length ? 'bg-red-50 text-ink-danger' : 'bg-edge text-ink-muted'}`}>{lowStock.length}</span>
             </button>
           </div>
         </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5">
+        <div className="min-w-0 rounded-lg border border-edge bg-white shadow-card p-5">
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-bold text-brand-navy">Recent orders</h3>
-            <button onClick={() => go('orders')} className="text-[11px] font-semibold text-brand-purple">View all</button>
+            <h3 className="text-sm font-semibold text-ink-primary">Recent orders</h3>
+            <button onClick={() => go('orders')} className="text-[11px] font-semibold text-ink-accent">View all</button>
           </div>
           {recent.length === 0 ? <p className="text-xs text-brand-muted">No orders yet.</p> : (
             <div className="space-y-1.5">
               {recent.map((o) => (
-                <button key={o.id} onClick={() => go('orders')} className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left hover:bg-slate-50">
-                  <span className="text-xs font-semibold text-brand-navy">#{o.id} <span className="font-normal text-brand-muted">{o.email}</span></span>
-                  <span className="flex items-center gap-2"><span className="text-xs text-brand-navy">{o.currency_code} {o.total}</span>
-                    <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${STATUS_COLOR[o.status]}`}>{o.status}</span></span>
+                <button key={o.id} onClick={() => go('orders')} className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-surface-muted">
+                  <span className="min-w-0 truncate text-xs font-semibold text-ink-primary">#{o.id} <span className="font-normal text-brand-muted">{o.email}</span></span>
+                  <span className="flex shrink-0 items-center gap-2"><span className="text-xs text-ink-primary">{o.currency_code} {o.total}</span>
+                    <span className={`rounded-xs px-1.5 py-0.5 text-[9px] font-semibold ${STATUS_COLOR[o.status]}`}>{o.status}</span></span>
                 </button>
               ))}
             </div>
           )}
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-5">
-          <h3 className="mb-3 text-sm font-bold text-brand-navy">Inventory to restock</h3>
+        <div className="min-w-0 rounded-lg border border-edge bg-white shadow-card p-5">
+          <h3 className="mb-3 text-sm font-semibold text-ink-primary">Inventory to restock</h3>
           {lowStock.length === 0 ? <p className="text-xs text-brand-muted">All products well stocked.</p> : (
             <div className="space-y-1.5">
               {lowStock.slice(0, 6).map((p) => (
-                <div key={p.sku} className="flex items-center justify-between rounded-lg px-2 py-1.5">
-                  <span className="text-xs font-medium text-brand-navy">{toDisplayText(p.name) || 'Untitled product'}</span>
-                  <span className="text-[10px] font-bold text-amber-600">{p.regions}</span>
+                <div key={p.sku} className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5">
+                  <span className="min-w-0 truncate text-xs font-medium text-ink-primary">{toDisplayText(p.name) || 'Untitled product'}</span>
+                  <span className="shrink-0 text-[10px] font-semibold text-ink-accent">{p.regions}</span>
                 </div>
               ))}
             </div>
@@ -832,13 +832,13 @@ function ProductsTab({ authFetch, regions, categories }) {
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-muted" />
           <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search products…"
-            className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/30" />
+            className="w-full rounded-lg border border-edge bg-white py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-edge-focus/30" />
         </div>
-        <select value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/30">
+        <select value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)} className="rounded-sm border border-edge px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-edge-focus/30">
           <option value="">All Categories</option>
           {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/30">
+        <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className="rounded-sm border border-edge px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-edge-focus/30">
           <option value="">Default order</option>
           <option value="name">Name (A-Z)</option>
           <option value="-name">Name (Z-A)</option>
@@ -847,22 +847,22 @@ function ProductsTab({ authFetch, regions, categories }) {
         </select>
         <p className="text-sm text-brand-muted ml-auto font-medium">{totalCount} products</p>
         <div className="flex gap-2">
-          <button onClick={handleExport} className="inline-flex items-center gap-1.5 px-3 py-2 text-xs uppercase border border-slate-200 bg-white rounded-lg hover:bg-slate-50 transition"><Download className="h-3.5 w-3.5" /> Export</button>
-          <button onClick={startNew} className="inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase bg-violet-600 text-white rounded-lg font-bold hover:bg-violet-700 transition"><Plus className="h-4 w-4" /> Add product</button>
+          <button onClick={handleExport} className="inline-flex items-center gap-1.5 px-3 py-2 text-xs uppercase border border-edge bg-white rounded-sm hover:bg-surface-muted transition"><Download className="h-3.5 w-3.5" /> Export</button>
+          <button onClick={startNew} className="inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase bg-ink-primary text-white rounded-sm font-semibold hover:bg-ink-primary/90 transition"><Plus className="h-4 w-4" /> Add product</button>
         </div>
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+      <div className="overflow-x-auto rounded-lg border border-edge bg-white shadow-card">
         <table className="w-full text-left text-xs">
-          <thead className="bg-slate-50 text-brand-muted border-b border-slate-200">
+          <thead className="bg-surface-muted text-[10px] font-medium uppercase tracking-wide text-ink-muted border-b border-edge">
             <tr>
-              <th className="px-3 py-3 font-bold">Product</th>
-              <th className="px-3 py-3 font-bold">Categories</th>
-              <th className="px-3 py-3 font-bold">Price · Stock</th>
-              <th className="px-3 py-3 font-bold">Variants</th>
-              <th className="px-3 py-3 font-bold">Status</th>
-              <th className="px-3 py-3 font-bold text-right">Actions</th>
+              <th className="px-3 py-3 font-medium">Product</th>
+              <th className="px-3 py-3 font-medium">Categories</th>
+              <th className="px-3 py-3 font-medium">Price · Stock</th>
+              <th className="px-3 py-3 font-medium">Variants</th>
+              <th className="px-3 py-3 font-medium">Status</th>
+              <th className="px-3 py-3 font-medium text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -872,35 +872,35 @@ function ProductsTab({ authFetch, regions, categories }) {
               const firstConfig = p.regional_configs?.[0];
               const firstStock = p.regional_stock?.find(s => s.region_id === firstConfig?.region);
               return (
-                <tr key={p.id} className="border-t border-slate-100 align-middle hover:bg-slate-50/50 cursor-pointer transition" onClick={() => startEdit(p)}>
+                <tr key={p.id} className="border-t border-edge-subtle align-middle hover:bg-surface-muted cursor-pointer transition" onClick={() => startEdit(p)}>
                   <td className="px-3 py-3">
                     <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 flex-shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100 flex items-center justify-center">
-                        {thumb ? <img src={thumb} alt="" className="h-full w-full object-cover" /> : <Package className="h-4 w-4 text-slate-300" />}
+                      <div className="h-10 w-10 flex-shrink-0 overflow-hidden rounded-lg border border-edge bg-surface-muted flex items-center justify-center">
+                        {thumb ? <img src={thumb} alt="" className="h-full w-full object-cover" /> : <Package className="h-4 w-4 text-ink-subtle" />}
                       </div>
                       <div>
-                        <p className="font-semibold text-brand-navy">{toDisplayText(p.name) || 'Untitled product'}</p>
-                        <p className="font-mono text-[10px] text-brand-muted">{p.sku} · <span className="rounded bg-brand-purple/10 text-brand-purple px-1 text-[8px] font-bold uppercase">{toDisplayText(p.nutrition_facts?._product_type) || 'Simple'}</span></p>
+                        <p className="font-semibold text-ink-primary">{toDisplayText(p.name) || 'Untitled product'}</p>
+                        <p className="font-mono text-[10px] text-brand-muted">{p.sku} · <span className="rounded bg-surface-muted text-ink-accent px-1 text-[8px] font-semibold uppercase">{toDisplayText(p.nutrition_facts?._product_type) || 'Simple'}</span></p>
                       </div>
                     </div>
                   </td>
                   <td className="px-3 py-3 text-brand-muted">{(p.categories || []).map((c) => c.name).join(', ') || '—'}</td>
                   <td className="px-3 py-3 text-brand-muted">
-                    {firstConfig ? <><span className="font-semibold text-brand-navy">{firstConfig.promotional_price || firstConfig.price}</span> · {firstStock ? firstStock.available : 0} units</> : '—'}
+                    {firstConfig ? <><span className="font-semibold text-ink-primary">{firstConfig.promotional_price || firstConfig.price}</span> · {firstStock ? firstStock.available : 0} units</> : '—'}
                   </td>
                   <td className="px-3 py-3">
                     {variantCount > 0
-                      ? <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700"><Layers className="h-3 w-3" />{variantCount} variants</span>
-                      : <span className="text-slate-400">—</span>}
+                      ? <span className="inline-flex items-center gap-1 rounded-full bg-surface-muted px-2 py-0.5 text-[10px] font-semibold text-ink-accent"><Layers className="h-3 w-3" />{variantCount} variants</span>
+                      : <span className="text-ink-subtle">—</span>}
                   </td>
                   <td className="px-3 py-3">
                     {p.is_archived
-                      ? <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600">ARCHIVED</span>
-                      : <span className="rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-bold text-green-700">ACTIVE</span>}
+                      ? <span className="rounded bg-surface-muted px-1.5 py-0.5 text-[10px] font-semibold text-ink-secondary">ARCHIVED</span>
+                      : <span className="rounded bg-brand-success/10 px-1.5 py-0.5 text-[10px] font-semibold text-ink-success">ACTIVE</span>}
                   </td>
                   <td className="px-3 py-3">
                     <div className="flex justify-end gap-2">
-                      <button onClick={(e) => { e.stopPropagation(); startEdit(p); }} className="text-brand-purple hover:opacity-70"><Pencil className="h-4 w-4" /></button>
+                      <button onClick={(e) => { e.stopPropagation(); startEdit(p); }} className="text-ink-accent hover:opacity-70"><Pencil className="h-4 w-4" /></button>
                       <button onClick={(e) => archive(p, e)} className="text-brand-muted hover:text-brand-danger"><Archive className="h-4 w-4" /></button>
                     </div>
                   </td>
@@ -1041,7 +1041,7 @@ function CollectionsTab({ authFetch }) {
     <div>
       <div className="mb-4 flex items-center justify-between">
         <p className="text-sm text-brand-muted">{cats.length} collections</p>
-        <button onClick={startNew} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase bg-brand-purple text-white rounded-lg">
+        <button onClick={startNew} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase">
           <Plus className="h-4 w-4" /> New collection
         </button>
       </div>
@@ -1050,29 +1050,29 @@ function CollectionsTab({ authFetch }) {
         {cats.map((c) => {
           const meta = rulesMap[c.slug] || { type: 'manual' };
           return (
-            <div key={c.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3">
+            <div key={c.id} className="flex items-center justify-between rounded-md border border-edge bg-white p-3">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 overflow-hidden rounded-lg border border-slate-200 bg-slate-100 flex items-center justify-center flex-shrink-0">
+                <div className="h-10 w-10 overflow-hidden rounded-lg border border-edge bg-surface-muted flex items-center justify-center flex-shrink-0">
                   {c.image_url ? (
                     <img src={c.image_url} alt="" className="h-full w-full object-cover" />
                   ) : (
-                    <Layers className="h-4 w-4 text-slate-300" />
+                    <Layers className="h-4 w-4 text-ink-subtle" />
                   )}
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-brand-navy">
+                  <p className="text-sm font-semibold text-ink-primary">
                     {toDisplayText(c.name)} <span className="font-mono text-[10px] text-brand-muted">/{toDisplayText(c.slug)}</span>
                     {meta.type === 'automated' ? (
-                      <span className="ml-2 rounded-full bg-purple-100 text-purple-700 px-1.5 py-0.5 text-[9px] font-bold">AUTOMATED</span>
+                      <span className="ml-2 rounded-xs bg-surface-muted text-ink-accent px-1.5 py-0.5 text-[9px] font-semibold">AUTOMATED</span>
                     ) : (
-                      <span className="ml-2 rounded-full bg-slate-100 text-slate-500 px-1.5 py-0.5 text-[9px] font-bold">MANUAL</span>
+                      <span className="ml-2 rounded-xs bg-surface-muted text-ink-muted px-1.5 py-0.5 text-[9px] font-semibold">MANUAL</span>
                     )}
                   </p>
                   {c.product_count != null && <p className="text-[11px] text-brand-muted">{c.product_count} products</p>}
                 </div>
               </div>
               <div className="flex gap-2">
-                <button onClick={() => startEdit(c)} className="text-brand-purple hover:opacity-70">
+                <button onClick={() => startEdit(c)} className="text-ink-accent hover:opacity-70">
                   <Pencil className="h-4 w-4" />
                 </button>
                 <button onClick={() => del(c)} className="text-brand-muted hover:text-brand-danger">
@@ -1085,40 +1085,40 @@ function CollectionsTab({ authFetch }) {
       </div>
 
       {form && (
-        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-slate-50 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-          <div className="w-full max-w-xl bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4 max-h-[85vh] overflow-y-auto">
-            <h3 className="text-lg font-black text-brand-navy">{form.id ? 'Edit' : 'New'} collection</h3>
+        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
+          <div className="w-full max-w-xl bg-white rounded-lg border border-edge p-6 shadow-card space-y-4 max-h-[85vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold text-ink-primary">{form.id ? 'Edit' : 'New'} collection</h3>
             
             <div className="space-y-3">
-              <input placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" />
-              <input placeholder="Slug" value={form.slug} disabled={!!form.id} onChange={(e) => setForm({ ...form, slug: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm disabled:bg-slate-50" />
-              <textarea placeholder="Description" rows={2} value={form.description || ''} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" />
+              <input placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
+              <input placeholder="Slug" value={form.slug} disabled={!!form.id} onChange={(e) => setForm({ ...form, slug: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-sm disabled:bg-surface-muted" />
+              <textarea placeholder="Description" rows={2} value={form.description || ''} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
               
               <div className="space-y-1">
-                <label className="block text-[10px] font-bold text-brand-muted uppercase">Collection Image URL</label>
+                <label className="block text-[10px] font-semibold text-brand-muted uppercase">Collection Image URL</label>
                 <div className="flex gap-3">
-                  <input placeholder="https://example.com/collection-image.jpg" value={form.image_url || ''} onChange={(e) => setForm({ ...form, image_url: e.target.value })} className="flex-1 rounded-lg border border-slate-200 p-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-violet-500" />
-                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2.5 text-xs font-bold text-brand-navy hover:border-brand-purple">
+                  <input placeholder="https://example.com/collection-image.jpg" value={form.image_url || ''} onChange={(e) => setForm({ ...form, image_url: e.target.value })} className="flex-1 rounded-sm border border-edge p-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-edge-focus/40" />
+                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-edge px-3 py-2.5 text-xs font-semibold text-ink-primary hover:border-ink-primary">
                     <Upload className="h-3.5 w-3.5" />
                     {uploadingImage ? 'Uploading' : 'Upload'}
                     <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" disabled={uploadingImage} />
                   </label>
                   {form.image_url && (
-                    <div className="h-10 w-10 rounded-lg overflow-hidden border border-slate-200 bg-slate-100 flex items-center justify-center flex-shrink-0">
+                    <div className="h-10 w-10 rounded-lg overflow-hidden border border-edge bg-surface-muted flex items-center justify-center flex-shrink-0">
                       <img src={form.image_url} alt="" className="h-full w-full object-cover" />
                     </div>
                   )}
                 </div>
               </div>
 
-              <div className="border-t border-slate-100 pt-3">
-                <label className="block text-xs font-bold text-brand-navy mb-2 uppercase">Collection Type</label>
+              <div className="border-t border-edge-subtle pt-3">
+                <label className="block text-xs font-semibold text-ink-primary mb-2 uppercase">Collection Type</label>
                 <div className="flex gap-4">
-                  <label className="flex items-center gap-2 text-xs text-brand-navy font-semibold cursor-pointer">
+                  <label className="flex items-center gap-2 text-xs text-ink-primary font-semibold cursor-pointer">
                     <input type="radio" checked={form.type === 'manual'} onChange={() => setForm({ ...form, type: 'manual' })} />
                     Manual (Manually add products)
                   </label>
-                  <label className="flex items-center gap-2 text-xs text-brand-navy font-semibold cursor-pointer">
+                  <label className="flex items-center gap-2 text-xs text-ink-primary font-semibold cursor-pointer">
                     <input type="radio" checked={form.type === 'automated'} onChange={() => setForm({ ...form, type: 'automated', rules: form.rules?.length ? form.rules : [{ column: 'category', relation: 'equals', value: '' }] })} />
                     Automated (Match product criteria)
                   </label>
@@ -1126,9 +1126,9 @@ function CollectionsTab({ authFetch }) {
               </div>
 
               {form.type === 'automated' && (
-                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
+                <div className="bg-surface-muted p-4 rounded-lg border border-edge space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-brand-navy uppercase">Conditions match:</span>
+                    <span className="text-xs font-semibold text-ink-primary uppercase">Conditions match:</span>
                     <select value={form.match} onChange={(e) => setForm({ ...form, match: e.target.value })} className="text-xs border rounded p-1 bg-white">
                       <option value="all">All Conditions (AND)</option>
                       <option value="any">Any Condition (OR)</option>
@@ -1154,14 +1154,14 @@ function CollectionsTab({ authFetch }) {
                         <button onClick={() => removeRule(idx)} className="text-brand-danger hover:opacity-75 p-1"><X className="h-4 w-4" /></button>
                       </div>
                     ))}
-                    <button onClick={addRule} className="text-xs font-bold text-brand-purple hover:underline">+ Add condition</button>
+                    <button onClick={addRule} className="text-xs font-semibold text-ink-accent hover:underline">+ Add condition</button>
                   </div>
                 </div>
               )}
 
               <div className="flex gap-2 pt-2">
-                <button onClick={save} className="btn-primary flex-1 py-2.5 text-xs uppercase bg-brand-purple text-white rounded-lg">Save Collection</button>
-                <button onClick={() => setForm(null)} className="flex-1 rounded-lg border border-slate-200 py-2.5 text-xs font-bold uppercase">Cancel</button>
+                <button onClick={save} className="btn-primary flex-1 py-2.5 text-xs uppercase">Save Collection</button>
+                <button onClick={() => setForm(null)} className="flex-1 rounded-sm border border-edge py-2.5 text-xs font-semibold uppercase">Cancel</button>
               </div>
             </div>
           </div>
@@ -1344,76 +1344,76 @@ function OrderDetail({ authFetch, order, onClose, onChanged }) {
   };
 
   return (
-    <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-slate-50 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-      <div className="w-full max-w-5xl bg-white rounded-2xl border border-slate-200 p-6 shadow-sm mx-auto">
-        <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-4 py-4 backdrop-blur sm:px-6">
+    <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
+      <div className="w-full max-w-5xl bg-white rounded-lg border border-edge p-6 shadow-card mx-auto">
+        <div className="sticky top-0 z-10 border-b border-edge bg-white/95 px-4 py-4 backdrop-blur sm:px-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-xs font-bold uppercase text-brand-muted">Checkout detail</p>
-              <h3 className="text-xl font-black text-brand-navy">Order #{order.id}</h3>
+              <p className="kicker">Checkout detail</p>
+              <h3 className="text-xl font-semibold text-ink-primary">Order #{order.id}</h3>
             </div>
             <div className="flex items-center gap-2">
-              <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${STATUS_COLOR[order.status]}`}>{order.status}</span>
-              <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${PAYMENT_STATUS_COLOR[order.payment_status] || 'bg-slate-100 text-slate-600'}`}>{order.payment_status || 'PAID'}</span>
-              <button onClick={onClose} className="rounded-lg border border-slate-200 p-2 text-brand-muted hover:bg-slate-50" aria-label="Close order detail"><X className="h-4 w-4" /></button>
+              <span className={`rounded-xs px-2.5 py-1 text-[10px] font-semibold ${STATUS_COLOR[order.status]}`}>{order.status}</span>
+              <span className={`rounded-xs px-2.5 py-1 text-[10px] font-semibold ${PAYMENT_STATUS_COLOR[order.payment_status] || 'bg-surface-muted text-ink-secondary'}`}>{order.payment_status || 'PAID'}</span>
+              <button onClick={onClose} className="rounded-sm border border-edge p-2 text-brand-muted hover:bg-surface-muted" aria-label="Close order detail"><X className="h-4 w-4" /></button>
             </div>
           </div>
         </div>
 
         <div className="grid gap-6 p-4 sm:p-6 lg:grid-cols-[1fr_320px]">
           <div className="space-y-5">
-            <section className="rounded-xl border border-slate-200 bg-white p-4">
+            <section className="rounded-md border border-edge bg-white shadow-card p-4">
               <div className="mb-3 flex items-center justify-between">
-                <p className="text-xs font-bold uppercase text-brand-muted">Items</p>
-                <select value={order.status} onChange={(e) => setStatus(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs">
+                <p className="kicker">Items</p>
+                <select value={order.status} onChange={(e) => setStatus(e.target.value)} className="rounded-sm border border-edge px-2 py-1.5 text-xs">
                   {ORDER_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
-              <div className="divide-y divide-slate-100">
+              <div className="divide-y divide-edge-subtle">
                 {(order.items || []).map((it) => (
                   <div key={it.id} className="flex items-center justify-between gap-3 py-3 text-sm">
                     <div>
-                      <p className="font-semibold text-brand-navy">{toDisplayText(it.product_name) || 'Unknown item'}</p>
+                      <p className="font-semibold text-ink-primary">{toDisplayText(it.product_name) || 'Unknown item'}</p>
                       <p className="font-mono text-[10px] text-brand-muted">{it.product_sku} · Qty {it.quantity}</p>
                     </div>
-                    <p className="font-semibold text-brand-navy">{formatMoney(order.currency_code, Number(it.price) * Number(it.quantity))}</p>
+                    <p className="font-semibold text-ink-primary">{formatMoney(order.currency_code, Number(it.price) * Number(it.quantity))}</p>
                   </div>
                 ))}
               </div>
-              <div className="mt-3 space-y-1 border-t border-slate-100 pt-3 text-sm">
+              <div className="mt-3 space-y-1 border-t border-edge-subtle pt-3 text-sm">
                 <div className="flex justify-between text-brand-muted"><span>Subtotal</span><span>{formatMoney(order.currency_code, order.subtotal)}</span></div>
                 <div className="flex justify-between text-brand-muted"><span>Tax ({order.tax_rate}%)</span><span>{formatMoney(order.currency_code, order.tax_amount)}</span></div>
                 <div className="flex justify-between text-brand-muted"><span>Shipping</span><span>{formatMoney(order.currency_code, order.shipping_cost)}</span></div>
-                <div className="flex justify-between pt-2 text-base font-black text-brand-navy"><span>Total</span><span>{formatMoney(order.currency_code, order.total)}</span></div>
+                <div className="flex justify-between pt-2 text-base font-semibold text-ink-primary"><span>Total</span><span>{formatMoney(order.currency_code, order.total)}</span></div>
               </div>
             </section>
 
-            <section className="rounded-xl border border-slate-200 bg-white p-4">
+            <section className="rounded-md border border-edge bg-white shadow-card p-4">
               <div className="mb-3 flex items-center gap-2">
-                <Banknote className="h-4 w-4 text-brand-purple" />
-                <p className="text-xs font-bold uppercase text-brand-muted">Payment</p>
+                <Banknote className="h-4 w-4 text-ink-accent" />
+                <p className="kicker">Payment</p>
               </div>
               <div className="grid gap-3 text-sm sm:grid-cols-3">
-                <div><p className="text-[11px] text-brand-muted">Method</p><p className="font-semibold text-brand-navy">{order.payment_method}</p></div>
-                <div><p className="text-[11px] text-brand-muted">Authorized</p><p className="font-semibold text-brand-navy">{formatMoney(order.currency_code, authorized)}</p></div>
-                <div><p className="text-[11px] text-brand-muted">Captured</p><p className="font-semibold text-brand-navy">{formatMoney(order.currency_code, captured)}</p></div>
+                <div><p className="text-[11px] text-brand-muted">Method</p><p className="font-semibold text-ink-primary">{order.payment_method}</p></div>
+                <div><p className="text-[11px] text-brand-muted">Authorized</p><p className="font-semibold text-ink-primary">{formatMoney(order.currency_code, authorized)}</p></div>
+                <div><p className="text-[11px] text-brand-muted">Captured</p><p className="font-semibold text-ink-primary">{formatMoney(order.currency_code, captured)}</p></div>
               </div>
-              <div className="mt-4 rounded-lg bg-slate-50 p-3">
+              <div className="mt-4 rounded-lg bg-surface-muted p-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <p className="text-xs font-bold text-brand-navy">Capture payment manually</p>
+                  <p className="text-xs font-semibold text-ink-primary">Capture payment manually</p>
                   <span className="text-[11px] text-brand-muted">{order.payment_capture_mode || 'AUTO'} capture</span>
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
-                  <button onClick={authorizePayment} disabled={saving} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-brand-navy hover:border-brand-purple disabled:opacity-50">Authorize</button>
-                  <input value={captureAmount} onChange={(e) => setCaptureAmount(e.target.value)} placeholder={`Remaining ${captureRemaining.toFixed(2)}`} className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm" />
-                  <button onClick={capturePayment} disabled={saving || captureRemaining <= 0} className="btn-primary rounded-lg px-4 py-2 text-xs uppercase bg-brand-purple text-white disabled:opacity-50">Capture</button>
+                  <button onClick={authorizePayment} disabled={saving} className="rounded-sm border border-edge bg-white px-3 py-2 text-xs font-semibold text-ink-primary hover:border-ink-primary disabled:opacity-50">Authorize</button>
+                  <input value={captureAmount} onChange={(e) => setCaptureAmount(e.target.value)} placeholder={`Remaining ${captureRemaining.toFixed(2)}`} className="min-w-0 flex-1 rounded-sm border border-edge px-3 py-2 text-sm" />
+                  <button onClick={capturePayment} disabled={saving || captureRemaining <= 0} className="btn-primary px-4 py-2 text-xs uppercase disabled:opacity-50">Capture</button>
                 </div>
                 {err && <p className="mt-2 rounded bg-brand-danger/10 p-2 text-xs text-brand-danger">{err}</p>}
               </div>
-              <div className="mt-4 divide-y divide-slate-100">
+              <div className="mt-4 divide-y divide-edge-subtle">
                 {paymentLogs.map((log, i) => (
                   <div key={`${log.transaction_id}-${i}`} className="flex items-center justify-between gap-3 py-2 text-xs">
-                    <span className="font-semibold text-brand-navy">{log.status} · {log.gateway}</span>
+                    <span className="font-semibold text-ink-primary">{log.status} · {log.gateway}</span>
                     <span className="text-brand-muted">{formatMoney(order.currency_code, log.amount)} · {formatDateTime(log.created_at)}</span>
                   </div>
                 ))}
@@ -1421,46 +1421,46 @@ function OrderDetail({ authFetch, order, onClose, onChanged }) {
               </div>
             </section>
 
-            <section className="rounded-xl border border-slate-200 bg-white p-4">
+            <section className="rounded-md border border-edge bg-white shadow-card p-4">
               <div className="mb-3 flex items-center gap-2">
-                <Activity className="h-4 w-4 text-brand-purple" />
-                <p className="text-xs font-bold uppercase text-brand-muted">Order activity timeline</p>
+                <Activity className="h-4 w-4 text-ink-accent" />
+                <p className="kicker">Order activity timeline</p>
               </div>
-              <ol className="space-y-4 border-l border-slate-200 pl-4">
+              <ol className="space-y-4 border-l border-edge pl-4">
                 {timeline.map((e, i) => (
                   <li key={i} className="relative">
-                    <span className="absolute -left-[21px] top-1 flex h-3 w-3 items-center justify-center rounded-full bg-white ring-2 ring-brand-purple" />
-                    <p className="text-sm font-semibold text-brand-navy">{e.label}</p>
+                    <span className="absolute -left-[21px] top-1 flex h-3 w-3 items-center justify-center rounded-full bg-white ring-2 ring-edge-focus" />
+                    <p className="text-sm font-semibold text-ink-primary">{e.label}</p>
                     <p className="text-xs text-brand-muted">{e.detail}</p>
-                    <p className="text-[10px] text-slate-400">{formatDateTime(e.ts)}</p>
+                    <p className="text-[10px] text-ink-subtle">{formatDateTime(e.ts)}</p>
                   </li>
                 ))}
                 {timeline.length === 0 && <li className="text-xs text-brand-muted">No events.</li>}
               </ol>
               <div className="mt-4 grid gap-2 sm:grid-cols-[160px_1fr_auto]">
-                <select value={noteKind} onChange={(e) => setNoteKind(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs">
+                <select value={noteKind} onChange={(e) => setNoteKind(e.target.value)} className="rounded-sm border border-edge px-3 py-2 text-xs">
                   <option value="NOTE">Note</option>
                   <option value="CUSTOMER_COMMUNICATION">Customer communication</option>
                 </select>
-                <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add note or communication record" className="rounded-lg border border-slate-200 px-3 py-2 text-sm" />
-                <button onClick={addTimelineEvent} disabled={saving || !note.trim()} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-brand-navy hover:border-brand-purple disabled:opacity-50">Add</button>
+                <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add note or communication record" className="rounded-sm border border-edge px-3 py-2 text-sm" />
+                <button onClick={addTimelineEvent} disabled={saving || !note.trim()} className="rounded-sm border border-edge px-3 py-2 text-xs font-semibold text-ink-primary hover:border-ink-primary disabled:opacity-50">Add</button>
               </div>
             </section>
           </div>
 
           <aside className="space-y-4">
             {/* Fulfillment & Refund Operations Panel */}
-            <section className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
-              <p className="text-xs font-bold uppercase text-brand-muted">Order Operations</p>
+            <section className="rounded-md border border-edge bg-white shadow-card p-4 space-y-3">
+              <p className="kicker">Order Operations</p>
               
               {order.status !== 'SHIPPED' && order.status !== 'DELIVERED' && order.status !== 'CANCELLED' && order.status !== 'REFUNDED' && (
-                <div className="border-b border-slate-100 pb-3">
-                  <button onClick={() => setShowFulfillForm(!showFulfillForm)} className="w-full btn-primary text-xs font-bold uppercase py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors">
+                <div className="border-b border-edge-subtle pb-3">
+                  <button onClick={() => setShowFulfillForm(!showFulfillForm)} className="w-full btn-primary text-xs font-semibold uppercase py-2 hover:">
                     Fulfill Items
                   </button>
                   {showFulfillForm && (
-                    <div className="mt-3 space-y-2 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                      <select value={carrier} onChange={(e) => setCarrier(e.target.value)} className="w-full text-xs rounded border border-slate-300 p-1 bg-white">
+                    <div className="mt-3 space-y-2 bg-surface-muted p-2.5 rounded-lg border border-edge">
+                      <select value={carrier} onChange={(e) => setCarrier(e.target.value)} className="w-full text-xs rounded border border-edge-strong p-1 bg-white">
                         <option value="Delhivery">Delhivery</option>
                         <option value="Blue Dart">Blue Dart</option>
                         <option value="DTDC">DTDC</option>
@@ -1468,8 +1468,8 @@ function OrderDetail({ authFetch, order, onClose, onChanged }) {
                         <option value="DPD">DPD</option>
                         <option value="Evri">Evri</option>
                       </select>
-                      <input placeholder="Tracking Number" value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)} className="w-full text-xs rounded border border-slate-300 p-1 bg-white" />
-                      <button onClick={handleFulfill} disabled={!trackingNumber || saving} className="w-full bg-brand-purple text-white text-[10px] uppercase font-bold py-1.5 rounded disabled:opacity-50">
+                      <input placeholder="Tracking Number" value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)} className="w-full text-xs rounded border border-edge-strong p-1 bg-white" />
+                      <button onClick={handleFulfill} disabled={!trackingNumber || saving} className="w-full bg-ink-primary text-white text-[10px] uppercase font-semibold py-1.5 rounded disabled:opacity-50">
                         Confirm Shipment
                       </button>
                     </div>
@@ -1478,21 +1478,21 @@ function OrderDetail({ authFetch, order, onClose, onChanged }) {
               )}
 
               {order.status !== 'CANCELLED' && order.status !== 'REFUNDED' && (
-                <div className="border-b border-slate-100 pb-3">
-                  <button onClick={() => setShowRefundForm(!showRefundForm)} className="w-full border border-slate-200 text-xs font-bold uppercase py-2 text-brand-navy rounded-lg hover:bg-slate-50">
+                <div className="border-b border-edge-subtle pb-3">
+                  <button onClick={() => setShowRefundForm(!showRefundForm)} className="w-full border border-edge text-xs font-semibold uppercase py-2 text-ink-primary rounded-sm hover:bg-surface-muted">
                     Refund Order
                   </button>
                   {showRefundForm && (
-                    <div className="mt-3 space-y-2 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                    <div className="mt-3 space-y-2 bg-surface-muted p-2.5 rounded-lg border border-edge">
                       <div>
                         <label className="text-[10px] text-brand-muted block font-semibold">Refund Amount ({order.currency_code})</label>
-                        <input type="number" step="0.01" value={refundAmount} onChange={(e) => setRefundAmount(e.target.value)} className="w-full text-xs rounded border border-slate-300 p-1 bg-white" />
+                        <input type="number" step="0.01" value={refundAmount} onChange={(e) => setRefundAmount(e.target.value)} className="w-full text-xs rounded border border-edge-strong p-1 bg-white" />
                       </div>
                       <div>
                         <label className="text-[10px] text-brand-muted block font-semibold">Reason</label>
-                        <input placeholder="Reason for return" value={refundReason} onChange={(e) => setRefundReason(e.target.value)} className="w-full text-xs rounded border border-slate-300 p-1 bg-white" />
+                        <input placeholder="Reason for return" value={refundReason} onChange={(e) => setRefundReason(e.target.value)} className="w-full text-xs rounded border border-edge-strong p-1 bg-white" />
                       </div>
-                      <button onClick={handleRefund} disabled={!refundAmount || Number(refundAmount) <= 0 || saving} className="w-full bg-brand-danger hover:bg-brand-danger/90 text-white text-[10px] uppercase font-bold py-1.5 rounded disabled:opacity-50">
+                      <button onClick={handleRefund} disabled={!refundAmount || Number(refundAmount) <= 0 || saving} className="w-full bg-brand-danger hover:bg-brand-danger/90 text-white text-[10px] uppercase font-semibold py-1.5 rounded disabled:opacity-50">
                         Process Refund
                       </button>
                     </div>
@@ -1502,35 +1502,35 @@ function OrderDetail({ authFetch, order, onClose, onChanged }) {
 
               {order.status !== 'CANCELLED' && order.status !== 'SHIPPED' && order.status !== 'DELIVERED' && order.status !== 'REFUNDED' && (
                 <div>
-                  <button onClick={handleCancel} disabled={saving} className="w-full border border-brand-danger/30 text-brand-danger text-xs font-bold uppercase py-2 rounded-lg hover:bg-brand-danger/5 transition-colors">
+                  <button onClick={handleCancel} disabled={saving} className="w-full border border-brand-danger/30 text-brand-danger text-xs font-semibold uppercase py-2 rounded-sm hover:bg-brand-danger/5 transition-colors">
                     Cancel Order
                   </button>
                 </div>
               )}
             </section>
 
-            <section className="rounded-xl border border-slate-200 bg-white p-4">
-              <div className="mb-3 flex items-center gap-2"><UserRound className="h-4 w-4 text-brand-purple" /><p className="text-xs font-bold uppercase text-brand-muted">Customer</p></div>
-              <p className="font-semibold text-brand-navy">{order.shipping_name}</p>
+            <section className="rounded-md border border-edge bg-white shadow-card p-4">
+              <div className="mb-3 flex items-center gap-2"><UserRound className="h-4 w-4 text-ink-accent" /><p className="kicker">Customer</p></div>
+              <p className="font-semibold text-ink-primary">{order.shipping_name}</p>
               <p className="text-xs text-brand-muted">{order.email}</p>
               <p className="mt-1 text-xs text-brand-muted">{order.shipping_phone || 'No phone'}</p>
-              <div className="mt-3 rounded-lg bg-slate-50 p-3 text-xs text-brand-muted">
+              <div className="mt-3 rounded-lg bg-surface-muted p-3 text-xs text-brand-muted">
                 {order.shipping_address_line1}{order.shipping_address_line2 ? `, ${order.shipping_address_line2}` : ''}<br />
                 {order.shipping_city}, {order.shipping_state} {order.shipping_postal_code}<br />
                 {order.shipping_country}
               </div>
             </section>
-            <section className="rounded-xl border border-slate-200 bg-white p-4">
-              <p className="mb-3 text-xs font-bold uppercase text-brand-muted">Checkout summary</p>
+            <section className="rounded-md border border-edge bg-white shadow-card p-4">
+              <p className="mb-3 text-xs font-semibold uppercase text-brand-muted">Checkout summary</p>
               <div className="space-y-2 text-xs">
-                <div className="flex justify-between"><span className="text-brand-muted">Region</span><span className="font-semibold text-brand-navy">{order.region_code || order.region}</span></div>
-                <div className="flex justify-between"><span className="text-brand-muted">Created</span><span className="font-semibold text-brand-navy">{formatDateTime(order.created_at)}</span></div>
-                <div className="flex justify-between"><span className="text-brand-muted">Updated</span><span className="font-semibold text-brand-navy">{formatDateTime(order.updated_at)}</span></div>
-                <div className="flex justify-between"><span className="text-brand-muted">Payment ID</span><span className="max-w-[160px] truncate font-mono text-brand-navy">{order.payment_id || '—'}</span></div>
+                <div className="flex justify-between"><span className="text-brand-muted">Region</span><span className="font-semibold text-ink-primary">{order.region_code || order.region}</span></div>
+                <div className="flex justify-between"><span className="text-brand-muted">Created</span><span className="font-semibold text-ink-primary">{formatDateTime(order.created_at)}</span></div>
+                <div className="flex justify-between"><span className="text-brand-muted">Updated</span><span className="font-semibold text-ink-primary">{formatDateTime(order.updated_at)}</span></div>
+                <div className="flex justify-between"><span className="text-brand-muted">Payment ID</span><span className="max-w-[160px] truncate font-mono text-ink-primary">{order.payment_id || '—'}</span></div>
               </div>
             </section>
             {order.invoice?.pdf_url && (
-              <a href={getApiUrl(order.invoice.pdf_url)} target="_blank" rel="noreferrer" className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-xs font-semibold text-brand-navy hover:border-brand-purple">
+              <a href={getApiUrl(order.invoice.pdf_url)} target="_blank" rel="noreferrer" className="flex w-full items-center justify-center gap-2 rounded-lg border border-edge bg-white px-4 py-3 text-xs font-semibold text-ink-primary hover:border-ink-primary">
                 <Download className="h-4 w-4" /> Download invoice
               </a>
             )}
@@ -1560,11 +1560,11 @@ function PaginationControls({ page, pageSize, totalCount, onChangePage, onChange
   }
 
   return (
-    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-100 pt-4 mt-4">
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-edge-subtle pt-4 mt-4">
       <div className="text-xs text-brand-muted">
-        Showing <span className="font-semibold text-brand-navy">{totalCount > 0 ? startRange : 0}</span> to{' '}
-        <span className="font-semibold text-brand-navy">{endRange}</span> of{' '}
-        <span className="font-semibold text-brand-navy">{totalCount}</span> results
+        Showing <span className="font-semibold text-ink-primary">{totalCount > 0 ? startRange : 0}</span> to{' '}
+        <span className="font-semibold text-ink-primary">{endRange}</span> of{' '}
+        <span className="font-semibold text-ink-primary">{totalCount}</span> results
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <select
@@ -1573,7 +1573,7 @@ function PaginationControls({ page, pageSize, totalCount, onChangePage, onChange
             onChangePageSize(Number(e.target.value));
             onChangePage(1);
           }}
-          className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-brand-navy"
+          className="rounded-lg border border-edge bg-white px-2.5 py-1.5 text-xs text-ink-primary"
         >
           {[10, 25, 50, 100].map((size) => (
             <option key={size} value={size}>
@@ -1581,11 +1581,11 @@ function PaginationControls({ page, pageSize, totalCount, onChangePage, onChange
             </option>
           ))}
         </select>
-        <div className="flex items-center rounded-lg border border-slate-200 bg-white overflow-hidden">
+        <div className="flex items-center rounded-lg border border-edge bg-white overflow-hidden">
           <button
             onClick={() => onChangePage(Math.max(1, page - 1))}
             disabled={page === 1}
-            className="px-3 py-1.5 text-xs font-semibold text-brand-navy hover:bg-slate-50 disabled:opacity-40 transition-colors border-r border-slate-200"
+            className="px-3 py-1.5 text-xs font-semibold text-ink-primary hover:bg-surface-muted disabled:opacity-40 transition-colors border-r border-edge"
           >
             Prev
           </button>
@@ -1593,10 +1593,10 @@ function PaginationControls({ page, pageSize, totalCount, onChangePage, onChange
             <button
               key={p}
               onClick={() => onChangePage(p)}
-              className={`px-3 py-1.5 text-xs font-semibold border-r border-slate-200 last:border-0 transition-colors ${
+              className={`px-3 py-1.5 text-xs font-semibold border-r border-edge last:border-0 transition-colors ${
                 page === p
-                  ? 'bg-brand-purple/10 text-brand-purple'
-                  : 'text-brand-navy hover:bg-slate-50'
+                  ? 'bg-surface-muted text-ink-accent'
+                  : 'text-ink-primary hover:bg-surface-muted'
               }`}
             >
               {p}
@@ -1605,7 +1605,7 @@ function PaginationControls({ page, pageSize, totalCount, onChangePage, onChange
           <button
             onClick={() => onChangePage(Math.min(totalPages, page + 1))}
             disabled={page === totalPages}
-            className="px-3 py-1.5 text-xs font-semibold text-brand-navy hover:bg-slate-50 disabled:opacity-40 transition-colors"
+            className="px-3 py-1.5 text-xs font-semibold text-ink-primary hover:bg-surface-muted disabled:opacity-40 transition-colors"
           >
             Next
           </button>
@@ -1686,20 +1686,20 @@ function OrdersTab({ authFetch, initialStatus = 'ALL', title = 'orders' }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-stretch gap-3">
-        <div className="flex-1 grid gap-2 rounded-xl border border-slate-200 bg-white p-2.5 sm:grid-cols-[1fr_auto_auto_auto]">
+        <div className="min-w-0 flex-1 grid gap-2 rounded-md border border-edge bg-white p-2.5 sm:grid-cols-2 xl:grid-cols-[1fr_auto_auto_auto]">
           <label className="relative block">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-muted" />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search orders, customer, payment ID" className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm" />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search orders, customer, payment ID" className="w-full rounded-sm border border-edge py-2 pl-9 pr-3 text-sm" />
           </label>
-          <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+          <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-sm border border-edge px-3 py-2 text-sm">
             <option value="ALL">All statuses</option>
             {ORDER_STATUSES.map((s) => <option key={s} value={s}>{s}{getStatusCount(s)}</option>)}
           </select>
-          <select value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+          <select value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)} className="rounded-sm border border-edge px-3 py-2 text-sm">
             <option value="ALL">All payments</option>
             {Object.keys(PAYMENT_STATUS_COLOR).map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
-          <select value={sort} onChange={(e) => setSort(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+          <select value={sort} onChange={(e) => setSort(e.target.value)} className="rounded-sm border border-edge px-3 py-2 text-sm">
             <option value="newest">Newest first</option>
             <option value="oldest">Oldest first</option>
             <option value="total">Highest total</option>
@@ -1707,43 +1707,43 @@ function OrdersTab({ authFetch, initialStatus = 'ALL', title = 'orders' }) {
         </div>
         <button
           onClick={() => { setDetail(null); setShowCreate(true); }}
-          className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-violet-700 active:scale-95 transition-all shadow-sm whitespace-nowrap flex-shrink-0"
+          className="inline-flex items-center gap-2 rounded-md bg-ink-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-ink-primary/90 active:scale-95 transition-all shadow-card whitespace-nowrap flex-shrink-0"
         >
           <Plus className="h-4 w-4" /> Create order
         </button>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+      <div className="overflow-x-auto rounded-md border border-edge bg-white shadow-card">
         <table className="w-full text-left text-xs">
-          <thead className="bg-slate-50 text-brand-muted border-b border-slate-100">
+          <thead className="bg-surface-muted text-[10px] font-medium uppercase tracking-wide text-ink-muted border-b border-edge">
             <tr>
-              <th className="px-3 py-3 font-bold">Order</th>
-              <th className="px-3 py-3 font-bold">Customer</th>
-              <th className="px-3 py-3 font-bold">Payment</th>
-              <th className="px-3 py-3 font-bold">Total</th>
-              <th className="px-3 py-3 font-bold">Date</th>
-              <th className="px-3 py-3 font-bold">Status</th>
+              <th className="px-3 py-3 font-medium">Order</th>
+              <th className="px-3 py-3 font-medium">Customer</th>
+              <th className="px-3 py-3 font-medium">Payment</th>
+              <th className="px-3 py-3 font-medium">Total</th>
+              <th className="px-3 py-3 font-medium">Date</th>
+              <th className="px-3 py-3 font-medium">Status</th>
             </tr>
           </thead>
           <tbody>
             {orders.map((o) => (
-              <tr key={o.id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50 transition-colors" onClick={() => { setShowCreate(false); setDetail(o); }}>
-                <td className="px-3 py-3"><p className="font-bold text-brand-navy">#{o.id}</p><p className="text-[10px] text-brand-muted">{o.region_code || o.region}</p></td>
-                <td className="px-3 py-3"><p className="font-semibold text-brand-navy">{o.shipping_name || 'Customer'}</p><p className="text-brand-muted">{o.email}</p></td>
+              <tr key={o.id} className="cursor-pointer border-t border-edge-subtle hover:bg-surface-muted transition-colors" onClick={() => { setShowCreate(false); setDetail(o); }}>
+                <td className="px-3 py-3"><p className="font-semibold text-ink-primary">#{o.id}</p><p className="text-[10px] text-brand-muted">{o.region_code || o.region}</p></td>
+                <td className="px-3 py-3"><p className="font-semibold text-ink-primary">{o.shipping_name || 'Customer'}</p><p className="text-brand-muted">{o.email}</p></td>
                 <td className="px-3 py-3">
-                  <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${PAYMENT_STATUS_COLOR[o.payment_status] || 'bg-slate-100 text-slate-600'}`}>{o.payment_status || 'PAID'}</span>
-                  <p className="mt-0.5 font-mono text-[9px] text-slate-400">{o.payment_method}</p>
+                  <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${PAYMENT_STATUS_COLOR[o.payment_status] || 'bg-surface-muted text-ink-secondary'}`}>{o.payment_status || 'PAID'}</span>
+                  <p className="mt-0.5 font-mono text-[9px] text-ink-subtle">{o.payment_method}</p>
                 </td>
-                <td className="px-3 py-3 font-semibold text-brand-navy">{o.currency_code} {o.total}</td>
+                <td className="px-3 py-3 font-semibold text-ink-primary">{o.currency_code} {o.total}</td>
                 <td className="px-3 py-3 text-brand-muted">{formatDateTime(o.created_at)}</td>
-                <td className="px-3 py-3"><span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${STATUS_COLOR[o.status]}`}>{o.status}</span></td>
+                <td className="px-3 py-3"><span className={`rounded-xs px-2 py-0.5 text-[9px] font-semibold ${STATUS_COLOR[o.status]}`}>{o.status}</span></td>
               </tr>
             ))}
             {!orders.length && (
               <tr><td colSpan={6} className="px-3 py-10 text-center text-sm text-brand-muted">
                 {query || status !== 'ALL' || paymentStatus !== 'ALL'
                   ? 'No orders match these filters.'
-                  : <span>No orders yet. <button onClick={() => setShowCreate(true)} className="text-violet-600 font-semibold hover:underline">Create your first order →</button></span>}
+                  : <span>No orders yet. <button onClick={() => setShowCreate(true)} className="text-ink-accent font-semibold hover:underline">Create your first order →</button></span>}
               </td></tr>
             )}
           </tbody>
@@ -1815,44 +1815,44 @@ function AbandonedTab({ authFetch }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-3 md:grid-cols-[1fr_auto_auto]">
+      <div className="grid gap-3 rounded-md border border-edge bg-white p-3 sm:grid-cols-2 lg:grid-cols-[1fr_auto_auto]">
         <label className="relative block">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-muted" />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search email, session ID" className="w-full rounded-lg border border-slate-200 py-2.5 pl-9 pr-3 text-sm" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search email, session ID" className="w-full rounded-sm border border-edge py-2.5 pl-9 pr-3 text-sm" />
         </label>
-        <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2.5 text-sm">
+        <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-sm border border-edge px-3 py-2.5 text-sm">
           <option value="ALL">All recovery states</option>
           {Object.keys(RECOVERY_STATUS_COLOR).map((s) => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
         </select>
-        <select value={sort} onChange={(e) => setSort(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2.5 text-sm">
+        <select value={sort} onChange={(e) => setSort(e.target.value)} className="rounded-sm border border-edge px-3 py-2.5 text-sm">
           <option value="recent">Recently active</option>
           <option value="value">Highest value</option>
         </select>
       </div>
       {filtered.map((c) => (
-        <div key={c.id || c.session_id} className="rounded-xl border border-slate-200 bg-white p-4">
+        <div key={c.id || c.session_id} className="rounded-md border border-edge bg-white shadow-card p-4">
           <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
             <div>
-              <p className="text-sm font-semibold text-brand-navy">{c.email || 'Guest'} <span className="ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600">{c.region}</span></p>
+              <p className="text-sm font-semibold text-ink-primary">{c.email || 'Guest'} <span className="ml-1 rounded bg-surface-muted px-1.5 py-0.5 text-[10px] font-semibold text-ink-secondary">{c.region}</span></p>
               <p className="text-[11px] text-brand-muted">{c.item_count} item(s) · {(c.items || []).map((i) => `${i.qty || i.quantity}× ${i.name}`).join(', ')}</p>
-              <p className="mt-1 font-mono text-[10px] text-slate-400">{c.session_id}</p>
+              <p className="mt-1 font-mono text-[10px] text-ink-subtle">{c.session_id}</p>
             </div>
             <div className="text-left sm:text-right">
-              <p className="text-sm font-black text-brand-navy">{c.currency || 'GBP'} {c.value}</p>
-              <p className="text-[10px] text-slate-400">Active {formatDateTime(c.updated_at)}</p>
+              <p className="text-sm font-semibold text-ink-primary">{c.currency || 'GBP'} {c.value}</p>
+              <p className="text-[10px] text-ink-subtle">Active {formatDateTime(c.updated_at)}</p>
               <p className="mt-1 text-[10px] text-brand-muted">{c.recovery_attempts || 0} recovery attempt(s)</p>
             </div>
           </div>
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
-            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${RECOVERY_STATUS_COLOR[c.recovery_status] || RECOVERY_STATUS_COLOR.NOT_CONTACTED}`}>{(c.recovery_status || 'NOT_CONTACTED').replace('_', ' ')}</span>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-edge-subtle pt-3">
+            <span className={`rounded-xs px-2 py-0.5 text-[10px] font-semibold ${RECOVERY_STATUS_COLOR[c.recovery_status] || RECOVERY_STATUS_COLOR.NOT_CONTACTED}`}>{(c.recovery_status || 'NOT_CONTACTED').replace('_', ' ')}</span>
             <div className="flex flex-wrap gap-2">
-              <button onClick={() => updateRecovery(c, 'CONTACTED')} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-brand-navy hover:border-brand-purple"><MessageSquare className="mr-1 inline h-3.5 w-3.5" />Mark contacted</button>
-              <button onClick={() => updateRecovery(c, 'RECOVERED')} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-brand-navy hover:border-green-400"><CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />Recovered</button>
+              <button onClick={() => updateRecovery(c, 'CONTACTED')} className="rounded-sm border border-edge px-3 py-1.5 text-xs font-semibold text-ink-primary hover:border-ink-primary"><MessageSquare className="mr-1 inline h-3.5 w-3.5" />Mark contacted</button>
+              <button onClick={() => updateRecovery(c, 'RECOVERED')} className="rounded-sm border border-edge px-3 py-1.5 text-xs font-semibold text-ink-primary hover:border-brand-success"><CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />Recovered</button>
             </div>
           </div>
         </div>
       ))}
-      {!filtered.length && <p className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-brand-muted">No abandoned checkouts match these filters.</p>}
+      {!filtered.length && <p className="rounded-md border border-edge bg-white shadow-card p-6 text-sm text-brand-muted">No abandoned checkouts match these filters.</p>}
     </div>
   );
 }
@@ -1959,47 +1959,47 @@ function PaymentsTab({ authFetch, regions }) {
   return (
     <div className="space-y-4">
       {/* Subtab Navigation */}
-      <div className="flex gap-2 border-b border-slate-100 pb-2">
-        <button onClick={() => setActiveSubTab('routing')} className={`px-4 py-1.5 text-xs font-bold uppercase rounded-lg ${activeSubTab === 'routing' ? 'bg-brand-purple text-white' : 'text-brand-navy hover:bg-slate-50'}`}>Gateway Routing &amp; Priority</button>
-        <button onClick={() => setActiveSubTab('fraud')} className={`px-4 py-1.5 text-xs font-bold uppercase rounded-lg ${activeSubTab === 'fraud' ? 'bg-brand-purple text-white' : 'text-brand-navy hover:bg-slate-50'}`}>Fraud Prevention Rules</button>
+      <div className="flex gap-2 border-b border-edge-subtle pb-2">
+        <button onClick={() => setActiveSubTab('routing')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm ${activeSubTab === 'routing' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Gateway Routing &amp; Priority</button>
+        <button onClick={() => setActiveSubTab('fraud')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm ${activeSubTab === 'fraud' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Fraud Prevention Rules</button>
       </div>
 
       {activeSubTab === 'routing' ? (
         <div className="space-y-5">
           <div className="grid gap-4 md:grid-cols-3">
-            <div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs text-brand-muted">Gateways</p><p className="mt-1 text-2xl font-black text-brand-navy">{gateways.length}</p></div>
-            <div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs text-brand-muted">Manual capture queue</p><p className="mt-1 text-2xl font-black text-brand-navy">{manualCapture.length}</p></div>
-            <div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs text-brand-muted">Captured orders</p><p className="mt-1 text-2xl font-black text-brand-navy">{orders.filter((o) => (o.payment_status || 'PAID') === 'PAID').length}</p></div>
+            <div className="rounded-md border border-edge bg-white shadow-card p-4"><p className="text-xs text-brand-muted">Gateways</p><p className="mt-1 text-2xl font-semibold text-ink-primary">{gateways.length}</p></div>
+            <div className="rounded-md border border-edge bg-white shadow-card p-4"><p className="text-xs text-brand-muted">Manual capture queue</p><p className="mt-1 text-2xl font-semibold text-ink-primary">{manualCapture.length}</p></div>
+            <div className="rounded-md border border-edge bg-white shadow-card p-4"><p className="text-xs text-brand-muted">Captured orders</p><p className="mt-1 text-2xl font-semibold text-ink-primary">{orders.filter((o) => (o.payment_status || 'PAID') === 'PAID').length}</p></div>
           </div>
-          <div className="flex items-center justify-between"><p className="text-sm text-brand-muted">{gateways.length} gateways · region-routed by priority</p><button onClick={() => setForm({ code: 'RAZORPAY', display_name: '', region: regions[0]?.id, is_enabled: true, mode: 'TEST', publishable_key: '', secret_key: '', supports_refunds: true, sort_order: 0 })} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase bg-brand-purple text-white rounded-lg"><Plus className="h-4 w-4" /> New gateway</button></div>
+          <div className="flex items-center justify-between"><p className="text-sm text-brand-muted">{gateways.length} gateways · region-routed by priority</p><button onClick={() => setForm({ code: 'RAZORPAY', display_name: '', region: regions[0]?.id, is_enabled: true, mode: 'TEST', publishable_key: '', secret_key: '', supports_refunds: true, sort_order: 0 })} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase"><Plus className="h-4 w-4" /> New gateway</button></div>
           
           <div className="space-y-2">
             {sortedGateways.map((g) => (
-              <div key={g.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3">
+              <div key={g.id} className="flex items-center justify-between rounded-md border border-edge bg-white p-3">
                 <div>
                   <div className="flex items-center gap-2">
-                    <p className="text-sm font-semibold text-brand-navy">{g.display_name} <span className="font-mono text-[10px] text-brand-muted">{g.code}</span></p>
-                    <span className="rounded bg-brand-purple/10 text-brand-purple px-1.5 py-0.2 text-[9px] font-bold">Priority #{g.sort_order || 0}</span>
+                    <p className="text-sm font-semibold text-ink-primary">{g.display_name} <span className="font-mono text-[10px] text-brand-muted">{g.code}</span></p>
+                    <span className="rounded bg-surface-muted text-ink-accent px-1.5 py-0.2 text-[9px] font-semibold">Priority #{g.sort_order || 0}</span>
                   </div>
                   <p className="text-[11px] text-brand-muted">Region {g.region_code || regionCode(g.region)} · {g.mode} · {g.is_configured ? 'configured' : 'keys missing'}</p>
                 </div>
                 <div className="flex items-center gap-3">
-                  <button onClick={() => toggle(g)} className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${g.is_enabled ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>{g.is_enabled ? 'ENABLED' : 'DISABLED'}</button>
-                  <button onClick={() => syncStatus(g)} title="Reconcile recent orders against this gateway" className="rounded-lg border border-slate-200 px-2 py-1 text-[10px] font-bold uppercase text-brand-navy hover:bg-slate-50">Sync recent</button>
-                  <button onClick={() => setForm({ ...g })} className="text-brand-purple hover:opacity-70"><Pencil className="h-4 w-4" /></button>
+                  <button onClick={() => toggle(g)} className={`rounded-xs px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${g.is_enabled ? 'bg-brand-success/10 text-ink-success' : 'bg-surface-muted text-ink-muted'}`}>{g.is_enabled ? 'ENABLED' : 'DISABLED'}</button>
+                  <button onClick={() => syncStatus(g)} title="Reconcile recent orders against this gateway" className="rounded-sm border border-edge px-2 py-1 text-[10px] font-medium uppercase text-ink-primary hover:bg-surface-muted">Sync recent</button>
+                  <button onClick={() => setForm({ ...g })} className="text-ink-accent hover:opacity-70"><Pencil className="h-4 w-4" /></button>
                   <button onClick={() => del(g)} className="text-brand-muted hover:text-brand-danger"><X className="h-4 w-4" /></button>
                 </div>
               </div>
             ))}
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-white">
-            <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3"><ReceiptText className="h-4 w-4 text-brand-purple" /><p className="text-sm font-bold text-brand-navy">Authorization and capture queue</p></div>
-            <div className="divide-y divide-slate-100">
+          <div className="rounded-md border border-edge bg-white">
+            <div className="flex items-center gap-2 border-b border-edge-subtle px-4 py-3"><ReceiptText className="h-4 w-4 text-ink-accent" /><p className="text-sm font-semibold text-ink-primary">Authorization and capture queue</p></div>
+            <div className="divide-y divide-edge-subtle">
               {manualCapture.slice(0, 6).map((o) => (
                 <div key={o.id} className="flex flex-col justify-between gap-2 px-4 py-3 text-sm sm:flex-row sm:items-center">
-                  <div><p className="font-semibold text-brand-navy">Order #{o.id} · {o.email}</p><p className="text-xs text-brand-muted">{o.payment_method} · {formatMoney(o.currency_code, o.payment_captured_amount)} captured of {formatMoney(o.currency_code, o.payment_authorized_amount || o.total)}</p></div>
-                  <span className={`w-fit rounded-full px-2 py-0.5 text-[10px] font-bold ${PAYMENT_STATUS_COLOR[o.payment_status] || 'bg-slate-100 text-slate-600'}`}>{o.payment_status || 'PENDING'}</span>
+                  <div><p className="font-semibold text-ink-primary">Order #{o.id} · {o.email}</p><p className="text-xs text-brand-muted">{o.payment_method} · {formatMoney(o.currency_code, o.payment_captured_amount)} captured of {formatMoney(o.currency_code, o.payment_authorized_amount || o.total)}</p></div>
+                  <span className={`w-fit rounded-xs px-2 py-0.5 text-[10px] font-semibold ${PAYMENT_STATUS_COLOR[o.payment_status] || 'bg-surface-muted text-ink-secondary'}`}>{o.payment_status || 'PENDING'}</span>
                 </div>
               ))}
               {!manualCapture.length && <p className="px-4 py-5 text-sm text-brand-muted">No orders are waiting for manual capture.</p>}
@@ -2007,30 +2007,30 @@ function PaymentsTab({ authFetch, regions }) {
           </div>
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4">
-          <h3 className="text-sm font-bold text-brand-navy">Checkout Fraud Filters</h3>
+        <div className="bg-white rounded-lg border border-edge p-5 space-y-4">
+          <h3 className="text-sm font-semibold text-ink-primary">Checkout Fraud Filters</h3>
           <p className="text-xs text-brand-muted">Configure security threshold metrics to restrict checkout routing for high-risk buyers.</p>
 
           <div className="space-y-3 text-xs max-w-md">
             <div>
-              <label className="block font-bold text-brand-navy mb-1">Blocked Countries (Comma separated codes)</label>
-              <input type="text" value={fraudRules.block_countries || ''} onChange={(e) => setFraudRules({ ...fraudRules, block_countries: e.target.value })} placeholder="e.g. RU, CN, IR" className="w-full rounded-lg border border-slate-200 p-2.5 font-mono" />
+              <label className="block font-semibold text-ink-primary mb-1">Blocked Countries (Comma separated codes)</label>
+              <input type="text" value={fraudRules.block_countries || ''} onChange={(e) => setFraudRules({ ...fraudRules, block_countries: e.target.value })} placeholder="e.g. RU, CN, IR" className="w-full rounded-sm border border-edge p-2.5 font-mono" />
             </div>
 
             <div>
-              <label className="block font-bold text-brand-navy mb-1">Minimum COD Order Amount (GBP value equivalent)</label>
-              <input type="number" value={fraudRules.min_cod_amount || ''} onChange={(e) => setFraudRules({ ...fraudRules, min_cod_amount: e.target.value })} placeholder="e.g. 20" className="w-full rounded-lg border border-slate-200 p-2.5" />
-              <p className="text-[10px] text-slate-400 mt-1">Orders below this value will not be allowed to checkout using Cash on Delivery (prevent fake orders).</p>
+              <label className="block font-semibold text-ink-primary mb-1">Minimum COD Order Amount (GBP value equivalent)</label>
+              <input type="number" value={fraudRules.min_cod_amount || ''} onChange={(e) => setFraudRules({ ...fraudRules, min_cod_amount: e.target.value })} placeholder="e.g. 20" className="w-full rounded-sm border border-edge p-2.5" />
+              <p className="text-[10px] text-ink-subtle mt-1">Orders below this value will not be allowed to checkout using Cash on Delivery (prevent fake orders).</p>
             </div>
 
             <div>
-              <label className="flex items-center gap-1.5 cursor-pointer font-bold text-brand-navy">
-                <input type="checkbox" checked={fraudRules.block_suspicious_emails} onChange={(e) => setFraudRules({ ...fraudRules, block_suspicious_emails: e.target.checked })} className="accent-brand-purple" />
+              <label className="flex items-center gap-1.5 cursor-pointer font-semibold text-ink-primary">
+                <input type="checkbox" checked={fraudRules.block_suspicious_emails} onChange={(e) => setFraudRules({ ...fraudRules, block_suspicious_emails: e.target.checked })} className="accent-ink-primary" />
                 Flag and block disposable/temporary email addresses
               </label>
             </div>
 
-            <button onClick={saveFraud} disabled={savingFraud} className="btn-primary py-2.5 px-6 bg-brand-purple text-white font-bold rounded-lg uppercase text-xs disabled:opacity-50">
+            <button onClick={saveFraud} disabled={savingFraud} className="btn-primary py-2.5 px-6 font-semibold uppercase text-xs disabled:opacity-50">
               {savingFraud ? 'Saving...' : 'Save Fraud Settings'}
             </button>
           </div>
@@ -2038,40 +2038,40 @@ function PaymentsTab({ authFetch, regions }) {
       )}
 
       {form && (
-        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-slate-50 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-          <div className="w-full max-w-md bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-            <h3 className="mb-4 text-lg font-black text-brand-navy">{form.id ? 'Edit' : 'New'} gateway</h3>
+        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
+          <div className="w-full max-w-md bg-white rounded-lg border border-edge p-6 shadow-card">
+            <h3 className="mb-4 text-lg font-semibold text-ink-primary">{form.id ? 'Edit' : 'New'} gateway</h3>
             <div className="space-y-3 text-xs">
               <div className="grid grid-cols-2 gap-3">
-                <select value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} className="rounded-lg border border-slate-200 p-2.5">
+                <select value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} className="rounded-sm border border-edge p-2.5">
                   {['RAZORPAY', 'STRIPE', 'PAYPAL', 'COD'].map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
-                <select value={form.region} onChange={(e) => setForm({ ...form, region: Number(e.target.value) })} className="rounded-lg border border-slate-200 p-2.5">
+                <select value={form.region} onChange={(e) => setForm({ ...form, region: Number(e.target.value) })} className="rounded-sm border border-edge p-2.5">
                   {regions.map((r) => <option key={r.id} value={r.id}>{r.code} — {r.name}</option>)}
                 </select>
               </div>
-              <input placeholder="Display name" value={form.display_name} onChange={(e) => setForm({ ...form, display_name: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2.5" />
+              <input placeholder="Display name" value={form.display_name} onChange={(e) => setForm({ ...form, display_name: e.target.value })} className="w-full rounded-sm border border-edge p-2.5" />
               <div className="grid grid-cols-2 gap-3">
-                <select value={form.mode} onChange={(e) => setForm({ ...form, mode: e.target.value })} className="rounded-lg border border-slate-200 p-2.5">
+                <select value={form.mode} onChange={(e) => setForm({ ...form, mode: e.target.value })} className="rounded-sm border border-edge p-2.5">
                   <option value="TEST">Test</option>
                   <option value="LIVE">Live</option>
                 </select>
-                <label className="flex items-center gap-2 text-brand-navy font-bold"><input type="checkbox" checked={form.supports_refunds} onChange={(e) => setForm({ ...form, supports_refunds: e.target.checked })} className="accent-brand-purple" /> Refunds</label>
+                <label className="flex items-center gap-2 text-ink-primary font-semibold"><input type="checkbox" checked={form.supports_refunds} onChange={(e) => setForm({ ...form, supports_refunds: e.target.checked })} className="accent-ink-primary" /> Refunds</label>
               </div>
-              <input placeholder="Publishable / Key ID" value={form.publishable_key || ''} onChange={(e) => setForm({ ...form, publishable_key: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2.5" />
-              <input placeholder="Secret key" value={form.secret_key || ''} onChange={(e) => setForm({ ...form, secret_key: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2.5" />
+              <input placeholder="Publishable / Key ID" value={form.publishable_key || ''} onChange={(e) => setForm({ ...form, publishable_key: e.target.value })} className="w-full rounded-sm border border-edge p-2.5" />
+              <input placeholder="Secret key" value={form.secret_key || ''} onChange={(e) => setForm({ ...form, secret_key: e.target.value })} className="w-full rounded-sm border border-edge p-2.5" />
               
               <div className="grid grid-cols-2 gap-3 items-center">
                 <div>
-                  <label className="block font-bold text-slate-400 mb-1">Priority Order</label>
-                  <input type="number" placeholder="0" value={form.sort_order} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} className="w-full rounded-lg border border-slate-200 p-2" />
+                  <label className="block font-semibold text-ink-subtle mb-1">Priority Order</label>
+                  <input type="number" placeholder="0" value={form.sort_order} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} className="w-full rounded-sm border border-edge p-2" />
                 </div>
-                <label className="flex items-center gap-2 text-brand-navy font-bold self-end mb-2"><input type="checkbox" checked={form.is_enabled} onChange={(e) => setForm({ ...form, is_enabled: e.target.checked })} className="accent-brand-purple" /> Enabled</label>
+                <label className="flex items-center gap-2 text-ink-primary font-semibold self-end mb-2"><input type="checkbox" checked={form.is_enabled} onChange={(e) => setForm({ ...form, is_enabled: e.target.checked })} className="accent-ink-primary" /> Enabled</label>
               </div>
 
               <div className="flex gap-2">
-                <button onClick={save} className="btn-primary flex-1 py-2.5 bg-brand-purple text-white rounded-lg uppercase font-bold">Save</button>
-                <button onClick={() => setForm(null)} className="flex-1 rounded-lg border border-slate-200 py-2.5 font-bold uppercase">Cancel</button>
+                <button onClick={save} className="btn-primary flex-1 py-2.5 uppercase font-semibold">Save</button>
+                <button onClick={() => setForm(null)} className="flex-1 rounded-sm border border-edge py-2.5 font-semibold uppercase">Cancel</button>
               </div>
             </div>
           </div>
@@ -2154,23 +2154,23 @@ function EmailsTab({ authFetch, regions }) {
     <div>
       <div className="mb-4 flex items-center justify-between">
         <p className="text-sm text-brand-muted">{templates.length} templates · region-specific (GST / VAT)</p>
-        <button onClick={() => setForm({ event: 'order_confirmation', region: '', subject: '', body: '', is_active: true })} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase bg-brand-purple text-white rounded-lg font-bold"><Plus className="h-4 w-4" /> New template</button>
+        <button onClick={() => setForm({ event: 'order_confirmation', region: '', subject: '', body: '', is_active: true })} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase font-semibold"><Plus className="h-4 w-4" /> New template</button>
       </div>
 
       <div className="grid gap-3">
         {templates.map((t) => (
-          <div key={t.id} className="rounded-xl border border-slate-200 bg-white p-4">
+          <div key={t.id} className="rounded-md border border-edge bg-white shadow-card p-4">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm font-semibold text-brand-navy">
+                <p className="text-sm font-semibold text-ink-primary">
                   {t.event_display || t.event.replace(/_/g, ' ').toUpperCase()} 
-                  <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 uppercase">{t.region_code || 'GLOBAL'}</span>
+                  <span className="ml-2 rounded bg-surface-muted px-1.5 py-0.5 text-[10px] font-semibold text-ink-secondary uppercase">{t.region_code || 'GLOBAL'}</span>
                 </p>
-                <p className="mt-1 text-xs font-semibold text-brand-purple">{t.subject}</p>
+                <p className="mt-1 text-xs font-semibold text-ink-accent">{t.subject}</p>
                 <p className="mt-1 line-clamp-2 text-xs text-brand-muted font-mono">{t.body}</p>
               </div>
               <div className="flex gap-2">
-                <button onClick={() => setForm({ ...t, region: t.region || '' })} className="text-brand-purple hover:opacity-70"><Pencil className="h-4 w-4" /></button>
+                <button onClick={() => setForm({ ...t, region: t.region || '' })} className="text-ink-accent hover:opacity-70"><Pencil className="h-4 w-4" /></button>
                 <button onClick={() => del(t)} className="text-brand-muted hover:text-brand-danger"><X className="h-4 w-4" /></button>
               </div>
             </div>
@@ -2179,10 +2179,10 @@ function EmailsTab({ authFetch, regions }) {
       </div>
 
       {form && (
-        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-slate-50 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-          <div className="w-full max-w-4xl bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
-            <div className="flex justify-between items-center pb-2 border-b border-slate-100">
-              <h3 className="text-lg font-black text-brand-navy">{form.id ? 'Edit' : 'New'} email template</h3>
+        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
+          <div className="w-full max-w-4xl bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
+            <div className="flex justify-between items-center pb-2 border-b border-edge-subtle">
+              <h3 className="text-lg font-semibold text-ink-primary">{form.id ? 'Edit' : 'New'} email template</h3>
               <button onClick={() => setForm(null)}><X className="h-5 w-5 text-brand-muted" /></button>
             </div>
 
@@ -2190,36 +2190,36 @@ function EmailsTab({ authFetch, regions }) {
               {/* Form Input fields */}
               <div className="space-y-3 text-xs">
                 <div className="grid grid-cols-2 gap-3">
-                  <select value={form.event} onChange={(e) => setForm({ ...form, event: e.target.value })} className="rounded-lg border border-slate-200 p-2.5">
+                  <select value={form.event} onChange={(e) => setForm({ ...form, event: e.target.value })} className="rounded-sm border border-edge p-2.5">
                     {EMAIL_EVENTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                   </select>
-                  <select value={form.region} onChange={(e) => setForm({ ...form, region: e.target.value ? Number(e.target.value) : '' })} className="rounded-lg border border-slate-200 p-2.5">
+                  <select value={form.region} onChange={(e) => setForm({ ...form, region: e.target.value ? Number(e.target.value) : '' })} className="rounded-sm border border-edge p-2.5">
                     <option value="">Global fallback</option>
                     {regions.map((r) => <option key={r.id} value={r.id}>{r.code}</option>)}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block font-bold text-brand-navy mb-1">Email Subject Line</label>
-                  <input placeholder="Subject" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2.5 text-xs font-semibold text-brand-navy" />
+                  <label className="block font-semibold text-ink-primary mb-1">Email Subject Line</label>
+                  <input placeholder="Subject" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-xs font-semibold text-ink-primary" />
                 </div>
 
                 <div>
                   <div className="flex justify-between items-center mb-1">
-                    <label className="block font-bold text-brand-navy">Email Template Body</label>
-                    <span className="text-[10px] text-brand-purple">Supports variables: {"{customer_name}"}, {"{order_id}"}, {"{total}"}</span>
+                    <label className="block font-semibold text-ink-primary">Email Template Body</label>
+                    <span className="text-[10px] text-ink-accent">Supports variables: {"{customer_name}"}, {"{order_id}"}, {"{total}"}</span>
                   </div>
-                  <textarea rows={8} placeholder="Body — Hello {customer_name}, your order {order_id} is processing..." value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2.5 font-mono text-xs" />
+                  <textarea rows={8} placeholder="Body — Hello {customer_name}, your order {order_id} is processing..." value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 font-mono text-xs" />
                 </div>
 
-                <label className="flex items-center gap-2 text-brand-navy font-bold cursor-pointer"><input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} className="accent-brand-purple" /> Active Template</label>
+                <label className="flex items-center gap-2 text-ink-primary font-semibold cursor-pointer"><input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} className="accent-ink-primary" /> Active Template</label>
 
                 {form.id && (
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-                    <p className="font-bold text-[10px] text-brand-navy uppercase">Send Test Email Configuration</p>
+                  <div className="p-3 bg-surface-muted border border-edge rounded-md space-y-2">
+                    <p className="font-semibold text-[10px] text-ink-primary uppercase">Send Test Email Configuration</p>
                     <div className="flex gap-2">
-                      <input placeholder="admin@scleroproteins.com" value={testEmail} onChange={(e) => setTestEmail(e.target.value)} className="flex-1 rounded-lg border border-slate-200 p-2 text-xs" />
-                      <button onClick={triggerTestSend} disabled={sendingTest} className="px-3 py-2 bg-brand-orange hover:bg-brand-orange/90 text-white font-bold rounded-lg text-[10px] uppercase">
+                      <input placeholder="admin@scleroproteins.com" value={testEmail} onChange={(e) => setTestEmail(e.target.value)} className="flex-1 rounded-sm border border-edge p-2 text-xs" />
+                      <button onClick={triggerTestSend} disabled={sendingTest} className="px-3 py-2 bg-brand-accent hover:bg-brand-accent/90 text-white font-semibold rounded-sm text-[10px] uppercase">
                         {sendingTest ? 'Sending...' : 'Send Test'}
                       </button>
                     </div>
@@ -2227,29 +2227,29 @@ function EmailsTab({ authFetch, regions }) {
                 )}
 
                 <div className="flex gap-2 pt-2">
-                  <button onClick={save} className="btn-primary flex-1 py-2.5 bg-brand-purple text-white rounded-lg uppercase font-bold">Save template</button>
-                  <button onClick={() => setForm(null)} className="flex-1 rounded-lg border border-slate-200 py-2.5 font-bold uppercase">Cancel</button>
+                  <button onClick={save} className="btn-primary flex-1 py-2.5 uppercase font-semibold">Save template</button>
+                  <button onClick={() => setForm(null)} className="flex-1 rounded-sm border border-edge py-2.5 font-semibold uppercase">Cancel</button>
                 </div>
               </div>
 
               {/* Live Rendered Visual Preview */}
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 flex flex-col justify-start">
-                <p className="text-[10px] font-bold text-brand-muted uppercase tracking-wider mb-2 border-b border-slate-200 pb-1.5">Live Template Split-Screen Preview</p>
-                <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-3 flex-1 flex flex-col justify-between">
+              <div className="rounded-lg border border-edge bg-surface-muted p-4 flex flex-col justify-start">
+                <p className="text-[10px] font-semibold text-brand-muted uppercase tracking-wider mb-2 border-b border-edge pb-1.5">Live Template Split-Screen Preview</p>
+                <div className="bg-white rounded-md border border-edge shadow-card p-5 space-y-3 flex-1 flex flex-col justify-between">
                   <div className="space-y-2">
-                    <div className="border-b border-slate-100 pb-2">
-                      <span className="text-[9px] font-bold text-slate-400 block uppercase">EMAIL SUBJECT</span>
-                      <span className="text-xs font-black text-brand-navy">{form.subject || '(No subject provided)'}</span>
+                    <div className="border-b border-edge-subtle pb-2">
+                      <span className="text-[9px] font-semibold text-ink-subtle block uppercase">EMAIL SUBJECT</span>
+                      <span className="text-xs font-semibold text-ink-primary">{form.subject || '(No subject provided)'}</span>
                     </div>
                     <div>
-                      <span className="text-[9px] font-bold text-slate-400 block uppercase">EMAIL BODY</span>
-                      <div className="text-xs text-slate-700 leading-relaxed font-semibold font-mono whitespace-pre-wrap mt-1">
+                      <span className="text-[9px] font-semibold text-ink-subtle block uppercase">EMAIL BODY</span>
+                      <div className="text-xs text-ink-secondary leading-relaxed font-semibold font-mono whitespace-pre-wrap mt-1">
                         {renderBodyPreview(form.body) || '(Enter body copy on the left to preview)'}
                       </div>
                     </div>
                   </div>
-                  <div className="border-t border-slate-100 pt-3 text-center">
-                    <p className="text-[9px] text-slate-400 font-bold uppercase">Sclero Proteins Ltd · Targeted Cellular Recovery</p>
+                  <div className="border-t border-edge-subtle pt-3 text-center">
+                    <p className="text-[9px] text-ink-subtle font-semibold uppercase">Sclero Proteins Ltd · Targeted Cellular Recovery</p>
                   </div>
                 </div>
               </div>
@@ -2341,7 +2341,7 @@ function ShippingTab({ authFetch, regions = [] }) {
   };
 
   if (loading) return (
-    <div className="flex items-center gap-3 py-12 justify-center text-slate-400">
+    <div className="flex items-center gap-3 py-12 justify-center text-ink-subtle">
       <Loader2 className="h-5 w-5 animate-spin" />
       <p className="text-sm">Loading shipping configuration…</p>
     </div>
@@ -2350,10 +2350,10 @@ function ShippingTab({ authFetch, regions = [] }) {
   return (
     <div className="space-y-6">
       {err && (
-        <div className="flex items-center gap-2 rounded-xl bg-red-50 border border-red-200 px-4 py-3">
-          <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
-          <p className="text-sm text-red-700">{err}</p>
-          <button onClick={() => setErr('')} className="ml-auto text-red-400 hover:text-red-600"><X className="h-4 w-4" /></button>
+        <div className="flex items-center gap-2 rounded-md bg-red-50 border border-red-200 px-4 py-3">
+          <AlertCircle className="h-4 w-4 text-ink-danger flex-shrink-0" />
+          <p className="text-sm text-ink-danger">{err}</p>
+          <button onClick={() => setErr('')} className="ml-auto text-ink-danger hover:text-ink-danger"><X className="h-4 w-4" /></button>
         </div>
       )}
       <ShippingZonePanel
@@ -2502,40 +2502,40 @@ function CustomersTab({ authFetch }) {
         <div className="flex flex-wrap gap-2 flex-grow max-w-xl">
           <label className="relative block flex-grow max-w-md">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-muted" />
-            <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search email, name..." className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm focus:outline-none" />
+            <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search email, name..." className="w-full rounded-sm border border-edge py-2 pl-9 pr-3 text-sm focus:outline-none" />
           </label>
-          <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/30">
+          <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className="rounded-sm border border-edge px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-edge-focus/30">
             <option value="">Newest first</option>
             <option value="oldest">Oldest first</option>
             <option value="email">Email (A-Z)</option>
             <option value="-email">Email (Z-A)</option>
           </select>
         </div>
-        <button onClick={startNew} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase bg-brand-purple text-white rounded-lg"><UserPlus className="h-4 w-4" /> Add Customer</button>
+        <button onClick={startNew} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase"><UserPlus className="h-4 w-4" /> Add Customer</button>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+      <div className="overflow-x-auto rounded-md border border-edge bg-white shadow-card">
         <table className="w-full text-left text-xs">
-          <thead className="bg-slate-50 text-brand-muted">
-            <tr><th className="px-3 py-3 font-bold">Email</th><th className="px-3 py-3 font-bold">Name</th><th className="px-3 py-3 font-bold">Phone</th><th className="px-3 py-3 font-bold">Tags</th><th className="px-3 py-3 font-bold">Staff?</th></tr>
+          <thead className="bg-surface-muted text-[10px] font-medium uppercase tracking-wide text-ink-muted border-b border-edge">
+            <tr><th className="px-3 py-3 font-medium">Email</th><th className="px-3 py-3 font-medium">Name</th><th className="px-3 py-3 font-medium">Phone</th><th className="px-3 py-3 font-medium">Tags</th><th className="px-3 py-3 font-medium">Staff?</th></tr>
           </thead>
           <tbody>
             {customers.map((c) => {
               const meta = metadataMap[c.id] || { credit: 0, tags: [] };
               return (
-                <tr key={c.id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50" onClick={() => viewDetails(c)}>
-                  <td className="px-3 py-3 font-bold text-brand-navy">{c.email}</td>
+                <tr key={c.id} className="cursor-pointer border-t border-edge-subtle hover:bg-surface-muted" onClick={() => viewDetails(c)}>
+                  <td className="px-3 py-3 font-semibold text-ink-primary">{c.email}</td>
                   <td className="px-3 py-3 font-semibold">{c.first_name} {c.last_name}</td>
                   <td className="px-3 py-3 text-brand-muted">{c.phone_number || '—'}</td>
                   <td className="px-3 py-3">
                     <div className="flex flex-wrap gap-1">
                       {meta.tags && meta.tags.map((tag) => (
-                        <span key={tag} className="rounded bg-brand-purple/10 text-brand-purple px-1.5 py-0.5 text-[9px] font-bold">{tag}</span>
+                        <span key={tag} className="rounded bg-surface-muted text-ink-accent px-1.5 py-0.5 text-[9px] font-semibold">{tag}</span>
                       ))}
-                      {!meta.tags?.length && <span className="text-[10px] text-slate-300 italic">None</span>}
+                      {!meta.tags?.length && <span className="text-[10px] text-ink-subtle italic">None</span>}
                     </div>
                   </td>
-                  <td className="px-3 py-3">{c.is_staff ? <span className="rounded bg-indigo-100 text-indigo-700 px-2 py-0.5 text-[10px] font-bold">STAFF</span> : <span className="rounded bg-slate-100 text-slate-500 px-2 py-0.5 text-[10px] font-bold">CUSTOMER</span>}</td>
+                  <td className="px-3 py-3">{c.is_staff ? <span className="rounded bg-surface-muted text-ink-accent px-2 py-0.5 text-[10px] font-semibold">STAFF</span> : <span className="rounded bg-surface-muted text-ink-muted px-2 py-0.5 text-[10px] font-semibold">CUSTOMER</span>}</td>
                 </tr>
               );
             })}
@@ -2555,23 +2555,23 @@ function CustomersTab({ authFetch }) {
 
       {/* Selected Customer Details Slide-out */}
       {selectedCustomer && (
-        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-slate-50 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-          <div className="w-full max-w-3xl bg-white rounded-2xl border border-slate-200 p-6 shadow-sm mx-auto space-y-6">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
+          <div className="w-full max-w-3xl bg-white rounded-lg border border-edge p-6 shadow-card mx-auto space-y-6">
+            <div className="flex items-center justify-between border-b border-edge-subtle pb-3">
               <div>
-                <p className="text-xs font-bold uppercase text-brand-muted">Customer CRM Profile</p>
-                <h3 className="text-xl font-black text-brand-navy">{selectedCustomer.first_name} {selectedCustomer.last_name}</h3>
+                <p className="kicker">Customer CRM Profile</p>
+                <h3 className="text-xl font-semibold text-ink-primary">{selectedCustomer.first_name} {selectedCustomer.last_name}</h3>
                 {metadataMap[selectedCustomer.id]?.tags && (
                   <div className="flex flex-wrap gap-1 mt-1">
                     {metadataMap[selectedCustomer.id].tags.map(t => (
-                      <span key={t} className="rounded bg-brand-purple/15 text-brand-purple px-1.5 py-0.5 text-[9px] font-bold uppercase">{t}</span>
+                      <span key={t} className="rounded bg-surface-muted text-ink-accent px-1.5 py-0.5 text-[9px] font-semibold uppercase">{t}</span>
                     ))}
                   </div>
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={() => startEdit(selectedCustomer)} className="rounded-lg border border-slate-200 p-2 text-brand-purple hover:bg-slate-50"><Pencil className="h-4 w-4" /></button>
-                <button onClick={() => { setSelectedCustomer(null); setCustomerDetails(null); }} className="rounded-lg border border-slate-200 p-2 text-brand-muted hover:bg-slate-50"><X className="h-4 w-4" /></button>
+                <button onClick={() => startEdit(selectedCustomer)} className="rounded-sm border border-edge p-2 text-ink-accent hover:bg-surface-muted"><Pencil className="h-4 w-4" /></button>
+                <button onClick={() => { setSelectedCustomer(null); setCustomerDetails(null); }} className="rounded-sm border border-edge p-2 text-brand-muted hover:bg-surface-muted"><X className="h-4 w-4" /></button>
               </div>
             </div>
 
@@ -2579,26 +2579,26 @@ function CustomersTab({ authFetch }) {
               <div className="space-y-6">
                 {/* Profile detail cards */}
                 <div className="grid gap-4 md:grid-cols-3">
-                  <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-                    <p className="text-xs text-brand-muted font-bold">LIFETIME SPENT</p>
-                    <p className="mt-1 text-xl font-black text-brand-navy">GBP {customerDetails.total_spent.toFixed(2)}</p>
+                  <div className="rounded-md border border-edge-subtle bg-surface-muted p-4">
+                    <p className="text-xs text-brand-muted font-semibold">LIFETIME SPENT</p>
+                    <p className="mt-1 text-xl font-semibold text-ink-primary">GBP {customerDetails.total_spent.toFixed(2)}</p>
                   </div>
-                  <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-                    <p className="text-xs text-brand-muted font-bold">TOTAL ORDERS</p>
-                    <p className="mt-1 text-xl font-black text-brand-navy">{customerDetails.orders_count} orders</p>
+                  <div className="rounded-md border border-edge-subtle bg-surface-muted p-4">
+                    <p className="text-xs text-brand-muted font-semibold">TOTAL ORDERS</p>
+                    <p className="mt-1 text-xl font-semibold text-ink-primary">{customerDetails.orders_count} orders</p>
                   </div>
-                  <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-                    <p className="text-xs text-brand-muted font-bold">STORE CREDIT</p>
-                    <p className="mt-1 text-xl font-black text-brand-purple">GBP {(metadataMap[selectedCustomer.id]?.credit || 0).toFixed(2)}</p>
+                  <div className="rounded-md border border-edge-subtle bg-surface-muted p-4">
+                    <p className="text-xs text-brand-muted font-semibold">STORE CREDIT</p>
+                    <p className="mt-1 text-xl font-semibold text-ink-accent">GBP {(metadataMap[selectedCustomer.id]?.credit || 0).toFixed(2)}</p>
                   </div>
                 </div>
 
                 {/* Operations UI: tags and store credit */}
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-4">
-                  <h4 className="text-xs font-bold uppercase text-brand-navy border-b border-slate-200 pb-2">CRM Actions</h4>
+                <div className="rounded-lg border border-edge bg-surface-muted p-4 space-y-4">
+                  <h4 className="text-xs font-semibold uppercase text-ink-primary border-b border-edge pb-2">CRM Actions</h4>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-1.5">
-                      <label className="text-[11px] font-bold text-brand-muted uppercase block">Issue / Adjust Store Credit</label>
+                      <label className="text-[11px] font-semibold text-brand-muted uppercase block">Issue / Adjust Store Credit</label>
                       <div className="flex gap-2">
                         <input
                           type="number"
@@ -2606,36 +2606,36 @@ function CustomersTab({ authFetch }) {
                           placeholder="Credit adjustment (e.g. 15.00)"
                           value={creditInput}
                           onChange={(e) => setCreditInput(e.target.value)}
-                          className="min-w-0 flex-1 rounded border border-slate-200 px-3 py-1.5 text-xs bg-white"
+                          className="min-w-0 flex-1 rounded border border-edge px-3 py-1.5 text-xs bg-white"
                         />
-                        <button onClick={handleSaveMetadata} className="bg-brand-purple text-white text-[10px] font-bold uppercase px-3 py-1.5 rounded hover:opacity-90 transition-opacity">Issue</button>
+                        <button onClick={handleSaveMetadata} className="bg-ink-primary text-white text-[10px] font-semibold uppercase px-3 py-1.5 rounded hover:opacity-90 transition-opacity">Issue</button>
                       </div>
-                      <p className="text-[10px] text-slate-400">Enter positive amount to grant, or negative to deduct.</p>
+                      <p className="text-[10px] text-ink-subtle">Enter positive amount to grant, or negative to deduct.</p>
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-[11px] font-bold text-brand-muted uppercase block">Profile Tags</label>
+                      <label className="text-[11px] font-semibold text-brand-muted uppercase block">Profile Tags</label>
                       <div className="flex gap-2">
                         <input
                           placeholder="e.g. VIP, Bulk-Buyer, Athlete"
                           value={tagsInput}
                           onChange={(e) => setTagsInput(e.target.value)}
-                          className="min-w-0 flex-1 rounded border border-slate-200 px-3 py-1.5 text-xs bg-white"
+                          className="min-w-0 flex-1 rounded border border-edge px-3 py-1.5 text-xs bg-white"
                         />
-                        <button onClick={handleSaveMetadata} className="bg-brand-purple text-white text-[10px] font-bold uppercase px-3 py-1.5 rounded hover:opacity-90 transition-opacity">Update</button>
+                        <button onClick={handleSaveMetadata} className="bg-ink-primary text-white text-[10px] font-semibold uppercase px-3 py-1.5 rounded hover:opacity-90 transition-opacity">Update</button>
                       </div>
-                      <p className="text-[10px] text-slate-400">Comma-separated lists of descriptive customer groups.</p>
+                      <p className="text-[10px] text-ink-subtle">Comma-separated lists of descriptive customer groups.</p>
                     </div>
                   </div>
                 </div>
 
                 {/* Addresses */}
                 <div>
-                  <h4 className="text-xs font-bold uppercase text-brand-muted mb-2">Addresses ({customerDetails.addresses.length})</h4>
+                  <h4 className="text-xs font-semibold uppercase text-brand-muted mb-2">Addresses ({customerDetails.addresses.length})</h4>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {customerDetails.addresses.map((addr) => (
-                      <div key={addr.id} className="rounded-xl border border-slate-200 p-3 text-xs bg-white">
-                        <p className="font-bold text-brand-navy">{addr.full_name}</p>
+                      <div key={addr.id} className="rounded-md border border-edge p-3 text-xs bg-white">
+                        <p className="font-semibold text-ink-primary">{addr.full_name}</p>
                         <p>{addr.address_line1}, {addr.city}</p>
                         <p>{addr.state} {addr.postal_code}, {addr.country}</p>
                       </div>
@@ -2645,12 +2645,12 @@ function CustomersTab({ authFetch }) {
 
                 {/* Recent Orders */}
                 <div>
-                  <h4 className="text-xs font-bold uppercase text-brand-muted mb-2">Recent Orders</h4>
+                  <h4 className="text-xs font-semibold uppercase text-brand-muted mb-2">Recent Orders</h4>
                   <div className="space-y-1.5">
                     {customerDetails.recent_orders.map((o) => (
-                      <div key={o.id} className="flex justify-between items-center rounded-lg border border-slate-100 p-2 text-xs">
+                      <div key={o.id} className="flex justify-between items-center rounded-lg border border-edge-subtle p-2 text-xs">
                         <span>Order #{o.id} · {formatDate(o.created_at)}</span>
-                        <span className="font-bold">{o.currency} {o.total} · <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${STATUS_COLOR[o.status]}`}>{o.status}</span></span>
+                        <span className="font-semibold">{o.currency} {o.total} · <span className={`rounded-xs px-2 py-0.5 text-[9px] font-semibold ${STATUS_COLOR[o.status]}`}>{o.status}</span></span>
                       </div>
                     ))}
                     {!customerDetails.recent_orders.length && <p className="text-xs text-brand-muted">No orders placed yet.</p>}
@@ -2659,13 +2659,13 @@ function CustomersTab({ authFetch }) {
 
                 {/* Customer Activities */}
                 <div>
-                  <h4 className="text-xs font-bold uppercase text-brand-muted mb-2">Activity Timeline</h4>
-                  <div className="border-l border-slate-100 pl-4 space-y-3">
+                  <h4 className="text-xs font-semibold uppercase text-brand-muted mb-2">Activity Timeline</h4>
+                  <div className="border-l border-edge-subtle pl-4 space-y-3">
                     {customerDetails.activities.map((act) => (
                       <div key={act.id} className="relative text-xs">
-                        <span className="absolute -left-[21px] top-1 flex h-2.5 w-2.5 rounded-full bg-brand-purple" />
-                        <p className="font-bold text-brand-navy">{act.activity_type.replace('_', ' ')}</p>
-                        <p className="text-slate-400">{act.description} · {formatDateTime(act.created_at)}</p>
+                        <span className="absolute -left-[21px] top-1 flex h-2.5 w-2.5 rounded-full bg-ink-primary" />
+                        <p className="font-semibold text-ink-primary">{act.activity_type.replace('_', ' ')}</p>
+                        <p className="text-ink-subtle">{act.description} · {formatDateTime(act.created_at)}</p>
                       </div>
                     ))}
                     {!customerDetails.activities.length && <p className="text-xs text-brand-muted">No activity logs recorded.</p>}
@@ -2674,12 +2674,12 @@ function CustomersTab({ authFetch }) {
 
                 {/* Support Tickets */}
                 <div>
-                  <h4 className="text-xs font-bold uppercase text-brand-muted mb-2">Customer Support History</h4>
+                  <h4 className="text-xs font-semibold uppercase text-brand-muted mb-2">Customer Support History</h4>
                   <div className="space-y-1.5">
                     {customerDetails.tickets.map((t) => (
-                      <div key={t.id} className="rounded-lg border border-slate-100 p-2 text-xs">
-                        <p className="font-bold text-brand-navy">{t.subject}</p>
-                        <p className="text-slate-400">{t.message} · <span className="font-bold text-indigo-600">{t.status}</span></p>
+                      <div key={t.id} className="rounded-lg border border-edge-subtle p-2 text-xs">
+                        <p className="font-semibold text-ink-primary">{t.subject}</p>
+                        <p className="text-ink-subtle">{t.message} · <span className="font-semibold text-ink-accent">{t.status}</span></p>
                       </div>
                     ))}
                     {!customerDetails.tickets.length && <p className="text-xs text-brand-muted">No support tickets.</p>}
@@ -2693,19 +2693,19 @@ function CustomersTab({ authFetch }) {
 
       {/* Editing/New Customer Modal */}
       {editingCustomer && (
-        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-slate-50 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-          <div className="w-full max-w-md bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
-            <h3 className="text-lg font-black text-brand-navy">{editingCustomer.id ? 'Edit Customer' : 'Add Customer'}</h3>
+        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
+          <div className="w-full max-w-md bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
+            <h3 className="text-lg font-semibold text-ink-primary">{editingCustomer.id ? 'Edit Customer' : 'Add Customer'}</h3>
             <div className="space-y-3">
-              <input placeholder="Email Address" value={editingCustomer.email} disabled={!!editingCustomer.id} onChange={(e) => setEditingCustomer({ ...editingCustomer, email: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm disabled:bg-slate-50" />
+              <input placeholder="Email Address" value={editingCustomer.email} disabled={!!editingCustomer.id} onChange={(e) => setEditingCustomer({ ...editingCustomer, email: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-sm disabled:bg-surface-muted" />
               <div className="grid grid-cols-2 gap-3">
-                <input placeholder="First Name" value={editingCustomer.first_name} onChange={(e) => setEditingCustomer({ ...editingCustomer, first_name: e.target.value })} className="rounded-lg border border-slate-200 p-2.5 text-sm" />
-                <input placeholder="Last Name" value={editingCustomer.last_name} onChange={(e) => setEditingCustomer({ ...editingCustomer, last_name: e.target.value })} className="rounded-lg border border-slate-200 p-2.5 text-sm" />
+                <input placeholder="First Name" value={editingCustomer.first_name} onChange={(e) => setEditingCustomer({ ...editingCustomer, first_name: e.target.value })} className="rounded-sm border border-edge p-2.5 text-sm" />
+                <input placeholder="Last Name" value={editingCustomer.last_name} onChange={(e) => setEditingCustomer({ ...editingCustomer, last_name: e.target.value })} className="rounded-sm border border-edge p-2.5 text-sm" />
               </div>
-              <input placeholder="Phone Number" value={editingCustomer.phone_number || ''} onChange={(e) => setEditingCustomer({ ...editingCustomer, phone_number: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" />
+              <input placeholder="Phone Number" value={editingCustomer.phone_number || ''} onChange={(e) => setEditingCustomer({ ...editingCustomer, phone_number: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
               <div className="flex gap-2">
-                <button onClick={saveCustomer} className="btn-primary flex-1 py-2.5 text-xs bg-brand-purple text-white rounded-lg uppercase font-bold">Save Profile</button>
-                <button onClick={() => setEditingCustomer(null)} className="flex-1 rounded-lg border border-slate-200 py-2.5 text-xs font-bold uppercase">Cancel</button>
+                <button onClick={saveCustomer} className="btn-primary flex-1 py-2.5 text-xs uppercase font-semibold">Save Profile</button>
+                <button onClick={() => setEditingCustomer(null)} className="flex-1 rounded-sm border border-edge py-2.5 text-xs font-semibold uppercase">Cancel</button>
               </div>
             </div>
           </div>
@@ -2744,37 +2744,37 @@ function SegmentsTab({ authFetch }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-brand-muted">{segments.length} customer segments</p>
-        <button onClick={() => setForm({ name: '', description: '', criteria: {} })} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase bg-brand-purple text-white rounded-lg"><Plus className="h-4 w-4" /> Create Segment</button>
+        <button onClick={() => setForm({ name: '', description: '', criteria: {} })} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase"><Plus className="h-4 w-4" /> Create Segment</button>
       </div>
 
       <div className="space-y-2">
         {segments.map((s) => (
-          <div key={s.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4">
+          <div key={s.id} className="flex items-center justify-between rounded-md border border-edge bg-white shadow-card p-4">
             <div>
-              <p className="text-sm font-semibold text-brand-navy">{s.name}</p>
+              <p className="text-sm font-semibold text-ink-primary">{s.name}</p>
               <p className="text-xs text-brand-muted">{s.description}</p>
-              <p className="mt-1 text-[10px] text-brand-purple font-mono font-bold">Rules: {JSON.stringify(s.criteria)}</p>
+              <p className="mt-1 text-[10px] text-ink-accent font-mono font-semibold">Rules: {JSON.stringify(s.criteria)}</p>
             </div>
             <div className="flex items-center gap-3">
-              <span className="rounded bg-purple-100 text-purple-700 px-2 py-0.5 text-xs font-bold">{s.customer_emails?.length || 0} buyers</span>
-              <button onClick={() => setForm({ ...s })} className="text-brand-purple hover:opacity-75"><Pencil className="h-4 w-4" /></button>
+              <span className="rounded bg-surface-muted text-ink-accent px-2 py-0.5 text-xs font-semibold">{s.customer_emails?.length || 0} buyers</span>
+              <button onClick={() => setForm({ ...s })} className="text-ink-accent hover:opacity-75"><Pencil className="h-4 w-4" /></button>
             </div>
           </div>
         ))}
       </div>
 
       {form && (
-        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-slate-50 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-          <div className="w-full max-w-md bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
-            <h3 className="text-lg font-black text-brand-navy">{form.id ? 'Edit Segment' : 'Create Segment'}</h3>
+        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
+          <div className="w-full max-w-md bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
+            <h3 className="text-lg font-semibold text-ink-primary">{form.id ? 'Edit Segment' : 'Create Segment'}</h3>
             <div className="space-y-3">
-              <input placeholder="Segment Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" />
-              <textarea placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" />
-              <p className="text-[11px] font-bold text-slate-400 uppercase">Segment Criteria Rules (JSON)</p>
-              <textarea placeholder='e.g. {"min_spend": 200}' value={typeof form.criteria === 'string' ? form.criteria : JSON.stringify(form.criteria)} onChange={(e) => setForm({ ...form, criteria: e.target.value })} className="w-full font-mono rounded-lg border border-slate-200 p-2.5 text-xs" rows={3} />
+              <input placeholder="Segment Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
+              <textarea placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
+              <p className="text-[11px] font-semibold text-ink-subtle uppercase">Segment Criteria Rules (JSON)</p>
+              <textarea placeholder='e.g. {"min_spend": 200}' value={typeof form.criteria === 'string' ? form.criteria : JSON.stringify(form.criteria)} onChange={(e) => setForm({ ...form, criteria: e.target.value })} className="w-full font-mono rounded-sm border border-edge p-2.5 text-xs" rows={3} />
               <div className="flex gap-2">
-                <button onClick={save} className="btn-primary flex-1 py-2.5 text-xs bg-brand-purple text-white rounded-lg uppercase">Save Segment</button>
-                <button onClick={() => setForm(null)} className="flex-1 rounded-lg border border-slate-200 py-2.5 text-xs font-bold uppercase">Cancel</button>
+                <button onClick={save} className="btn-primary flex-1 py-2.5 text-xs uppercase">Save Segment</button>
+                <button onClick={() => setForm(null)} className="flex-1 rounded-sm border border-edge py-2.5 text-xs font-semibold uppercase">Cancel</button>
               </div>
             </div>
           </div>
@@ -2822,20 +2822,20 @@ function SupportTab({ authFetch }) {
     <div className="space-y-6">
       {/* Support Tickets */}
       <div>
-        <h3 className="text-sm font-bold text-brand-navy mb-3">Customer Support Tickets ({tickets.length})</h3>
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <h3 className="text-sm font-semibold text-ink-primary mb-3">Customer Support Tickets ({tickets.length})</h3>
+        <div className="overflow-x-auto rounded-md border border-edge bg-white shadow-card">
           <table className="w-full text-left text-xs font-medium">
-            <thead className="bg-slate-50 text-brand-muted">
-              <tr><th className="px-3 py-2 font-bold">Ticket #</th><th className="px-3 py-2 font-bold">Email</th><th className="px-3 py-2 font-bold">Subject</th><th className="px-3 py-2 font-bold">Priority</th><th className="px-3 py-2 font-bold">Status</th></tr>
+            <thead className="bg-surface-muted text-[10px] font-medium uppercase tracking-wide text-ink-muted border-b border-edge">
+              <tr><th className="px-3 py-2 font-semibold">Ticket #</th><th className="px-3 py-2 font-semibold">Email</th><th className="px-3 py-2 font-semibold">Subject</th><th className="px-3 py-2 font-semibold">Priority</th><th className="px-3 py-2 font-semibold">Status</th></tr>
             </thead>
             <tbody>
               {tickets.map((t) => (
-                <tr key={t.id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50" onClick={() => setSelectedTicket({ ...t })}>
+                <tr key={t.id} className="cursor-pointer border-t border-edge-subtle hover:bg-surface-muted" onClick={() => setSelectedTicket({ ...t })}>
                   <td className="px-3 py-2 font-mono text-[10px] text-brand-muted">#{t.id}</td>
                   <td className="px-3 py-2">{t.email}</td>
-                  <td className="px-3 py-2 font-bold text-brand-navy">{t.subject}</td>
-                  <td className="px-3 py-2"><span className="text-[10px] uppercase font-bold">{t.priority}</span></td>
-                  <td className="px-3 py-2"><span className="rounded bg-indigo-100 text-indigo-700 px-2 py-0.5 text-[10px] font-bold">{t.status}</span></td>
+                  <td className="px-3 py-2 font-semibold text-ink-primary">{t.subject}</td>
+                  <td className="px-3 py-2"><span className="text-[10px] uppercase font-semibold">{t.priority}</span></td>
+                  <td className="px-3 py-2"><span className="rounded bg-surface-muted text-ink-accent px-2 py-0.5 text-[10px] font-semibold">{t.status}</span></td>
                 </tr>
               ))}
               {!tickets.length && <tr><td colSpan={5} className="px-3 py-4 text-center text-brand-muted text-xs">No customer support tickets registered.</td></tr>}
@@ -2845,39 +2845,39 @@ function SupportTab({ authFetch }) {
       </div>
 
       {/* Wholesale B2B Enquiries */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 space-y-4">
+      <div className="rounded-lg border border-edge bg-white shadow-card p-4 sm:p-5 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h3 className="text-sm font-bold text-brand-navy uppercase">B2B &amp; Bulk Wholesaler Enquiries</h3>
+            <h3 className="text-sm font-semibold text-ink-primary uppercase">B2B &amp; Bulk Wholesaler Enquiries</h3>
             <p className="text-xs text-brand-muted mt-1">Wholesale and distributor leads submitted through the public inquiry form.</p>
           </div>
-          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-bold uppercase text-brand-muted">
+          <span className="rounded-xs border border-edge bg-surface-muted px-3 py-1 text-[10px] font-semibold uppercase text-brand-muted">
             {enquiries.length} open
           </span>
         </div>
-        <div className="overflow-x-auto rounded-xl border border-slate-200">
+        <div className="overflow-x-auto rounded-md border border-edge">
           <table className="min-w-full text-left text-xs">
-            <thead className="bg-slate-50/80 text-brand-muted font-bold">
+            <thead className="bg-surface-muted text-[10px] font-medium uppercase tracking-wide text-ink-muted border-b border-edge">
               <tr>
-                <th className="px-4 py-3 font-bold">Name / Company</th>
-                <th className="px-4 py-3 font-bold">Email</th>
-                <th className="px-4 py-3 font-bold">Interest</th>
-                <th className="px-4 py-3 font-bold">Type</th>
-                <th className="px-4 py-3 font-bold">Status</th>
+                <th className="px-4 py-3 font-semibold">Name / Company</th>
+                <th className="px-4 py-3 font-semibold">Email</th>
+                <th className="px-4 py-3 font-semibold">Interest</th>
+                <th className="px-4 py-3 font-semibold">Type</th>
+                <th className="px-4 py-3 font-semibold">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 bg-white">
+            <tbody className="divide-y divide-edge-subtle bg-white">
               {enquiries.map((e) => (
-                <tr key={e.id} className="hover:bg-slate-50/60">
-                  <td className="px-4 py-3 align-top font-semibold text-brand-navy">
+                <tr key={e.id} className="hover:bg-surface-muted">
+                  <td className="px-4 py-3 align-top font-semibold text-ink-primary">
                     {e.name}
                     <p className="mt-0.5 text-[10px] text-brand-muted">{e.company || 'Personal'}</p>
                   </td>
-                  <td className="px-4 py-3 align-top text-slate-700">{e.email}</td>
-                  <td className="px-4 py-3 align-top text-slate-700">{e.product_interest} · {e.quantity}</td>
+                  <td className="px-4 py-3 align-top text-ink-secondary">{e.email}</td>
+                  <td className="px-4 py-3 align-top text-ink-secondary">{e.product_interest} · {e.quantity}</td>
                   <td className="px-4 py-3 align-top text-brand-muted">{e.enquiry_type}</td>
                   <td className="px-4 py-3 align-top">
-                    <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-600">
+                    <span className="inline-flex rounded-xs bg-surface-muted px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-ink-secondary">
                       {e.status}
                     </span>
                   </td>
@@ -2891,24 +2891,24 @@ function SupportTab({ authFetch }) {
 
       {/* Ticket Details Modal */}
       {selectedTicket && (
-        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-slate-50 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-          <div className="w-full max-w-lg bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
-            <div className="flex justify-between items-center pb-2 border-b border-slate-100">
-              <h3 className="text-lg font-black text-brand-navy">Ticket #{selectedTicket.id} Detail</h3>
+        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
+          <div className="w-full max-w-lg bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
+            <div className="flex justify-between items-center pb-2 border-b border-edge-subtle">
+              <h3 className="text-lg font-semibold text-ink-primary">Ticket #{selectedTicket.id} Detail</h3>
               <button onClick={() => setSelectedTicket(null)}><X className="h-5 w-5 text-brand-muted" /></button>
             </div>
             <div className="space-y-3 text-xs">
-              <p><span className="font-bold uppercase text-brand-muted">Subject:</span> {selectedTicket.subject}</p>
-              <p><span className="font-bold uppercase text-brand-muted">From:</span> {selectedTicket.email}</p>
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                <p className="font-bold text-slate-400 mb-1">MESSAGE BODY</p>
-                <p className="text-brand-navy leading-normal">{selectedTicket.message}</p>
+              <p><span className="font-semibold uppercase text-brand-muted">Subject:</span> {selectedTicket.subject}</p>
+              <p><span className="font-semibold uppercase text-brand-muted">From:</span> {selectedTicket.email}</p>
+              <div className="p-3 bg-surface-muted rounded-md border border-edge-subtle">
+                <p className="font-semibold text-ink-subtle mb-1">MESSAGE BODY</p>
+                <p className="text-ink-primary leading-normal">{selectedTicket.message}</p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <p className="font-bold text-brand-muted mb-1">STATUS</p>
-                  <select value={selectedTicket.status} onChange={(e) => setSelectedTicket({ ...selectedTicket, status: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2 text-xs">
+                  <p className="font-semibold text-brand-muted mb-1">STATUS</p>
+                  <select value={selectedTicket.status} onChange={(e) => setSelectedTicket({ ...selectedTicket, status: e.target.value })} className="w-full rounded-sm border border-edge p-2 text-xs">
                     <option value="OPEN">Open</option>
                     <option value="PENDING">Pending</option>
                     <option value="RESOLVED">Resolved</option>
@@ -2916,8 +2916,8 @@ function SupportTab({ authFetch }) {
                   </select>
                 </div>
                 <div>
-                  <p className="font-bold text-brand-muted mb-1">PRIORITY</p>
-                  <select value={selectedTicket.priority} onChange={(e) => setSelectedTicket({ ...selectedTicket, priority: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2 text-xs">
+                  <p className="font-semibold text-brand-muted mb-1">PRIORITY</p>
+                  <select value={selectedTicket.priority} onChange={(e) => setSelectedTicket({ ...selectedTicket, priority: e.target.value })} className="w-full rounded-sm border border-edge p-2 text-xs">
                     <option value="LOW">Low</option>
                     <option value="MEDIUM">Medium</option>
                     <option value="HIGH">High</option>
@@ -2927,11 +2927,11 @@ function SupportTab({ authFetch }) {
               </div>
 
               <div>
-                <p className="font-bold text-brand-muted mb-1">ADMIN NOTES</p>
-                <textarea rows={3} value={selectedTicket.admin_notes || ''} onChange={(e) => setSelectedTicket({ ...selectedTicket, admin_notes: e.target.value })} placeholder="Add follow-up notes..." className="w-full rounded-lg border border-slate-200 p-2.5 text-xs" />
+                <p className="font-semibold text-brand-muted mb-1">ADMIN NOTES</p>
+                <textarea rows={3} value={selectedTicket.admin_notes || ''} onChange={(e) => setSelectedTicket({ ...selectedTicket, admin_notes: e.target.value })} placeholder="Add follow-up notes..." className="w-full rounded-sm border border-edge p-2.5 text-xs" />
               </div>
 
-              <button onClick={saveTicketStatus} disabled={saving} className="btn-primary w-full py-2.5 text-xs bg-brand-purple text-white rounded-lg uppercase">{saving ? 'Updating...' : 'Update Ticket'}</button>
+              <button onClick={saveTicketStatus} disabled={saving} className="btn-primary w-full py-2.5 text-xs uppercase">{saving ? 'Updating...' : 'Update Ticket'}</button>
             </div>
           </div>
         </div>
@@ -3063,9 +3063,9 @@ function IntegrationsTab({ authFetch }) {
   return (
     <div className="space-y-4">
       {/* Subtab Navigation */}
-      <div className="flex gap-2 border-b border-slate-100 pb-2">
-        <button onClick={() => setActiveSubTab('marketing')} className={`px-4 py-1.5 text-xs font-bold uppercase rounded-lg ${activeSubTab === 'marketing' ? 'bg-brand-purple text-white' : 'text-brand-navy hover:bg-slate-50'}`}>Marketing Channels</button>
-        <button onClick={() => setActiveSubTab('system')} className={`px-4 py-1.5 text-xs font-bold uppercase rounded-lg ${activeSubTab === 'system' ? 'bg-brand-purple text-white' : 'text-brand-navy hover:bg-slate-50'}`}>Webhooks &amp; API Keys</button>
+      <div className="flex gap-2 border-b border-edge-subtle pb-2">
+        <button onClick={() => setActiveSubTab('marketing')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm ${activeSubTab === 'marketing' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Marketing Channels</button>
+        <button onClick={() => setActiveSubTab('system')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm ${activeSubTab === 'system' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Webhooks &amp; API Keys</button>
       </div>
 
       {activeSubTab === 'marketing' ? (
@@ -3073,27 +3073,27 @@ function IntegrationsTab({ authFetch }) {
           {MARKETING_CHANNELS_CATALOG.map((chan) => {
             const active = integrations.find(i => i.channel === chan.code);
             return (
-              <div key={chan.code} className="rounded-2xl border border-slate-200 bg-white p-5 flex flex-col justify-between">
+              <div key={chan.code} className="rounded-lg border border-edge bg-white shadow-card p-5 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-brand-purple">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-md bg-surface-muted text-ink-accent">
                       <chan.icon className="h-5 w-5" />
                     </span>
-                    <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-400'}`}>
+                    <span className={`rounded-xs px-2 py-0.5 text-[9px] font-semibold ${active ? 'bg-brand-success/10 text-ink-success' : 'bg-surface-muted text-ink-subtle'}`}>
                       {active ? 'CONNECTED' : 'DISCONNECTED'}
                     </span>
                   </div>
-                  <h4 className="text-sm font-bold text-brand-navy">{chan.name}</h4>
+                  <h4 className="text-sm font-semibold text-ink-primary">{chan.name}</h4>
                   <p className="mt-1 text-xs text-brand-muted">{chan.desc}</p>
-                  {active?.last_sync && <p className="mt-2 text-[10px] text-slate-400">Last sync feed: {formatDateTime(active.last_sync)}</p>}
+                  {active?.last_sync && <p className="mt-2 text-[10px] text-ink-subtle">Last sync feed: {formatDateTime(active.last_sync)}</p>}
                 </div>
 
-                <div className="mt-4 flex gap-2 border-t border-slate-50 pt-3">
-                  <button onClick={() => toggleConnection(chan.code)} className={`text-xs px-3 py-1.5 rounded-lg border font-bold uppercase ${active ? 'border-slate-200 text-slate-500 hover:bg-slate-50' : 'border-brand-purple text-brand-purple hover:bg-brand-purple/10'}`}>
+                <div className="mt-4 flex gap-2 border-t border-edge-subtle pt-3">
+                  <button onClick={() => toggleConnection(chan.code)} className={`text-xs px-3 py-1.5 rounded-sm border font-semibold uppercase ${active ? 'border-edge text-ink-muted hover:bg-surface-muted' : 'border-ink-primary text-ink-accent hover:bg-surface-muted'}`}>
                     {active ? 'Disconnect' : 'Connect Account'}
                   </button>
                   {active && (
-                    <button onClick={() => syncCatalog(active)} className="text-xs px-3 py-1.5 border border-slate-100 text-brand-navy font-bold rounded-lg uppercase flex items-center gap-1"><RefreshCw className="h-3 w-3" /> Sync catalog</button>
+                    <button onClick={() => syncCatalog(active)} className="text-xs px-3 py-1.5 border border-edge-subtle text-ink-primary font-semibold rounded-sm uppercase flex items-center gap-1"><RefreshCw className="h-3 w-3" /> Sync catalog</button>
                   )}
                 </div>
               </div>
@@ -3103,70 +3103,70 @@ function IntegrationsTab({ authFetch }) {
       ) : (
         <div className="grid gap-6 md:grid-cols-[1fr_400px]">
           {/* API keys credentials form */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
-            <h3 className="text-sm font-bold text-brand-navy">API Key &amp; Credentials Center</h3>
+          <div className="bg-white border border-edge rounded-lg p-5 space-y-4">
+            <h3 className="text-sm font-semibold text-ink-primary">API Key &amp; Credentials Center</h3>
             <p className="text-xs text-brand-muted font-medium">Input production credentials below. Secret values are accepted by the server but are never returned to the browser.</p>
             
             <div className="space-y-3.5 text-xs">
-              <div className="border-b border-slate-100 pb-3">
+              <div className="border-b border-edge-subtle pb-3">
                 <div className="flex justify-between items-center mb-1">
-                  <label className="font-bold text-brand-navy">Delhivery Courier API Access Token</label>
-                  <button onClick={() => testHealth('Delhivery')} className="text-brand-purple font-bold text-[10px] uppercase">Test ping</button>
+                  <label className="font-semibold text-ink-primary">Delhivery Courier API Access Token</label>
+                  <button onClick={() => testHealth('Delhivery')} className="text-ink-accent font-semibold text-[10px] uppercase">Test ping</button>
                 </div>
-                <input type="password" value={connectors.delhivery_api_key} onChange={(e) => setConnectors({ ...connectors, delhivery_api_key: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2 font-mono" />
+                <input type="password" value={connectors.delhivery_api_key} onChange={(e) => setConnectors({ ...connectors, delhivery_api_key: e.target.value })} className="w-full rounded-sm border border-edge p-2 font-mono" />
               </div>
 
-              <div className="border-b border-slate-100 pb-3">
+              <div className="border-b border-edge-subtle pb-3">
                 <div className="flex justify-between items-center mb-1">
-                  <label className="font-bold text-brand-navy">Cloudflare CDN Zone Token &amp; ID</label>
-                  <button onClick={() => testHealth('Cloudflare')} className="text-brand-purple font-bold text-[10px] uppercase">Test API</button>
+                  <label className="font-semibold text-ink-primary">Cloudflare CDN Zone Token &amp; ID</label>
+                  <button onClick={() => testHealth('Cloudflare')} className="text-ink-accent font-semibold text-[10px] uppercase">Test API</button>
                 </div>
-                <input type="password" value={connectors.cloudflare_zone_id} onChange={(e) => setConnectors({ ...connectors, cloudflare_zone_id: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2 font-mono" />
+                <input type="password" value={connectors.cloudflare_zone_id} onChange={(e) => setConnectors({ ...connectors, cloudflare_zone_id: e.target.value })} className="w-full rounded-sm border border-edge p-2 font-mono" />
               </div>
 
-              <div className="border-b border-slate-100 pb-3">
+              <div className="border-b border-edge-subtle pb-3">
                 <div className="flex justify-between items-center mb-1">
-                  <label className="font-bold text-brand-navy">Klaviyo Private API Key</label>
-                  <button onClick={() => testHealth('Klaviyo')} className="text-brand-purple font-bold text-[10px] uppercase">Test sync</button>
+                  <label className="font-semibold text-ink-primary">Klaviyo Private API Key</label>
+                  <button onClick={() => testHealth('Klaviyo')} className="text-ink-accent font-semibold text-[10px] uppercase">Test sync</button>
                 </div>
-                <input type="password" value={connectors.klaviyo_private_key} onChange={(e) => setConnectors({ ...connectors, klaviyo_private_key: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2 font-mono" />
+                <input type="password" value={connectors.klaviyo_private_key} onChange={(e) => setConnectors({ ...connectors, klaviyo_private_key: e.target.value })} className="w-full rounded-sm border border-edge p-2 font-mono" />
               </div>
 
-              <div className="border-b border-slate-100 pb-3">
+              <div className="border-b border-edge-subtle pb-3">
                 <div className="flex justify-between items-center mb-1">
-                  <label className="font-bold text-brand-navy">Google Analytics GA4 Measurement ID</label>
-                  <button onClick={() => testHealth('Google Analytics')} className="text-brand-purple font-bold text-[10px] uppercase">Test script</button>
+                  <label className="font-semibold text-ink-primary">Google Analytics GA4 Measurement ID</label>
+                  <button onClick={() => testHealth('Google Analytics')} className="text-ink-accent font-semibold text-[10px] uppercase">Test script</button>
                 </div>
-                <input value={connectors.ga4_measurement_id} onChange={(e) => setConnectors({ ...connectors, ga4_measurement_id: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2 font-mono" />
+                <input value={connectors.ga4_measurement_id} onChange={(e) => setConnectors({ ...connectors, ga4_measurement_id: e.target.value })} className="w-full rounded-sm border border-edge p-2 font-mono" />
               </div>
 
-              <div className="border-b border-slate-100 pb-3">
+              <div className="border-b border-edge-subtle pb-3">
                 <div className="flex justify-between items-center mb-1">
-                  <label className="font-bold text-brand-navy">Stripe / Razorpay Endpoint Webhook Secrets</label>
-                  <button onClick={() => testHealth('Stripe/Razorpay')} className="text-brand-purple font-bold text-[10px] uppercase">Verify endpoints</button>
+                  <label className="font-semibold text-ink-primary">Stripe / Razorpay Endpoint Webhook Secrets</label>
+                  <button onClick={() => testHealth('Stripe/Razorpay')} className="text-ink-accent font-semibold text-[10px] uppercase">Verify endpoints</button>
                 </div>
-                <input type="password" value={connectors.stripe_webhook_secret} onChange={(e) => setConnectors({ ...connectors, stripe_webhook_secret: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2 font-mono" />
+                <input type="password" value={connectors.stripe_webhook_secret} onChange={(e) => setConnectors({ ...connectors, stripe_webhook_secret: e.target.value })} className="w-full rounded-sm border border-edge p-2 font-mono" />
               </div>
 
-              <button onClick={saveConnectors} className="btn-primary w-full py-2.5 bg-brand-purple text-white font-bold rounded-lg uppercase text-xs">Save Connector Credentials</button>
+              <button onClick={saveConnectors} className="btn-primary w-full py-2.5 font-semibold uppercase text-xs">Save Connector Credentials</button>
             </div>
           </div>
 
           {/* Webhook logs history list */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col h-[520px]">
-            <div className="flex justify-between items-center mb-3 border-b border-slate-800 pb-2">
-              <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Incoming Webhook Logs</h4>
-              <span className="rounded bg-brand-purple/20 text-brand-purple px-1.5 py-0.2 text-[8px] font-bold">RECEIVER LIVE</span>
+          <div className="bg-surface-inverse border border-white/10 rounded-lg p-4 flex flex-col h-[520px]">
+            <div className="flex justify-between items-center mb-3 border-b border-white/10 pb-2">
+              <h4 className="text-xs font-medium text-white/70 uppercase tracking-wider">Incoming Webhook Logs</h4>
+              <span className="rounded-xs bg-brand-accent/20 text-brand-accent px-1.5 py-0.2 text-[8px] font-semibold">RECEIVER LIVE</span>
             </div>
 
-            <div className="flex-1 overflow-y-auto divide-y divide-slate-800/80 space-y-1.5">
+            <div className="flex-1 overflow-y-auto divide-y divide-white/10 space-y-1.5">
               {webhookLogs.map((log, i) => (
-                <div key={i} className="py-2 flex justify-between items-center cursor-pointer hover:bg-slate-800/40 px-2 rounded-lg" onClick={() => setSelectedLog(log)}>
+                <div key={i} className="py-2 flex justify-between items-center cursor-pointer hover:bg-white/5 px-2 rounded-sm" onClick={() => setSelectedLog(log)}>
                   <div>
-                    <span className="font-mono text-[9px] font-black uppercase text-brand-purple block">{log.event}</span>
-                    <span className="text-[10px] text-slate-400 font-semibold">{log.gateway} · {new Date(log.ts).toLocaleTimeString()}</span>
+                    <span className="font-mono text-[9px] font-semibold uppercase text-brand-accent block">{log.event}</span>
+                    <span className="text-[10px] text-white/50 font-medium">{log.gateway} · {new Date(log.ts).toLocaleTimeString()}</span>
                   </div>
-                  <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-bold ${log.status === 200 ? 'bg-green-950 text-green-400' : 'bg-rose-950 text-rose-400'}`}>{log.status}</span>
+                  <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded-xs font-semibold ${log.status === 200 ? 'bg-green-950 text-green-400' : 'bg-rose-950 text-rose-400'}`}>{log.status}</span>
                 </div>
               ))}
             </div>
@@ -3175,15 +3175,15 @@ function IntegrationsTab({ authFetch }) {
       )}
 
       {selectedChannel && (
-        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-slate-50 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-          <div className="w-full max-w-md bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
-            <h3 className="text-lg font-black text-brand-navy">Connect {selectedChannel.name}</h3>
+        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
+          <div className="w-full max-w-md bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
+            <h3 className="text-lg font-semibold text-ink-primary">Connect {selectedChannel.name}</h3>
             <div className="space-y-3">
-              <input placeholder="Client Customer ID / Merchant ID / Pixel ID" value={selectedChannel.credentials.identifier || ''} onChange={(e) => setSelectedChannel({ ...selectedChannel, credentials: { ...selectedChannel.credentials, identifier: e.target.value } })} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" />
-              <input placeholder="API Secret Access Token" type="password" value={selectedChannel.credentials.token || ''} onChange={(e) => setSelectedChannel({ ...selectedChannel, credentials: { ...selectedChannel.credentials, token: e.target.value } })} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" />
+              <input placeholder="Client Customer ID / Merchant ID / Pixel ID" value={selectedChannel.credentials.identifier || ''} onChange={(e) => setSelectedChannel({ ...selectedChannel, credentials: { ...selectedChannel.credentials, identifier: e.target.value } })} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
+              <input placeholder="API Secret Access Token" type="password" value={selectedChannel.credentials.token || ''} onChange={(e) => setSelectedChannel({ ...selectedChannel, credentials: { ...selectedChannel.credentials, token: e.target.value } })} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
               <div className="flex gap-2">
-                <button onClick={saveConnection} className="btn-primary flex-1 py-2.5 text-xs bg-brand-purple text-white rounded-lg uppercase font-bold">Connect Channel</button>
-                <button onClick={() => setSelectedChannel(null)} className="flex-1 rounded-lg border border-slate-200 py-2.5 text-xs font-bold uppercase">Cancel</button>
+                <button onClick={saveConnection} className="btn-primary flex-1 py-2.5 text-xs uppercase font-semibold">Connect Channel</button>
+                <button onClick={() => setSelectedChannel(null)} className="flex-1 rounded-sm border border-edge py-2.5 text-xs font-semibold uppercase">Cancel</button>
               </div>
             </div>
           </div>
@@ -3191,19 +3191,19 @@ function IntegrationsTab({ authFetch }) {
       )}
 
       {selectedLog && (
-        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-slate-50 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-          <div className="w-full max-w-md bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
-            <div className="flex justify-between items-center pb-2 border-b border-slate-100">
-              <h3 className="text-sm font-black text-brand-navy uppercase">Webhook Details</h3>
+        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
+          <div className="w-full max-w-md bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
+            <div className="flex justify-between items-center pb-2 border-b border-edge-subtle">
+              <h3 className="text-sm font-semibold text-ink-primary uppercase">Webhook Details</h3>
               <button onClick={() => setSelectedLog(null)}><X className="h-5 w-5 text-brand-muted" /></button>
             </div>
             <div className="space-y-2 text-xs">
-              <p><span className="font-bold text-slate-400">EVENT TYPE:</span> {selectedLog.event}</p>
-              <p><span className="font-bold text-slate-400">SOURCE:</span> {selectedLog.gateway}</p>
-              <p><span className="font-bold text-slate-400">RECEIVED AT:</span> {formatDateTime(selectedLog.ts)}</p>
+              <p><span className="font-semibold text-ink-subtle">EVENT TYPE:</span> {selectedLog.event}</p>
+              <p><span className="font-semibold text-ink-subtle">SOURCE:</span> {selectedLog.gateway}</p>
+              <p><span className="font-semibold text-ink-subtle">RECEIVED AT:</span> {formatDateTime(selectedLog.ts)}</p>
               <div>
-                <span className="font-bold text-slate-400 block mb-1">RAW JSON PAYLOAD:</span>
-                <pre className="p-3 bg-slate-900 text-green-400 font-mono text-[9px] rounded-lg overflow-x-auto max-h-48">{JSON.stringify(selectedLog.payload, null, 2)}</pre>
+                <span className="font-semibold text-ink-subtle block mb-1">RAW JSON PAYLOAD:</span>
+                <pre className="p-3 bg-surface-inverse text-green-400 font-mono text-[9px] rounded-sm overflow-x-auto max-h-48">{JSON.stringify(selectedLog.payload, null, 2)}</pre>
               </div>
             </div>
           </div>
@@ -3245,9 +3245,9 @@ function ContentOverviewTab({ authFetch, go }) {
       {cards.map((card) => {
         const Icon = card.icon;
         return (
-          <button key={card.key} type="button" onClick={() => go(card.key)} className="rounded-2xl border border-slate-200 bg-white p-5 text-left hover:border-brand-purple/30 hover:shadow-sm">
-            <Icon className="mb-4 h-5 w-5 text-brand-purple" />
-            <p className="text-sm font-black text-brand-navy">{card.title}</p>
+          <button key={card.key} type="button" onClick={() => go(card.key)} className="rounded-lg border border-edge bg-white p-5 text-left hover:border-edge-strong hover:shadow-card">
+            <Icon className="mb-4 h-5 w-5 text-ink-accent" />
+            <p className="text-sm font-semibold text-ink-primary">{card.title}</p>
             <p className="mt-1 text-xs text-brand-muted">{card.detail}</p>
           </button>
         );
@@ -3360,24 +3360,24 @@ function PagesTab({ authFetch }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-brand-muted">{pages.length} web pages</p>
-        <button onClick={startNew} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase bg-brand-purple text-white rounded-lg"><Plus className="h-4 w-4" /> Create Page</button>
+        <button onClick={startNew} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase"><Plus className="h-4 w-4" /> Create Page</button>
       </div>
 
       <div className="space-y-2">
         {pages.map((p) => (
-          <div key={p.id} className="flex justify-between items-center rounded-xl border border-slate-200 bg-white p-4">
+          <div key={p.id} className="flex justify-between items-center rounded-md border border-edge bg-white shadow-card p-4">
             <div>
-              <p className="text-sm font-semibold text-brand-navy">{toDisplayText(p.title)} <span className="font-mono text-[10px] text-brand-muted">/{toDisplayText(p.slug)}</span></p>
-              <p className="text-[10px] uppercase font-bold text-slate-400">{p.page_type}</p>
-              <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[9px] font-bold uppercase ${p.is_published ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+              <p className="text-sm font-semibold text-ink-primary">{toDisplayText(p.title)} <span className="font-mono text-[10px] text-brand-muted">/{toDisplayText(p.slug)}</span></p>
+              <p className="text-[10px] uppercase font-semibold text-ink-subtle">{p.page_type}</p>
+              <span className={`mt-1 inline-flex rounded-xs px-2 py-0.5 text-[9px] font-semibold uppercase ${p.is_published ? 'bg-brand-success/10 text-ink-success' : 'bg-surface-muted text-ink-muted'}`}>
                 {p.is_published ? 'Published' : 'Draft'}
               </span>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => togglePublish(p)} className="text-brand-muted hover:text-brand-purple" title={p.is_published ? 'Unpublish' : 'Publish'}>
+              <button onClick={() => togglePublish(p)} className="text-brand-muted hover:text-ink-accent" title={p.is_published ? 'Unpublish' : 'Publish'}>
                 {p.is_published ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
               </button>
-              <button onClick={() => setEditing({ ...p })} className="text-brand-purple"><Pencil className="h-4 w-4" /></button>
+              <button onClick={() => setEditing({ ...p })} className="text-ink-accent"><Pencil className="h-4 w-4" /></button>
               <button onClick={() => deleteItem(p)} className="text-brand-muted hover:text-brand-danger"><X className="h-4 w-4" /></button>
             </div>
           </div>
@@ -3385,38 +3385,38 @@ function PagesTab({ authFetch }) {
       </div>
 
       {editing && (
-        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-slate-50 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-          <div className="my-8 w-full max-w-lg bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
-            <h3 className="text-lg font-black text-brand-navy">{editing.id ? 'Edit Page' : 'Create Page'}</h3>
+        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
+          <div className="my-8 w-full max-w-lg bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
+            <h3 className="text-lg font-semibold text-ink-primary">{editing.id ? 'Edit Page' : 'Create Page'}</h3>
             <div className="space-y-3 text-xs">
-              <input placeholder="Page Title" value={editing.title} onChange={(e) => setEditing({ ...editing, title: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" />
-              <input placeholder="Slug" value={editing.slug} disabled={!!editing.id} onChange={(e) => setEditing({ ...editing, slug: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm disabled:bg-slate-50" />
-              <select value={editing.page_type} onChange={(e) => setEditing({ ...editing, page_type: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2 text-xs">
+              <input placeholder="Page Title" value={editing.title} onChange={(e) => setEditing({ ...editing, title: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
+              <input placeholder="Slug" value={editing.slug} disabled={!!editing.id} onChange={(e) => setEditing({ ...editing, slug: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-sm disabled:bg-surface-muted" />
+              <select value={editing.page_type} onChange={(e) => setEditing({ ...editing, page_type: e.target.value })} className="w-full rounded-sm border border-edge p-2 text-xs">
                 <option value="STANDARD">Standard layout</option>
                 <option value="LANDING">Landing page layout</option>
                 <option value="PROMO">Promotional grid</option>
               </select>
               <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => insertToken('**', true)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-[10px] font-bold text-brand-navy">Bold</button>
-                <button type="button" onClick={() => insertToken('*', true)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-[10px] font-bold text-brand-navy">Italic</button>
-                <button type="button" onClick={insertLink} className="rounded-lg border border-slate-200 px-3 py-1.5 text-[10px] font-bold text-brand-navy">Link</button>
-                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-[10px] font-bold text-brand-navy">
+                <button type="button" onClick={() => insertToken('**', true)} className="rounded-sm border border-edge px-3 py-1.5 text-[10px] font-semibold text-ink-primary">Bold</button>
+                <button type="button" onClick={() => insertToken('*', true)} className="rounded-sm border border-edge px-3 py-1.5 text-[10px] font-semibold text-ink-primary">Italic</button>
+                <button type="button" onClick={insertLink} className="rounded-sm border border-edge px-3 py-1.5 text-[10px] font-semibold text-ink-primary">Link</button>
+                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-edge px-3 py-1.5 text-[10px] font-semibold text-ink-primary">
                   <Upload className="h-3.5 w-3.5" /> Image
                   <input type="file" accept="image/*" onChange={(e) => uploadContentImage(e.target.files?.[0])} className="hidden" />
                 </label>
               </div>
-              <textarea ref={contentRef} placeholder="HTML/Markdown content" value={editing.content} onChange={(e) => setEditing({ ...editing, content: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2.5 font-mono" rows={5} />
+              <textarea ref={contentRef} placeholder="HTML/Markdown content" value={editing.content} onChange={(e) => setEditing({ ...editing, content: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 font-mono" rows={5} />
               
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
-                <p className="font-bold text-slate-400">SEO TAGS</p>
-                <input placeholder="Meta Title" value={editing.meta_title || ''} onChange={(e) => setEditing({ ...editing, meta_title: e.target.value })} className="w-full rounded border border-slate-200 p-1.5 text-xs bg-white" />
-                <textarea placeholder="Meta Description" value={editing.meta_description || ''} onChange={(e) => setEditing({ ...editing, meta_description: e.target.value })} className="w-full rounded border border-slate-200 p-1.5 text-xs bg-white" rows={2} />
+              <div className="p-3 bg-surface-muted rounded-md border border-edge-subtle space-y-2">
+                <p className="font-semibold text-ink-subtle">SEO TAGS</p>
+                <input placeholder="Meta Title" value={editing.meta_title || ''} onChange={(e) => setEditing({ ...editing, meta_title: e.target.value })} className="w-full rounded border border-edge p-1.5 text-xs bg-white" />
+                <textarea placeholder="Meta Description" value={editing.meta_description || ''} onChange={(e) => setEditing({ ...editing, meta_description: e.target.value })} className="w-full rounded border border-edge p-1.5 text-xs bg-white" rows={2} />
               </div>
 
-              <label className="flex items-center gap-2 text-sm text-brand-navy cursor-pointer"><input type="checkbox" checked={editing.is_published} onChange={(e) => setEditing({ ...editing, is_published: e.target.checked })} className="accent-brand-purple" /> Publish Page</label>
+              <label className="flex items-center gap-2 text-sm text-ink-primary cursor-pointer"><input type="checkbox" checked={editing.is_published} onChange={(e) => setEditing({ ...editing, is_published: e.target.checked })} className="accent-ink-primary" /> Publish Page</label>
               <div className="flex gap-2">
-                <button onClick={save} className="btn-primary flex-1 py-2.5 text-xs bg-brand-purple text-white rounded-lg uppercase">Save Page</button>
-                <button onClick={() => setEditing(null)} className="flex-1 rounded-lg border border-slate-200 py-2.5 text-xs font-bold uppercase">Cancel</button>
+                <button onClick={save} className="btn-primary flex-1 py-2.5 text-xs uppercase">Save Page</button>
+                <button onClick={() => setEditing(null)} className="flex-1 rounded-sm border border-edge py-2.5 text-xs font-semibold uppercase">Cancel</button>
               </div>
             </div>
           </div>
@@ -3479,24 +3479,24 @@ function BlogsTab({ authFetch }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-brand-muted">{blogs.length} articles</p>
-        <button onClick={startNew} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase bg-brand-purple text-white rounded-lg"><Plus className="h-4 w-4" /> Write Article</button>
+        <button onClick={startNew} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase"><Plus className="h-4 w-4" /> Write Article</button>
       </div>
 
       <div className="space-y-2">
         {blogs.map((b) => (
-          <div key={b.id} className="flex justify-between items-center rounded-xl border border-slate-200 bg-white p-4">
+          <div key={b.id} className="flex justify-between items-center rounded-md border border-edge bg-white shadow-card p-4">
             <div>
-              <p className="text-sm font-semibold text-brand-navy">{toDisplayText(b.title)}</p>
+              <p className="text-sm font-semibold text-ink-primary">{toDisplayText(b.title)}</p>
               <p className="text-[10px] text-brand-muted">Written by {b.author} · /{b.slug}</p>
-              <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[9px] font-bold uppercase ${b.is_published ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+              <span className={`mt-1 inline-flex rounded-xs px-2 py-0.5 text-[9px] font-semibold uppercase ${b.is_published ? 'bg-brand-success/10 text-ink-success' : 'bg-surface-muted text-ink-muted'}`}>
                 {b.is_published ? 'Published' : 'Draft'}
               </span>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => togglePublish(b)} className="text-brand-muted hover:text-brand-purple" title={b.is_published ? 'Unpublish' : 'Publish'}>
+              <button onClick={() => togglePublish(b)} className="text-brand-muted hover:text-ink-accent" title={b.is_published ? 'Unpublish' : 'Publish'}>
                 {b.is_published ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
               </button>
-              <button onClick={() => setEditing({ ...b })} className="text-brand-purple"><Pencil className="h-4 w-4" /></button>
+              <button onClick={() => setEditing({ ...b })} className="text-ink-accent"><Pencil className="h-4 w-4" /></button>
               <button onClick={() => deleteItem(b)} className="text-brand-muted hover:text-brand-danger"><X className="h-4 w-4" /></button>
             </div>
           </div>
@@ -3504,18 +3504,18 @@ function BlogsTab({ authFetch }) {
       </div>
 
       {editing && (
-        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-slate-50 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-          <div className="my-8 w-full max-w-lg bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
-            <h3 className="text-lg font-black text-brand-navy">{editing.id ? 'Edit Article' : 'Write Article'}</h3>
+        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
+          <div className="my-8 w-full max-w-lg bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
+            <h3 className="text-lg font-semibold text-ink-primary">{editing.id ? 'Edit Article' : 'Write Article'}</h3>
             <div className="space-y-3 text-xs">
-              <input placeholder="Article Title" value={editing.title} onChange={(e) => setEditing({ ...editing, title: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" />
-              <input placeholder="Slug" value={editing.slug} disabled={!!editing.id} onChange={(e) => setEditing({ ...editing, slug: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm disabled:bg-slate-50" />
-              <input placeholder="Author name" value={editing.author} onChange={(e) => setEditing({ ...editing, author: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" />
+              <input placeholder="Article Title" value={editing.title} onChange={(e) => setEditing({ ...editing, title: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
+              <input placeholder="Slug" value={editing.slug} disabled={!!editing.id} onChange={(e) => setEditing({ ...editing, slug: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-sm disabled:bg-surface-muted" />
+              <input placeholder="Author name" value={editing.author} onChange={(e) => setEditing({ ...editing, author: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
               <div>
-                <label className="mb-1 block text-[10px] font-bold uppercase text-brand-muted">Cover image</label>
+                <label className="mb-1 block text-[10px] font-semibold uppercase text-brand-muted">Cover image</label>
                 <div className="flex gap-2">
-                  <input placeholder="https://..." value={editing.cover_image_url || ''} onChange={(e) => setEditing({ ...editing, cover_image_url: e.target.value })} className="flex-1 rounded-lg border border-slate-200 p-2.5 text-sm" />
-                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-brand-navy hover:border-brand-purple">
+                  <input placeholder="https://..." value={editing.cover_image_url || ''} onChange={(e) => setEditing({ ...editing, cover_image_url: e.target.value })} className="flex-1 rounded-sm border border-edge p-2.5 text-sm" />
+                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-edge px-3 py-2 text-xs font-semibold text-ink-primary hover:border-ink-primary">
                     <Upload className="h-3.5 w-3.5" />
                     {uploadingCover ? 'Uploading' : 'Upload'}
                     <input type="file" accept="image/*" onChange={(e) => uploadCover(e.target.files?.[0])} disabled={uploadingCover} className="hidden" />
@@ -3523,18 +3523,18 @@ function BlogsTab({ authFetch }) {
                 </div>
                 {editing.cover_image_url && <img src={editing.cover_image_url} alt="" className="mt-2 h-28 w-full rounded-lg object-cover" />}
               </div>
-              <textarea placeholder="Write article content..." value={editing.content} onChange={(e) => setEditing({ ...editing, content: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2.5 font-serif text-sm" rows={8} />
+              <textarea placeholder="Write article content..." value={editing.content} onChange={(e) => setEditing({ ...editing, content: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 font-serif text-sm" rows={8} />
 
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
-                <p className="font-bold text-slate-400">SEO META</p>
-                <input placeholder="Meta Title" value={editing.meta_title || ''} onChange={(e) => setEditing({ ...editing, meta_title: e.target.value })} className="w-full rounded border border-slate-200 p-1.5 text-xs bg-white" />
-                <textarea placeholder="Meta Description" value={editing.meta_description || ''} onChange={(e) => setEditing({ ...editing, meta_description: e.target.value })} className="w-full rounded border border-slate-200 p-1.5 text-xs bg-white" rows={2} />
+              <div className="p-3 bg-surface-muted rounded-md border border-edge-subtle space-y-2">
+                <p className="font-semibold text-ink-subtle">SEO META</p>
+                <input placeholder="Meta Title" value={editing.meta_title || ''} onChange={(e) => setEditing({ ...editing, meta_title: e.target.value })} className="w-full rounded border border-edge p-1.5 text-xs bg-white" />
+                <textarea placeholder="Meta Description" value={editing.meta_description || ''} onChange={(e) => setEditing({ ...editing, meta_description: e.target.value })} className="w-full rounded border border-edge p-1.5 text-xs bg-white" rows={2} />
               </div>
 
-              <label className="flex items-center gap-2 text-sm text-brand-navy cursor-pointer"><input type="checkbox" checked={editing.is_published} onChange={(e) => setEditing({ ...editing, is_published: e.target.checked })} className="accent-brand-purple" /> Publish Article</label>
+              <label className="flex items-center gap-2 text-sm text-ink-primary cursor-pointer"><input type="checkbox" checked={editing.is_published} onChange={(e) => setEditing({ ...editing, is_published: e.target.checked })} className="accent-ink-primary" /> Publish Article</label>
               <div className="flex gap-2">
-                <button onClick={save} className="btn-primary flex-1 py-2.5 text-xs bg-brand-purple text-white rounded-lg uppercase">Save Article</button>
-                <button onClick={() => setEditing(null)} className="flex-1 rounded-lg border border-slate-200 py-2.5 text-xs font-bold uppercase">Cancel</button>
+                <button onClick={save} className="btn-primary flex-1 py-2.5 text-xs uppercase">Save Article</button>
+                <button onClick={() => setEditing(null)} className="flex-1 rounded-sm border border-edge py-2.5 text-xs font-semibold uppercase">Cancel</button>
               </div>
             </div>
           </div>
@@ -3560,10 +3560,10 @@ function AnalyticsAndReportsTab({ authFetch }) {
   ];
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2 border-b border-slate-100 pb-2">
+      <div className="flex flex-wrap gap-2 border-b border-edge-subtle pb-2">
         {VIEWS.map((v) => (
           <button key={v.key} onClick={() => setView(v.key)}
-            className={`px-3 py-1.5 text-xs font-bold uppercase rounded-lg ${view === v.key ? 'bg-brand-purple text-white' : 'text-brand-navy hover:bg-slate-50'}`}>
+            className={`px-3 py-1.5 text-xs font-semibold uppercase rounded-lg ${view === v.key ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>
             {v.label}
           </button>
         ))}
@@ -3615,7 +3615,7 @@ function AnalyticsOverview({ authFetch }) {
   };
 
   if (loading) return <p className="text-sm text-brand-muted">Gathering report analytics...</p>;
-  if (!data) return <p className="text-sm text-brand-muted font-bold">Failed to load analytics.</p>;
+  if (!data) return <p className="text-sm text-brand-muted font-semibold">Failed to load analytics.</p>;
 
   // Safe defaults — prevents TypeError when API returns partial data
   const sales = data.sales || { currency: 'GBP', total_revenue: 0, aov: 0 };
@@ -3626,56 +3626,56 @@ function AnalyticsOverview({ authFetch }) {
   return (
     <div className="space-y-6">
       {/* Action triggers */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
-        <h3 className="text-sm font-bold text-brand-navy">Performance Exporter</h3>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-edge-subtle pb-3">
+        <h3 className="text-sm font-semibold text-ink-primary">Performance Exporter</h3>
         <div className="flex gap-2">
-          <button onClick={triggerPDFDownload} className="btn-secondary inline-flex items-center gap-1.5 px-3 py-2 text-xs border border-slate-200 bg-white rounded-lg"><Download className="h-3.5 w-3.5 text-brand-purple" /> Export PDF Summary</button>
-          <button onClick={triggerCSVDownload} className="btn-secondary inline-flex items-center gap-1.5 px-3 py-2 text-xs border border-slate-200 bg-white rounded-lg"><Download className="h-3.5 w-3.5 text-brand-purple" /> Export CSV Spreadsheet</button>
+          <button onClick={triggerPDFDownload} className="btn-secondary inline-flex items-center gap-1.5 px-3 py-2 text-xs border border-edge bg-white rounded-sm"><Download className="h-3.5 w-3.5 text-ink-accent" /> Export PDF Summary</button>
+          <button onClick={triggerCSVDownload} className="btn-secondary inline-flex items-center gap-1.5 px-3 py-2 text-xs border border-edge bg-white rounded-sm"><Download className="h-3.5 w-3.5 text-ink-accent" /> Export CSV Spreadsheet</button>
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <p className="text-xs text-brand-muted font-bold">GROSS SALES REVENUE</p>
-          <p className="mt-1 text-2xl font-black text-brand-navy">{sales.currency} {Number(sales.total_revenue || 0).toLocaleString()}</p>
-          <p className="text-[10px] text-slate-400 mt-1">Average Order Value: {sales.currency} {Number(sales.aov || 0).toFixed(2)}</p>
+        <div className="rounded-md border border-edge bg-white shadow-card p-4">
+          <p className="text-xs text-brand-muted font-semibold">GROSS SALES REVENUE</p>
+          <p className="mt-1 text-2xl font-semibold text-ink-primary">{sales.currency} {Number(sales.total_revenue || 0).toLocaleString()}</p>
+          <p className="text-[10px] text-ink-subtle mt-1">Average Order Value: {sales.currency} {Number(sales.aov || 0).toFixed(2)}</p>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <p className="text-xs text-brand-muted font-bold">REPEAT CUSTOMER RATE</p>
-          <p className="mt-1 text-2xl font-black text-brand-navy">{Number(customers.repeat_purchase_rate || 0).toFixed(1)}%</p>
-          <p className="text-[10px] text-slate-400 mt-1">Total buyer database size: {customers.total_customers}</p>
+        <div className="rounded-md border border-edge bg-white shadow-card p-4">
+          <p className="text-xs text-brand-muted font-semibold">REPEAT CUSTOMER RATE</p>
+          <p className="mt-1 text-2xl font-semibold text-ink-primary">{Number(customers.repeat_purchase_rate || 0).toFixed(1)}%</p>
+          <p className="text-[10px] text-ink-subtle mt-1">Total buyer database size: {customers.total_customers}</p>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <p className="text-xs text-brand-muted font-bold">TOTAL CAMPAIGN CLICKS</p>
-          <p className="mt-1 text-2xl font-black text-brand-purple">
+        <div className="rounded-md border border-edge bg-white shadow-card p-4">
+          <p className="text-xs text-brand-muted font-semibold">TOTAL CAMPAIGN CLICKS</p>
+          <p className="mt-1 text-2xl font-semibold text-ink-accent">
             {marketing.reduce((acc, c) => acc + c.clicks, 0).toLocaleString()}
           </p>
-          <p className="text-[10px] text-slate-400 mt-1">Total campaign conversions: {marketing.reduce((acc, c) => acc + c.conversions, 0).toLocaleString()}</p>
+          <p className="text-[10px] text-ink-subtle mt-1">Total campaign conversions: {marketing.reduce((acc, c) => acc + c.conversions, 0).toLocaleString()}</p>
         </div>
       </div>
 
       {/* Schedule automated report generation */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
-        <div className="border-b border-slate-50 pb-2">
-          <h4 className="text-xs font-bold text-brand-navy uppercase">Schedule Automated Reports Delivery</h4>
+      <div className="rounded-lg border border-edge bg-white shadow-card p-5 space-y-4">
+        <div className="border-b border-edge-subtle pb-2">
+          <h4 className="text-xs font-semibold text-ink-primary uppercase">Schedule Automated Reports Delivery</h4>
           <p className="text-[11px] text-brand-muted">Configure the platform to automatically compile and email summary performance reports.</p>
         </div>
         <div className="grid gap-3 sm:grid-cols-3 text-xs">
           <div>
-            <p className="font-bold text-brand-muted mb-1">FREQUENCY</p>
-            <select value={scheduler.frequency} onChange={(e) => setScheduler({ ...scheduler, frequency: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2 text-xs bg-white">
+            <p className="font-semibold text-brand-muted mb-1">FREQUENCY</p>
+            <select value={scheduler.frequency} onChange={(e) => setScheduler({ ...scheduler, frequency: e.target.value })} className="w-full rounded-sm border border-edge p-2 text-xs bg-white">
               <option value="daily">Daily digest</option>
               <option value="weekly">Weekly performance sheet</option>
               <option value="monthly">Monthly audit pack</option>
             </select>
           </div>
           <div>
-            <p className="font-bold text-brand-muted mb-1">RECIPIENT EMAIL</p>
-            <input placeholder="admin@scleroproteins.com" value={scheduler.email} onChange={(e) => setScheduler({ ...scheduler, email: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2 text-xs" />
+            <p className="font-semibold text-brand-muted mb-1">RECIPIENT EMAIL</p>
+            <input placeholder="admin@scleroproteins.com" value={scheduler.email} onChange={(e) => setScheduler({ ...scheduler, email: e.target.value })} className="w-full rounded-sm border border-edge p-2 text-xs" />
           </div>
           <div className="flex items-end">
-            <button onClick={saveScheduler} className="btn-primary w-full py-2 bg-brand-purple text-white font-bold rounded-lg uppercase">Schedule Delivery</button>
-            {schedSaved && <p className="text-[11px] font-bold text-brand-success text-center">✓ Schedule saved</p>}
+            <button onClick={saveScheduler} className="btn-primary w-full py-2 font-semibold uppercase">Schedule Delivery</button>
+            {schedSaved && <p className="text-[11px] font-semibold text-brand-success text-center">✓ Schedule saved</p>}
           </div>
         </div>
       </div>
@@ -3774,15 +3774,15 @@ function SettingsTab({ authFetch }) {
   ];
 
   return (
-    <div className="space-y-6 text-xs bg-white rounded-2xl border border-slate-200 p-5">
+    <div className="space-y-6 text-xs bg-white rounded-lg border border-edge p-5">
       {/* Tax & pricing — wired to the live store config */}
       <div>
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-bold text-brand-navy mb-1 uppercase">Tax &amp; pricing</h3>
+            <h3 className="text-sm font-semibold text-ink-primary mb-1 uppercase">Tax &amp; pricing</h3>
             <p className="text-brand-muted mb-3">Choose how product prices display and how tax is charged at checkout.</p>
           </div>
-          {taxSaved && <span className="text-[11px] font-bold text-brand-success">✓ Saved</span>}
+          {taxSaved && <span className="text-[11px] font-semibold text-brand-success">✓ Saved</span>}
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           {TAX_OPTIONS.map((o) => (
@@ -3791,13 +3791,13 @@ function SettingsTab({ authFetch }) {
               type="button"
               disabled={taxSaving}
               onClick={() => saveTaxMode(o.v)}
-              className={`text-left rounded-xl border p-3.5 transition disabled:opacity-60 ${
-                taxMode === o.v ? 'border-brand-purple bg-brand-purple/5 ring-1 ring-brand-purple/30' : 'border-slate-200 hover:border-brand-purple/40'
+              className={`text-left rounded-md border p-3.5 transition disabled:opacity-60 ${
+                taxMode === o.v ? 'border-ink-primary bg-surface-muted ring-1 ring-edge-focus/30' : 'border-edge hover:border-edge-strong'
               }`}
             >
-              <div className="flex items-center gap-2 font-bold text-brand-navy">
-                <span className={`flex h-4 w-4 items-center justify-center rounded-full border ${taxMode === o.v ? 'border-brand-purple' : 'border-slate-300'}`}>
-                  {taxMode === o.v && <span className="h-2 w-2 rounded-full bg-brand-purple" />}
+              <div className="flex items-center gap-2 font-semibold text-ink-primary">
+                <span className={`flex h-4 w-4 items-center justify-center rounded-full border ${taxMode === o.v ? 'border-ink-primary' : 'border-edge-strong'}`}>
+                  {taxMode === o.v && <span className="h-2 w-2 rounded-full bg-ink-primary" />}
                 </span>
                 {o.title}
               </div>
@@ -3807,31 +3807,31 @@ function SettingsTab({ authFetch }) {
         </div>
       </div>
 
-      <div className="border-t border-slate-100 pt-4">
+      <div className="border-t border-edge-subtle pt-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 className="text-sm font-bold text-brand-navy mb-1 uppercase">Checkout access</h3>
+            <h3 className="text-sm font-semibold text-ink-primary mb-1 uppercase">Checkout access</h3>
             <p className="text-brand-muted mb-0">Control whether shoppers can place orders without signing in.</p>
           </div>
-          {checkoutSaved && <span className="text-[11px] font-bold text-brand-success">✓ Saved</span>}
+          {checkoutSaved && <span className="text-[11px] font-semibold text-brand-success">✓ Saved</span>}
         </div>
         {checkoutError && <p className="mt-2 text-[11px] font-semibold text-brand-danger">{checkoutError}</p>}
         <button
           type="button"
           onClick={() => saveCheckoutSettings(!checkoutSettings.allow_guest_checkout)}
           disabled={checkoutSaving}
-          className={`mt-3 flex w-full items-center justify-between rounded-xl border p-3 text-left transition disabled:opacity-60 ${
+          className={`mt-3 flex w-full items-center justify-between rounded-md border p-3 text-left transition disabled:opacity-60 ${
             checkoutSettings.allow_guest_checkout
-              ? 'border-brand-purple bg-brand-purple/5 ring-1 ring-brand-purple/20'
-              : 'border-slate-200 hover:border-brand-purple/40'
+              ? 'border-ink-primary bg-surface-muted ring-1 ring-edge-focus/30'
+              : 'border-edge hover:border-edge-strong'
           }`}
         >
           <div>
-            <div className="flex items-center gap-2 font-bold text-brand-navy">
+            <div className="flex items-center gap-2 font-semibold text-ink-primary">
               {checkoutSettings.allow_guest_checkout ? (
-                <ToggleRight className="h-4 w-4 text-brand-purple" />
+                <ToggleRight className="h-4 w-4 text-ink-accent" />
               ) : (
-                <ToggleLeft className="h-4 w-4 text-slate-400" />
+                <ToggleLeft className="h-4 w-4 text-ink-subtle" />
               )}
               Guest checkout {checkoutSettings.allow_guest_checkout ? 'enabled' : 'disabled'}
             </div>
@@ -3839,16 +3839,16 @@ function SettingsTab({ authFetch }) {
               When enabled, shoppers can complete checkout as guests. When disabled, login is required before payment.
             </p>
           </div>
-          <span className="text-[10px] font-bold uppercase text-brand-muted">
+          <span className="text-[10px] font-semibold uppercase text-brand-muted">
             {checkoutSettings.allow_guest_checkout ? 'On' : 'Off'}
           </span>
         </button>
       </div>
 
-      <p className="border-t border-slate-100 pt-4 text-[11px] text-brand-muted">
+      <p className="border-t border-edge-subtle pt-4 text-[11px] text-brand-muted">
         Payment keys, email/SMTP, shipping rates, theme and cookie settings live in their own
         sections in the sidebar. API keys for marketing integrations are managed under
-        <span className="font-semibold text-brand-navy"> Marketing → Integrations</span>.
+        <span className="font-semibold text-ink-primary"> Marketing → Integrations</span>.
       </p>
     </div>
   );
@@ -3917,28 +3917,28 @@ function ReviewsTab({ authFetch }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200">
+      <div className="flex justify-between items-center bg-white p-4 rounded-md border border-edge">
         <p className="text-xs text-brand-muted">{reviews.length} total customer reviews pending or moderated</p>
       </div>
 
       <div className="space-y-3">
         {reviews.map((rev) => (
-          <div key={rev.id} className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3 hover:shadow-md transition-shadow">
+          <div key={rev.id} className="rounded-lg border border-edge bg-white p-5 space-y-3 hover:shadow-elevated transition-shadow">
             <div className="flex justify-between items-start">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-brand-purple/10 flex items-center justify-center font-bold text-brand-purple">
+                <div className="h-10 w-10 rounded-full bg-surface-muted flex items-center justify-center font-semibold text-ink-accent">
                   {rev.user_name?.substring(0, 2).toUpperCase() || 'U'}
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-brand-navy">{rev.user_name} <span className="text-xs font-mono text-slate-400">({rev.user_email})</span></p>
-                  <p className="text-[11px] text-slate-400">on <span className="font-semibold text-brand-purple">{toDisplayText(rev.product_name || rev.product_sku || rev.product) || 'Unknown product'}</span> · {formatDateTime(rev.created_at)}</p>
+                  <p className="text-sm font-semibold text-ink-primary">{rev.user_name} <span className="text-xs font-mono text-ink-subtle">({rev.user_email})</span></p>
+                  <p className="text-[11px] text-ink-subtle">on <span className="font-semibold text-ink-accent">{toDisplayText(rev.product_name || rev.product_sku || rev.product) || 'Unknown product'}</span> · {formatDateTime(rev.created_at)}</p>
                 </div>
               </div>
               <div className="flex items-center gap-1.5">
-                <button onClick={() => toggleFeature(rev.id)} className={`p-1.5 rounded-lg border ${rev.is_featured ? 'bg-amber-50 border-amber-200 text-amber-500' : 'border-slate-200 text-slate-400 hover:bg-slate-50'}`} title="Feature Review">
+                <button onClick={() => toggleFeature(rev.id)} className={`p-1.5 rounded-sm border ${rev.is_featured ? 'bg-amber-50 border-amber-200 text-amber-500' : 'border-edge text-ink-subtle hover:bg-surface-muted'}`} title="Feature Review">
                   <Star className="h-4 w-4 fill-current" />
                 </button>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${rev.is_approved ? 'bg-green-100 text-green-700' : 'bg-rose-100 text-rose-700'}`}>
+                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-xs ${rev.is_approved ? 'bg-brand-success/10 text-ink-success' : 'bg-red-50 text-ink-danger'}`}>
                   {rev.is_approved ? 'APPROVED' : 'PENDING MODERATION'}
                 </span>
               </div>
@@ -3947,55 +3947,55 @@ function ReviewsTab({ authFetch }) {
             <div className="space-y-1">
               <div className="flex gap-0.5">
                 {Array.from({ length: 5 }).map((_, i) => (
-                  <Star key={i} className={`h-4 w-4 ${i < rev.rating ? 'text-amber-400 fill-amber-400' : 'text-slate-200'}`} />
+                  <Star key={i} className={`h-4 w-4 ${i < rev.rating ? 'text-amber-400 fill-amber-400' : 'text-edge-strong'}`} />
                 ))}
                 {rev.is_verified_purchase && (
-                  <span className="ml-2 bg-green-50 text-green-700 border border-green-200 rounded px-1.5 py-0.2 text-[9px] font-bold flex items-center gap-0.5">
+                  <span className="ml-2 bg-brand-success/10 text-ink-success border border-brand-success/30 rounded px-1.5 py-0.2 text-[9px] font-semibold flex items-center gap-0.5">
                     Verified Buyer
                   </span>
                 )}
               </div>
-              <p className="text-xs text-brand-navy leading-relaxed italic">"{rev.comment}"</p>
+              <p className="text-xs text-ink-primary leading-relaxed italic">"{rev.comment}"</p>
             </div>
 
             {replies[rev.id] && (
-              <div className="p-3.5 bg-brand-purple/5 border border-brand-purple/10 rounded-xl space-y-1">
-                <p className="text-[10px] font-black text-brand-purple uppercase">SCLERO STAFF RESPONSE</p>
-                <p className="text-xs text-slate-700 leading-relaxed font-semibold">"{replies[rev.id]}"</p>
+              <div className="p-3.5 bg-surface-muted border border-edge-strong rounded-md space-y-1">
+                <p className="text-[10px] font-semibold text-ink-accent uppercase">SCLERO STAFF RESPONSE</p>
+                <p className="text-xs text-ink-secondary leading-relaxed font-semibold">"{replies[rev.id]}"</p>
               </div>
             )}
 
-            <div className="flex gap-2 pt-2 border-t border-slate-50 justify-end">
+            <div className="flex gap-2 pt-2 border-t border-edge-subtle justify-end">
               {!rev.is_approved ? (
-                <button onClick={() => approve(rev.id)} className="px-3 py-1.5 text-[10px] bg-green-600 hover:bg-green-700 text-white rounded-lg uppercase font-bold">Approve</button>
+                <button onClick={() => approve(rev.id)} className="px-3 py-1.5 text-[10px] bg-ink-success hover:bg-ink-success/90 text-white rounded-sm uppercase font-semibold">Approve</button>
               ) : (
-                <button onClick={() => reject(rev.id)} className="px-3 py-1.5 text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg uppercase font-bold">Reject / Hide</button>
+                <button onClick={() => reject(rev.id)} className="px-3 py-1.5 text-[10px] bg-surface-muted hover:bg-edge text-ink-secondary rounded-sm uppercase font-semibold">Reject / Hide</button>
               )}
-              <button onClick={() => setReplyingTo(rev.id)} className="px-3 py-1.5 text-[10px] border border-brand-purple text-brand-purple hover:bg-brand-purple/10 rounded-lg uppercase font-bold">Respond</button>
+              <button onClick={() => setReplyingTo(rev.id)} className="px-3 py-1.5 text-[10px] border border-ink-primary text-ink-accent hover:bg-surface-muted rounded-sm uppercase font-semibold">Respond</button>
             </div>
           </div>
         ))}
 
         {reviews.length === 0 && (
-          <p className="text-center py-10 text-xs text-brand-muted bg-white border border-slate-200 rounded-2xl">No customer reviews found to moderate.</p>
+          <p className="text-center py-10 text-xs text-brand-muted bg-white border border-edge rounded-lg">No customer reviews found to moderate.</p>
         )}
       </div>
 
       {replyingTo && (
-        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-slate-50 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-          <div className="w-full max-w-md bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
-            <h3 className="text-lg font-black text-brand-navy">Write Staff Response</h3>
+        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
+          <div className="w-full max-w-md bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
+            <h3 className="text-lg font-semibold text-ink-primary">Write Staff Response</h3>
             <p className="text-xs text-brand-muted">This response will be visible on the public product page below the customer's comment.</p>
             <textarea
               rows={4}
               value={replyText}
               onChange={(e) => setReplyText(e.target.value)}
               placeholder="Write your public reply..."
-              className="w-full rounded-lg border border-slate-200 p-2.5 text-xs font-semibold text-brand-navy"
+              className="w-full rounded-lg border border-edge p-2.5 text-xs font-semibold text-ink-primary"
             />
             <div className="flex gap-2">
-              <button onClick={saveReply} className="btn-primary flex-1 py-2.5 text-xs bg-brand-purple text-white rounded-lg uppercase font-bold">Save Response</button>
-              <button onClick={() => { setReplyingTo(null); setReplyText(''); }} className="flex-1 rounded-lg border border-slate-200 py-2.5 text-xs font-bold uppercase">Cancel</button>
+              <button onClick={saveReply} className="btn-primary flex-1 py-2.5 text-xs uppercase font-semibold">Save Response</button>
+              <button onClick={() => { setReplyingTo(null); setReplyText(''); }} className="flex-1 rounded-sm border border-edge py-2.5 text-xs font-semibold uppercase">Cancel</button>
             </div>
           </div>
         </div>
@@ -4064,35 +4064,35 @@ function ThemeTab({ authFetch }) {
   return (
     <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
       {/* Settings Form */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
-        <h3 className="text-base font-bold text-brand-navy">Theme Settings</h3>
+      <div className="rounded-lg border border-edge bg-white shadow-card p-5 space-y-4">
+        <h3 className="text-base font-semibold text-ink-primary">Theme Settings</h3>
         <p className="text-xs text-brand-muted">Customize your eCommerce store storefront styling in real-time. Changes are applied instantly without deploys.</p>
         
         <div className="space-y-3 text-xs">
           <div>
-            <label className="block font-bold text-brand-navy mb-1">Primary Brand Color</label>
+            <label className="block font-semibold text-ink-primary mb-1">Primary Brand Color</label>
             <div className="flex gap-2 items-center">
-              <input type="color" value={theme.primaryColor} onChange={(e) => setTheme({ ...theme, primaryColor: e.target.value })} className="h-9 w-9 rounded-lg cursor-pointer border border-slate-200 p-0.5" />
-              <input type="text" value={theme.primaryColor} onChange={(e) => setTheme({ ...theme, primaryColor: e.target.value })} className="flex-1 rounded-lg border border-slate-200 p-2 font-mono" />
+              <input type="color" value={theme.primaryColor} onChange={(e) => setTheme({ ...theme, primaryColor: e.target.value })} className="h-9 w-9 rounded-sm cursor-pointer border border-edge p-0.5" />
+              <input type="text" value={theme.primaryColor} onChange={(e) => setTheme({ ...theme, primaryColor: e.target.value })} className="flex-1 rounded-sm border border-edge p-2 font-mono" />
             </div>
             <div className="flex gap-1 mt-1.5">
               {['#6d28d9', '#3b82f6', '#0f766e', '#1e293b', '#e11d48'].map((c) => (
-                <button key={c} onClick={() => setTheme({ ...theme, primaryColor: c })} className="h-5 w-5 rounded-full border border-slate-200" style={{ backgroundColor: c }} />
+                <button key={c} onClick={() => setTheme({ ...theme, primaryColor: c })} className="h-5 w-5 rounded-full border border-edge" style={{ backgroundColor: c }} />
               ))}
             </div>
           </div>
 
           <div>
-            <label className="block font-bold text-brand-navy mb-1">Accent Highlight Color</label>
+            <label className="block font-semibold text-ink-primary mb-1">Accent Highlight Color</label>
             <div className="flex gap-2 items-center">
-              <input type="color" value={theme.accentColor} onChange={(e) => setTheme({ ...theme, accentColor: e.target.value })} className="h-9 w-9 rounded-lg cursor-pointer border border-slate-200 p-0.5" />
-              <input type="text" value={theme.accentColor} onChange={(e) => setTheme({ ...theme, accentColor: e.target.value })} className="flex-1 rounded-lg border border-slate-200 p-2 font-mono" />
+              <input type="color" value={theme.accentColor} onChange={(e) => setTheme({ ...theme, accentColor: e.target.value })} className="h-9 w-9 rounded-sm cursor-pointer border border-edge p-0.5" />
+              <input type="text" value={theme.accentColor} onChange={(e) => setTheme({ ...theme, accentColor: e.target.value })} className="flex-1 rounded-sm border border-edge p-2 font-mono" />
             </div>
           </div>
 
           <div>
-            <label className="block font-bold text-brand-navy mb-1">Typography (Body Font)</label>
-            <select value={theme.fontName} onChange={(e) => setTheme({ ...theme, fontName: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2">
+            <label className="block font-semibold text-ink-primary mb-1">Typography (Body Font)</label>
+            <select value={theme.fontName} onChange={(e) => setTheme({ ...theme, fontName: e.target.value })} className="w-full rounded-sm border border-edge p-2">
               <option value="Outfit">Outfit (Geometric & Clean)</option>
               <option value="Inter">Inter (Highly Readable)</option>
               <option value="Playfair Display">Playfair Display (Premium Serif)</option>
@@ -4101,8 +4101,8 @@ function ThemeTab({ authFetch }) {
           </div>
 
           <div>
-            <label className="block font-bold text-brand-navy mb-1">Border Roundness</label>
-            <select value={theme.borderRadius} onChange={(e) => setTheme({ ...theme, borderRadius: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2">
+            <label className="block font-semibold text-ink-primary mb-1">Border Roundness</label>
+            <select value={theme.borderRadius} onChange={(e) => setTheme({ ...theme, borderRadius: e.target.value })} className="w-full rounded-sm border border-edge p-2">
               <option value="0px">Sharp Corners (0px)</option>
               <option value="6px">Subtle Round (6px)</option>
               <option value="12px">Premium Curved (12px)</option>
@@ -4111,8 +4111,8 @@ function ThemeTab({ authFetch }) {
           </div>
 
           <div>
-            <label className="block font-bold text-brand-navy mb-1">Glassmorphism Blur</label>
-            <select value={theme.glassmorphism} onChange={(e) => setTheme({ ...theme, glassmorphism: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2">
+            <label className="block font-semibold text-ink-primary mb-1">Glassmorphism Blur</label>
+            <select value={theme.glassmorphism} onChange={(e) => setTheme({ ...theme, glassmorphism: e.target.value })} className="w-full rounded-sm border border-edge p-2">
               <option value="None">None (Solid backgrounds)</option>
               <option value="Low">Low (Subtle opacity)</option>
               <option value="Medium">Medium (Polished glass)</option>
@@ -4121,10 +4121,10 @@ function ThemeTab({ authFetch }) {
           </div>
 
           <div>
-            <label className="block font-bold text-brand-navy mb-1">Logo image URL</label>
+            <label className="block font-semibold text-ink-primary mb-1">Logo image URL</label>
             <div className="flex gap-2">
-              <input type="text" value={theme.logoUrl} onChange={(e) => setTheme({ ...theme, logoUrl: e.target.value })} className="flex-1 rounded-lg border border-slate-200 p-2" />
-              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-3 font-bold text-brand-navy hover:border-brand-purple">
+              <input type="text" value={theme.logoUrl} onChange={(e) => setTheme({ ...theme, logoUrl: e.target.value })} className="flex-1 rounded-sm border border-edge p-2" />
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-edge px-3 font-semibold text-ink-primary hover:border-ink-primary">
                 <Upload className="h-3.5 w-3.5" />
                 {uploadingLogo ? 'Uploading' : 'Upload'}
                 <input type="file" accept="image/*" onChange={(e) => uploadLogo(e.target.files?.[0])} className="hidden" disabled={uploadingLogo} />
@@ -4133,61 +4133,61 @@ function ThemeTab({ authFetch }) {
           </div>
 
           <div>
-            <label className="block font-bold text-brand-navy mb-1">Custom CSS Overrides</label>
-            <textarea rows={3} value={theme.customCss || ''} onChange={(e) => setTheme({ ...theme, customCss: e.target.value })} placeholder="e.g. .btn { text-transform: uppercase; }" className="w-full rounded-lg border border-slate-200 p-2 font-mono text-[10px]" />
+            <label className="block font-semibold text-ink-primary mb-1">Custom CSS Overrides</label>
+            <textarea rows={3} value={theme.customCss || ''} onChange={(e) => setTheme({ ...theme, customCss: e.target.value })} placeholder="e.g. .btn { text-transform: uppercase; }" className="w-full rounded-sm border border-edge p-2 font-mono text-[10px]" />
           </div>
         </div>
 
-        {success && <p className="text-xs bg-green-50 text-green-700 border border-green-200 p-2 rounded-lg font-bold">Theme published to storefront successfully!</p>}
-        <button onClick={save} disabled={saving} className="btn-primary w-full py-2.5 bg-brand-purple text-white rounded-lg uppercase font-bold text-xs disabled:opacity-50">
+        {success && <p className="text-xs bg-brand-success/10 text-ink-success border border-brand-success/30 p-2 rounded-lg font-semibold">Theme published to storefront successfully!</p>}
+        <button onClick={save} disabled={saving} className="btn-primary w-full py-2.5 uppercase font-semibold text-xs disabled:opacity-50">
           {saving ? 'Publishing...' : 'Save & Publish Theme'}
         </button>
       </div>
 
       {/* Live Storefront Preview */}
-      <div className="rounded-2xl border border-slate-200 bg-slate-900 p-6 flex flex-col justify-start min-h-[500px]">
-        <div className="flex items-center justify-between mb-4 border-b border-slate-800 pb-3">
-          <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">LIVE STOREFRONT PREVIEW</p>
+      <div className="rounded-lg border border-edge bg-surface-inverse p-6 flex flex-col justify-start min-h-[500px]">
+        <div className="flex items-center justify-between mb-4 border-b border-white/10 pb-3">
+          <p className="text-[10px] uppercase font-medium text-white/50 tracking-wider">LIVE STOREFRONT PREVIEW</p>
           <div className="flex gap-1">
             <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
-            <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
-            <span className="h-2.5 w-2.5 rounded-full bg-green-500" />
+            <span className="h-2.5 w-2.5 rounded-full bg-brand-accent" />
+            <span className="h-2.5 w-2.5 rounded-full bg-brand-success/100" />
           </div>
         </div>
 
-        <div className="flex-1 bg-slate-950 rounded-xl border border-slate-800 flex flex-col overflow-hidden text-slate-100" style={{ fontFamily: theme.fontName === 'System' ? 'sans-serif' : theme.fontName }}>
+        <div className="flex-1 bg-[#111110] rounded-md border border-white/10 flex flex-col overflow-hidden text-white" style={{ fontFamily: theme.fontName === 'System' ? 'sans-serif' : theme.fontName }}>
           {/* Header */}
-          <header className="px-4 py-3 flex items-center justify-between border-b border-slate-900 bg-slate-950/80 backdrop-blur-md">
+          <header className="px-4 py-3 flex items-center justify-between border-b border-white/10 bg-[#111110]">
             <div className="flex items-center gap-1.5">
-              <div className="h-5 w-5 rounded-full bg-brand-purple flex items-center justify-center text-[10px] font-black text-white" style={{ backgroundColor: theme.primaryColor }}>S</div>
-              <span className="text-xs font-black tracking-tight text-white">SCLERO PROTEINS</span>
+              <div className="h-5 w-5 rounded-full bg-brand-accent flex items-center justify-center text-[10px] font-semibold text-white" style={{ backgroundColor: theme.primaryColor }}>S</div>
+              <span className="text-xs font-semibold tracking-tight text-white">SCLERO PROTEINS</span>
             </div>
-            <nav className="flex gap-3 text-[10px] text-slate-400 font-semibold">
+            <nav className="flex gap-3 text-[10px] text-white/50 font-medium">
               <span className="hover:text-white cursor-pointer">Shop</span>
               <span className="hover:text-white cursor-pointer">Science</span>
               <span className="hover:text-white cursor-pointer">About</span>
             </nav>
-            <ShoppingCart className="h-3.5 w-3.5 text-slate-300" />
+            <ShoppingCart className="h-3.5 w-3.5 text-white/60" />
           </header>
 
           {/* Hero section */}
-          <div className="p-6 text-center space-y-3 relative overflow-hidden bg-gradient-to-b from-slate-900 to-slate-950">
-            <h1 className="text-lg font-black text-white leading-tight">Bio-active Protein Nutrition</h1>
-            <p className="text-[10px] text-slate-400 max-w-sm mx-auto">Cellular-grade targeted protein peptide concentrates engineered to accelerate structural tissue recovery and muscular restoration.</p>
-            <button className="px-4 py-2 text-[10px] font-black uppercase text-white hover:opacity-90 inline-block transition-opacity" style={{ backgroundColor: theme.primaryColor, borderRadius: theme.borderRadius }}>
+          <div className="p-6 text-center space-y-3 relative overflow-hidden bg-surface-inverse">
+            <h1 className="text-lg font-semibold text-white leading-tight">Bio-active Protein Nutrition</h1>
+            <p className="text-[10px] text-white/50 max-w-sm mx-auto">Cellular-grade targeted protein peptide concentrates engineered to accelerate structural tissue recovery and muscular restoration.</p>
+            <button className="px-4 py-2 text-[10px] font-semibold uppercase text-white hover:opacity-90 inline-block transition-opacity" style={{ backgroundColor: theme.primaryColor, borderRadius: theme.borderRadius }}>
               Explore Formulas
             </button>
           </div>
 
           {/* Product list */}
-          <div className="p-4 grid grid-cols-2 gap-3 bg-slate-950">
+          <div className="p-4 grid grid-cols-2 gap-3 bg-[#111110]">
             {[{ name: 'Sclero Isolate 90', price: '£59.99' }, { name: 'Joint Repair Peptide', price: '£72.50' }].map((prod, idx) => (
-              <div key={idx} className="p-3 border border-slate-900 bg-slate-900/40 relative" style={{ borderRadius: theme.borderRadius, backdropFilter: theme.glassmorphism === 'None' ? 'none' : 'blur(8px)' }}>
-                <div className="h-20 bg-slate-800 rounded-lg flex items-center justify-center text-[10px] font-bold text-slate-500 mb-2">IMAGE</div>
-                <h4 className="text-[11px] font-bold text-white">{prod.name}</h4>
+              <div key={idx} className="p-3 border border-white/10 bg-white/5 relative" style={{ borderRadius: theme.borderRadius, backdropFilter: theme.glassmorphism === 'None' ? 'none' : 'blur(8px)' }}>
+                <div className="h-20 bg-white/10 rounded-sm flex items-center justify-center text-[10px] font-medium text-white/40 mb-2">IMAGE</div>
+                <h4 className="text-[11px] font-semibold text-white">{prod.name}</h4>
                 <div className="flex justify-between items-center mt-1">
-                  <span className="text-[10px] font-semibold text-slate-400">{prod.price}</span>
-                  <span className="text-[9px] font-black uppercase text-amber-500" style={{ color: theme.accentColor }}>★ 4.9</span>
+                  <span className="text-[10px] font-medium text-white/50">{prod.price}</span>
+                  <span className="text-[9px] font-semibold uppercase text-amber-500" style={{ color: theme.accentColor }}>★ 4.9</span>
                 </div>
               </div>
             ))}
@@ -4245,82 +4245,82 @@ function CookieConsentTab({ authFetch }) {
 
   return (
     <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
-        <h3 className="text-base font-bold text-brand-navy">GDPR & Cookie Banner Settings</h3>
+      <div className="rounded-lg border border-edge bg-white shadow-card p-5 space-y-4">
+        <h3 className="text-base font-semibold text-ink-primary">GDPR & Cookie Banner Settings</h3>
         <p className="text-xs text-brand-muted">Manage the user privacy consent banners and cookie consent opt-in policies for different storefront regions.</p>
         
         <div className="space-y-3 text-xs">
           <div>
-            <label className="block font-bold text-brand-navy mb-1">Banner Title</label>
-            <input type="text" value={config.title} onChange={(e) => setConfig({ ...config, title: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2" />
+            <label className="block font-semibold text-ink-primary mb-1">Banner Title</label>
+            <input type="text" value={config.title} onChange={(e) => setConfig({ ...config, title: e.target.value })} className="w-full rounded-sm border border-edge p-2" />
           </div>
 
           <div>
-            <label className="block font-bold text-brand-navy mb-1">Description message</label>
-            <textarea rows={3} value={config.description} onChange={(e) => setConfig({ ...config, description: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2" />
+            <label className="block font-semibold text-ink-primary mb-1">Description message</label>
+            <textarea rows={3} value={config.description} onChange={(e) => setConfig({ ...config, description: e.target.value })} className="w-full rounded-sm border border-edge p-2" />
           </div>
 
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="block font-bold text-brand-navy mb-1">Accept Button Label</label>
-              <input type="text" value={config.acceptText} onChange={(e) => setConfig({ ...config, acceptText: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2" />
+              <label className="block font-semibold text-ink-primary mb-1">Accept Button Label</label>
+              <input type="text" value={config.acceptText} onChange={(e) => setConfig({ ...config, acceptText: e.target.value })} className="w-full rounded-sm border border-edge p-2" />
             </div>
             <div>
-              <label className="block font-bold text-brand-navy mb-1">Decline Button Label</label>
-              <input type="text" value={config.declineText} onChange={(e) => setConfig({ ...config, declineText: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2" />
+              <label className="block font-semibold text-ink-primary mb-1">Decline Button Label</label>
+              <input type="text" value={config.declineText} onChange={(e) => setConfig({ ...config, declineText: e.target.value })} className="w-full rounded-sm border border-edge p-2" />
             </div>
           </div>
 
           <div>
-            <label className="block font-bold text-brand-navy mb-1">Layout Style</label>
-            <select value={config.layout} onChange={(e) => setConfig({ ...config, layout: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2">
+            <label className="block font-semibold text-ink-primary mb-1">Layout Style</label>
+            <select value={config.layout} onChange={(e) => setConfig({ ...config, layout: e.target.value })} className="w-full rounded-sm border border-edge p-2">
               <option value="Bottom Bar">Bottom Bar (Full-width banner)</option>
               <option value="Floating Card">Floating Card (Bottom-left/right modal)</option>
             </select>
           </div>
 
           <div>
-            <label className="block font-bold text-brand-navy mb-1">Cookie Policy Link</label>
-            <input type="text" value={config.cookiePolicyUrl} onChange={(e) => setConfig({ ...config, cookiePolicyUrl: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2" />
+            <label className="block font-semibold text-ink-primary mb-1">Cookie Policy Link</label>
+            <input type="text" value={config.cookiePolicyUrl} onChange={(e) => setConfig({ ...config, cookiePolicyUrl: e.target.value })} className="w-full rounded-sm border border-edge p-2" />
           </div>
         </div>
 
-        {success && <p className="text-xs bg-green-50 text-green-700 border border-green-200 p-2 rounded-lg font-bold">Cookie consent banner updated successfully!</p>}
-        <button onClick={save} disabled={saving} className="btn-primary w-full py-2.5 bg-brand-purple text-white rounded-lg uppercase font-bold text-xs disabled:opacity-50">
+        {success && <p className="text-xs bg-brand-success/10 text-ink-success border border-brand-success/30 p-2 rounded-lg font-semibold">Cookie consent banner updated successfully!</p>}
+        <button onClick={save} disabled={saving} className="btn-primary w-full py-2.5 uppercase font-semibold text-xs disabled:opacity-50">
           {saving ? 'Saving...' : 'Save Configuration'}
         </button>
       </div>
 
       {/* Visual Banner Preview Panel */}
-      <div className="rounded-2xl border border-slate-200 bg-slate-100 p-6 flex flex-col justify-between relative min-h-[400px]">
+      <div className="rounded-lg border border-edge bg-surface-muted p-6 flex flex-col justify-between relative min-h-[400px]">
         <div>
-          <p className="text-[10px] uppercase font-bold text-brand-muted tracking-wider mb-2">BANNER VISUAL LAYOUT PREVIEW</p>
-          <div className="bg-white rounded-xl border border-slate-200 p-6 text-center text-xs text-brand-muted italic">
+          <p className="kicker mb-2">BANNER VISUAL LAYOUT PREVIEW</p>
+          <div className="bg-white rounded-md border border-edge p-6 text-center text-xs text-brand-muted italic">
             [ Storefront Mock Screen Container ]
           </div>
         </div>
 
         {/* Banner rendered matching layout */}
         {config.layout === 'Bottom Bar' ? (
-          <div className="w-full bg-slate-900 border border-slate-800 text-white p-4 rounded-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+          <div className="w-full bg-surface-inverse border border-white/10 text-white p-4 rounded-md flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
             <div className="space-y-1 max-w-xl text-left">
-              <p className="text-xs font-bold text-white">{config.title}</p>
-              <p className="text-[10px] text-slate-300 leading-normal">{config.description}</p>
+              <p className="text-xs font-semibold text-white">{config.title}</p>
+              <p className="text-[10px] text-white/70 leading-normal">{config.description}</p>
             </div>
             <div className="flex gap-2 whitespace-nowrap self-end md:self-auto">
-              <button className="px-3 py-1.5 text-[9px] font-bold border border-slate-700 hover:bg-slate-800 text-slate-300 rounded-lg">{config.declineText}</button>
-              <button className="px-3 py-1.5 text-[9px] font-bold bg-brand-purple text-white rounded-lg">{config.acceptText}</button>
+              <button className="px-3 py-1.5 text-[9px] font-semibold border border-white/20 hover:bg-white/10 text-white/70 rounded-sm">{config.declineText}</button>
+              <button className="px-3 py-1.5 text-[9px] font-semibold bg-white text-ink-primary rounded-sm">{config.acceptText}</button>
             </div>
           </div>
         ) : (
-          <div className="w-72 bg-slate-900 border border-slate-800 text-white p-4 rounded-2xl shadow-xl space-y-2.5 text-left self-end md:mr-4">
+          <div className="w-72 bg-surface-inverse border border-white/10 text-white p-4 rounded-lg shadow-overlay space-y-2.5 text-left self-end md:mr-4">
             <div className="space-y-1">
-              <p className="text-xs font-bold text-white flex items-center gap-1.5"><Cookie className="h-4 w-4 text-amber-500 fill-amber-500" /> {config.title}</p>
-              <p className="text-[10px] text-slate-300 leading-relaxed">{config.description}</p>
+              <p className="text-xs font-semibold text-white flex items-center gap-1.5"><Cookie className="h-4 w-4 text-amber-500 fill-amber-500" /> {config.title}</p>
+              <p className="text-[10px] text-white/70 leading-relaxed">{config.description}</p>
             </div>
             <div className="flex gap-2">
-              <button className="flex-1 py-1.5 text-[9px] font-bold border border-slate-700 hover:bg-slate-800 text-slate-300 rounded-lg">{config.declineText}</button>
-              <button className="flex-1 py-1.5 text-[9px] font-bold bg-brand-purple text-white rounded-lg">{config.acceptText}</button>
+              <button className="flex-1 py-1.5 text-[9px] font-semibold border border-white/20 hover:bg-white/10 text-white/70 rounded-sm">{config.declineText}</button>
+              <button className="flex-1 py-1.5 text-[9px] font-semibold bg-white text-ink-primary rounded-sm">{config.acceptText}</button>
             </div>
           </div>
         )}
@@ -4459,30 +4459,30 @@ function NavigationTab({ authFetch, regions }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2 border-b border-slate-100 pb-2">
-        <button onClick={() => setActiveSubTab('header')} className={`px-4 py-1.5 text-xs font-bold uppercase rounded-lg ${activeSubTab === 'header' ? 'bg-brand-purple text-white' : 'text-brand-navy hover:bg-slate-50'}`}>Header Menus</button>
-        <button onClick={() => setActiveSubTab('footer')} className={`px-4 py-1.5 text-xs font-bold uppercase rounded-lg ${activeSubTab === 'footer' ? 'bg-brand-purple text-white' : 'text-brand-navy hover:bg-slate-50'}`}>Footer Columns</button>
+      <div className="flex gap-2 border-b border-edge-subtle pb-2">
+        <button onClick={() => setActiveSubTab('header')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm ${activeSubTab === 'header' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Header Menus</button>
+        <button onClick={() => setActiveSubTab('footer')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm ${activeSubTab === 'footer' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Footer Columns</button>
       </div>
 
       {activeSubTab === 'header' ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4">
+        <div className="bg-white rounded-lg border border-edge p-5 space-y-4">
           <div className="flex justify-between items-center">
-            <h4 className="text-sm font-bold text-brand-navy">Header Navigation Links</h4>
-            <button onClick={() => openEdit('header', null, -1, null)} className="px-3 py-1.5 text-xs uppercase bg-brand-purple text-white rounded-lg font-bold inline-flex items-center gap-1"><Plus className="h-3 w-3" /> Add Link</button>
+            <h4 className="text-sm font-semibold text-ink-primary">Header Navigation Links</h4>
+            <button onClick={() => openEdit('header', null, -1, null)} className="px-3 py-1.5 text-xs uppercase bg-ink-primary text-white rounded-sm font-semibold inline-flex items-center gap-1"><Plus className="h-3 w-3" /> Add Link</button>
           </div>
 
-          <div className="divide-y divide-slate-100 border border-slate-100 rounded-xl bg-slate-55 p-2 space-y-1">
+          <div className="divide-y divide-edge-subtle border border-edge-subtle rounded-md bg-surface-muted p-2 space-y-1">
             {headerLinks.map((link, idx) => (
-              <div key={idx} className="flex justify-between items-center py-2 px-3 bg-white rounded-lg border border-slate-100 shadow-sm">
+              <div key={idx} className="flex justify-between items-center py-2 px-3 bg-white rounded-lg border border-edge-subtle shadow-card">
                 <div>
-                  <p className="text-xs font-bold text-brand-navy">{toDisplayText(link.label)} <span className="font-mono text-[10px] text-brand-muted ml-1">{toDisplayText(link.url)}</span></p>
-                  {link.mega_menu && <span className="rounded bg-brand-purple/10 text-brand-purple px-1.5 py-0.2 text-[8px] font-bold">MEGA MENU</span>}
-                  {link.region_limit && <span className="rounded bg-amber-100 text-amber-700 ml-1 px-1.5 py-0.2 text-[8px] font-bold uppercase">Region: {link.region_limit}</span>}
+                  <p className="text-xs font-semibold text-ink-primary">{toDisplayText(link.label)} <span className="font-mono text-[10px] text-brand-muted ml-1">{toDisplayText(link.url)}</span></p>
+                  {link.mega_menu && <span className="rounded bg-surface-muted text-ink-accent px-1.5 py-0.2 text-[8px] font-semibold">MEGA MENU</span>}
+                  {link.region_limit && <span className="rounded bg-amber-50 text-ink-accent ml-1 px-1.5 py-0.2 text-[8px] font-semibold uppercase">Region: {link.region_limit}</span>}
                 </div>
                 <div className="flex items-center gap-2">
-                  <button onClick={() => moveHeader(idx, -1)} disabled={idx === 0} className="text-slate-400 hover:text-brand-navy disabled:opacity-30">▲</button>
-                  <button onClick={() => moveHeader(idx, 1)} disabled={idx === headerLinks.length - 1} className="text-slate-400 hover:text-brand-navy disabled:opacity-30">▼</button>
-                  <button onClick={() => openEdit('header', null, idx, link)} className="text-brand-purple hover:opacity-75"><Pencil className="h-3.5 w-3.5" /></button>
+                  <button onClick={() => moveHeader(idx, -1)} disabled={idx === 0} className="text-ink-subtle hover:text-ink-primary disabled:opacity-30">▲</button>
+                  <button onClick={() => moveHeader(idx, 1)} disabled={idx === headerLinks.length - 1} className="text-ink-subtle hover:text-ink-primary disabled:opacity-30">▼</button>
+                  <button onClick={() => openEdit('header', null, idx, link)} className="text-ink-accent hover:opacity-75"><Pencil className="h-3.5 w-3.5" /></button>
                   <button onClick={() => deleteHeaderItem(idx)} className="text-brand-muted hover:text-brand-danger"><X className="h-3.5 w-3.5" /></button>
                 </div>
               </div>
@@ -4492,20 +4492,20 @@ function NavigationTab({ authFetch, regions }) {
       ) : (
         <div className="grid gap-4 md:grid-cols-4">
           {['shop', 'company', 'support', 'legal'].map((col) => (
-            <div key={col} className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
-              <div className="flex justify-between items-center border-b border-slate-50 pb-2">
-                <h4 className="text-xs font-black uppercase text-brand-navy">{col}</h4>
-                <button onClick={() => openEdit('footer', col, -1, null)} className="text-brand-purple font-bold text-[10px] uppercase">Add</button>
+            <div key={col} className="bg-white rounded-lg border border-edge p-4 space-y-3">
+              <div className="flex justify-between items-center border-b border-edge-subtle pb-2">
+                <h4 className="text-xs font-semibold uppercase text-ink-primary">{col}</h4>
+                <button onClick={() => openEdit('footer', col, -1, null)} className="text-ink-accent font-semibold text-[10px] uppercase">Add</button>
               </div>
 
               <div className="space-y-1.5 min-h-[150px]">
                 {footerLinks[col]?.map((link, idx) => (
-                  <div key={idx} className="flex justify-between items-center p-2 rounded-lg border border-slate-100 bg-slate-50 text-[11px] font-semibold text-brand-navy">
+                  <div key={idx} className="flex justify-between items-center p-2 rounded-lg border border-edge-subtle bg-surface-muted text-[11px] font-semibold text-ink-primary">
                     <span className="truncate max-w-[80px]">{toDisplayText(link.label)}</span>
                     <div className="flex gap-1.5">
-                      <button onClick={() => moveFooter(col, idx, -1)} disabled={idx === 0} className="text-[9px] text-slate-400">▲</button>
-                      <button onClick={() => moveFooter(col, idx, 1)} disabled={idx === footerLinks[col].length - 1} className="text-[9px] text-slate-400">▼</button>
-                      <button onClick={() => openEdit('footer', col, idx, link)} className="text-brand-purple"><Pencil className="h-3 w-3" /></button>
+                      <button onClick={() => moveFooter(col, idx, -1)} disabled={idx === 0} className="text-[9px] text-ink-subtle">▲</button>
+                      <button onClick={() => moveFooter(col, idx, 1)} disabled={idx === footerLinks[col].length - 1} className="text-[9px] text-ink-subtle">▼</button>
+                      <button onClick={() => openEdit('footer', col, idx, link)} className="text-ink-accent"><Pencil className="h-3 w-3" /></button>
                       <button onClick={() => deleteFooterItem(col, idx)} className="text-brand-danger"><X className="h-3 w-3" /></button>
                     </div>
                   </div>
@@ -4517,24 +4517,24 @@ function NavigationTab({ authFetch, regions }) {
       )}
 
       {editingItem && (
-        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-slate-50 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-          <div className="w-full max-w-md bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
-            <h3 className="text-lg font-black text-brand-navy">{editingItem.index === -1 ? 'Add Link' : 'Edit Link'}</h3>
+        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
+          <div className="w-full max-w-md bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
+            <h3 className="text-lg font-semibold text-ink-primary">{editingItem.index === -1 ? 'Add Link' : 'Edit Link'}</h3>
             <div className="space-y-3 text-xs">
               <div>
-                <label className="block font-bold text-brand-navy mb-1">Link Text / Label</label>
-                <input type="text" value={toDisplayText(editingItem.item.label)} onChange={(e) => setEditingItem({ ...editingItem, item: { ...editingItem.item, label: e.target.value } })} className="w-full rounded-lg border border-slate-200 p-2" />
+                <label className="block font-semibold text-ink-primary mb-1">Link Text / Label</label>
+                <input type="text" value={toDisplayText(editingItem.item.label)} onChange={(e) => setEditingItem({ ...editingItem, item: { ...editingItem.item, label: e.target.value } })} className="w-full rounded-sm border border-edge p-2" />
               </div>
               <div>
-                <label className="block font-bold text-brand-navy mb-1">Destination URL / Path</label>
-                <input type="text" value={toDisplayText(editingItem.item.url)} onChange={(e) => setEditingItem({ ...editingItem, item: { ...editingItem.item, url: e.target.value } })} className="w-full rounded-lg border border-slate-200 p-2" />
+                <label className="block font-semibold text-ink-primary mb-1">Destination URL / Path</label>
+                <input type="text" value={toDisplayText(editingItem.item.url)} onChange={(e) => setEditingItem({ ...editingItem, item: { ...editingItem.item, url: e.target.value } })} className="w-full rounded-sm border border-edge p-2" />
               </div>
               {editingItem.type === 'header' && (
-                <div className="space-y-2 pt-2 border-t border-slate-100">
-                  <label className="flex items-center gap-1.5 cursor-pointer font-bold text-brand-navy"><input type="checkbox" checked={editingItem.item.mega_menu || false} onChange={(e) => setEditingItem({ ...editingItem, item: { ...editingItem.item, mega_menu: e.target.checked } })} className="accent-brand-purple" /> Enable Mega Menu (Dropdown Block)</label>
+                <div className="space-y-2 pt-2 border-t border-edge-subtle">
+                  <label className="flex items-center gap-1.5 cursor-pointer font-semibold text-ink-primary"><input type="checkbox" checked={editingItem.item.mega_menu || false} onChange={(e) => setEditingItem({ ...editingItem, item: { ...editingItem.item, mega_menu: e.target.checked } })} className="accent-ink-primary" /> Enable Mega Menu (Dropdown Block)</label>
                   <div>
-                    <label className="block font-bold text-slate-400 mb-1">Limit to Region (leave blank for Global)</label>
-                    <select value={editingItem.item.region_limit || ''} onChange={(e) => setEditingItem({ ...editingItem, item: { ...editingItem.item, region_limit: e.target.value } })} className="w-full rounded-lg border border-slate-200 p-1.5">
+                    <label className="block font-semibold text-ink-subtle mb-1">Limit to Region (leave blank for Global)</label>
+                    <select value={editingItem.item.region_limit || ''} onChange={(e) => setEditingItem({ ...editingItem, item: { ...editingItem.item, region_limit: e.target.value } })} className="w-full rounded-sm border border-edge p-1.5">
                       <option value="">Global / All regions</option>
                       <option value="UK">United Kingdom (UK)</option>
                       <option value="IN">India (IN)</option>
@@ -4543,8 +4543,8 @@ function NavigationTab({ authFetch, regions }) {
                 </div>
               )}
               <div className="flex gap-2 pt-3">
-                <button onClick={saveEdit} className="btn-primary flex-1 py-2.5 text-xs bg-brand-purple text-white rounded-lg uppercase font-bold">Save Link</button>
-                <button onClick={() => setEditingItem(null)} className="flex-1 rounded-lg border border-slate-200 py-2.5 text-xs font-bold uppercase">Cancel</button>
+                <button onClick={saveEdit} className="btn-primary flex-1 py-2.5 text-xs uppercase font-semibold">Save Link</button>
+                <button onClick={() => setEditingItem(null)} className="flex-1 rounded-sm border border-edge py-2.5 text-xs font-semibold uppercase">Cancel</button>
               </div>
             </div>
           </div>
@@ -4629,57 +4629,57 @@ function MediaLibraryTab({ authFetch }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white border border-slate-200 p-4 rounded-2xl">
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-white border border-edge p-4 rounded-lg">
         <label className="relative block flex-1 max-w-md">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-muted" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search asset files..." className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-xs" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search asset files..." className="w-full rounded-sm border border-edge py-2 pl-9 pr-3 text-xs" />
         </label>
-        <button onClick={() => setUploadModal(true)} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase bg-brand-purple text-white rounded-lg font-bold"><Upload className="h-4 w-4" /> Upload Asset</button>
+        <button onClick={() => setUploadModal(true)} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase font-semibold"><Upload className="h-4 w-4" /> Upload Asset</button>
       </div>
 
       <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
         {filtered.map((asset, idx) => (
-          <div key={idx} className="group relative rounded-2xl border border-slate-200 bg-white p-3 space-y-2 hover:shadow-md transition-shadow">
-            <div className="h-32 bg-slate-50 border border-slate-100 rounded-xl overflow-hidden flex items-center justify-center relative">
+          <div key={idx} className="group relative rounded-lg border border-edge bg-white p-3 space-y-2 hover:shadow-elevated transition-shadow">
+            <div className="h-32 bg-surface-muted border border-edge-subtle rounded-md overflow-hidden flex items-center justify-center relative">
               <img src={asset.url} alt={asset.name} className="h-full w-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
-              <div className="absolute inset-0 bg-brand-navy/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                <button onClick={() => copyUrl(asset.url)} className="p-2 bg-white rounded-full text-brand-purple hover:scale-105 transition-transform"><LinkIcon className="h-4 w-4" /></button>
-                <button onClick={() => deleteAsset(idx)} className="p-2 bg-white rounded-full text-brand-danger hover:scale-105 transition-transform"><X className="h-4 w-4" /></button>
+              <div className="absolute inset-0 bg-surface-overlay opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                <button onClick={() => copyUrl(asset.url)} className="p-2 bg-white rounded-sm border border-edge text-ink-accent hover:scale-105 transition-transform"><LinkIcon className="h-4 w-4" /></button>
+                <button onClick={() => deleteAsset(idx)} className="p-2 bg-white rounded-sm border border-edge text-ink-danger hover:scale-105 transition-transform"><X className="h-4 w-4" /></button>
               </div>
             </div>
             <div>
-              <p className="text-[11px] font-bold text-brand-navy truncate">{asset.name}</p>
-              <p className="text-[9px] text-slate-400">{asset.size} · {asset.date}</p>
+              <p className="text-[11px] font-semibold text-ink-primary truncate">{asset.name}</p>
+              <p className="text-[9px] text-ink-subtle">{asset.size} · {asset.date}</p>
             </div>
           </div>
         ))}
 
         {filtered.length === 0 && (
-          <div className="col-span-4 text-center py-12 text-xs text-brand-muted bg-white border border-slate-200 rounded-2xl">No assets found in library.</div>
+          <div className="col-span-4 text-center py-12 text-xs text-brand-muted bg-white border border-edge rounded-lg">No assets found in library.</div>
         )}
       </div>
 
       {uploadModal && (
-        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-slate-50 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-          <div className="w-full max-w-md bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
-            <h3 className="text-lg font-black text-brand-navy">Upload Asset</h3>
+        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
+          <div className="w-full max-w-md bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
+            <h3 className="text-lg font-semibold text-ink-primary">Upload Asset</h3>
             <div className="space-y-3 text-xs">
               <div>
-                <label className="block font-bold text-brand-navy mb-1">Asset Name</label>
-                <input placeholder="e.g. Whey Protein Isolate Pack" value={newName} onChange={(e) => setNewName(e.target.value)} className="w-full rounded-lg border border-slate-200 p-2" />
+                <label className="block font-semibold text-ink-primary mb-1">Asset Name</label>
+                <input placeholder="e.g. Whey Protein Isolate Pack" value={newName} onChange={(e) => setNewName(e.target.value)} className="w-full rounded-sm border border-edge p-2" />
               </div>
               <div>
-                <label className="block font-bold text-brand-navy mb-1">Asset Image URL</label>
-                <input placeholder="e.g. https://images.unsplash.com/..." value={newUrl} onChange={(e) => setNewUrl(e.target.value)} className="w-full rounded-lg border border-slate-200 p-2" />
+                <label className="block font-semibold text-ink-primary mb-1">Asset Image URL</label>
+                <input placeholder="e.g. https://images.unsplash.com/..." value={newUrl} onChange={(e) => setNewUrl(e.target.value)} className="w-full rounded-sm border border-edge p-2" />
               </div>
-              <label className="flex cursor-pointer items-center justify-between rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3 font-semibold text-brand-navy">
+              <label className="flex cursor-pointer items-center justify-between rounded-md border border-dashed border-edge-strong bg-surface-muted p-3 font-semibold text-ink-primary">
                 <span>{selectedFile ? selectedFile.name : 'Upload from device'}</span>
-                <Upload className="h-4 w-4 text-brand-purple" />
+                <Upload className="h-4 w-4 text-ink-accent" />
                 <input type="file" accept="image/*,video/*" onChange={(e) => setSelectedFile(e.target.files?.[0] || null)} className="hidden" />
               </label>
               <div className="flex gap-2 pt-2">
-                <button onClick={uploadFile} disabled={uploading} className="btn-primary flex-1 py-2.5 text-xs bg-brand-purple text-white rounded-lg uppercase font-bold disabled:opacity-60">{uploading ? 'Uploading...' : 'Add Asset'}</button>
-                <button onClick={() => { setUploadModal(false); setSelectedFile(null); }} className="flex-1 rounded-lg border border-slate-200 py-2.5 text-xs font-bold uppercase">Cancel</button>
+                <button onClick={uploadFile} disabled={uploading} className="btn-primary flex-1 py-2.5 text-xs uppercase font-semibold disabled:opacity-60">{uploading ? 'Uploading...' : 'Add Asset'}</button>
+                <button onClick={() => { setUploadModal(false); setSelectedFile(null); }} className="flex-1 rounded-sm border border-edge py-2.5 text-xs font-semibold uppercase">Cancel</button>
               </div>
             </div>
           </div>
@@ -4778,17 +4778,17 @@ function NewsletterTab({ authFetch }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2 border-b border-slate-100 pb-2">
-        <button onClick={() => setActiveSubTab('subscribers')} className={`px-4 py-1.5 text-xs font-bold uppercase rounded-lg ${activeSubTab === 'subscribers' ? 'bg-brand-purple text-white' : 'text-brand-navy hover:bg-slate-50'}`}>Subscribers Directory</button>
-        <button onClick={() => setActiveSubTab('segments')} className={`px-4 py-1.5 text-xs font-bold uppercase rounded-lg ${activeSubTab === 'segments' ? 'bg-brand-purple text-white' : 'text-brand-navy hover:bg-slate-50'}`}>Smart Segments</button>
-        <button onClick={() => setActiveSubTab('flows')} className={`px-4 py-1.5 text-xs font-bold uppercase rounded-lg ${activeSubTab === 'flows' ? 'bg-brand-purple text-white' : 'text-brand-navy hover:bg-slate-50'}`}>Automated Flows</button>
+      <div className="flex gap-2 border-b border-edge-subtle pb-2">
+        <button onClick={() => setActiveSubTab('subscribers')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm ${activeSubTab === 'subscribers' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Subscribers Directory</button>
+        <button onClick={() => setActiveSubTab('segments')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm ${activeSubTab === 'segments' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Smart Segments</button>
+        <button onClick={() => setActiveSubTab('flows')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm ${activeSubTab === 'flows' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Automated Flows</button>
       </div>
 
       {activeSubTab === 'subscribers' && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 space-y-4">
+        <div className="rounded-lg border border-edge bg-white shadow-card p-4 sm:p-5 space-y-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <h4 className="text-sm font-bold text-brand-navy uppercase">Marketing Opt-in Subscribers</h4>
+              <h4 className="text-sm font-semibold text-ink-primary uppercase">Marketing Opt-in Subscribers</h4>
               <p className="mt-1 text-xs text-brand-muted">{subscribers.length} customers and manual opt-ins are in this list.</p>
             </div>
             <div className="flex w-full gap-2 lg:max-w-lg">
@@ -4796,29 +4796,29 @@ function NewsletterTab({ authFetch }) {
                 placeholder="Enter email to subscribe"
                 value={newEmail}
                 onChange={(e) => setNewEmail(e.target.value)}
-                className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-xs"
+                className="min-w-0 flex-1 rounded-lg border border-edge px-3 py-2 text-xs"
               />
-              <button onClick={addManualSub} className="shrink-0 rounded-lg bg-brand-purple px-3 py-2 text-xs font-bold uppercase text-white">
+              <button onClick={addManualSub} className="shrink-0 rounded-sm bg-ink-primary px-3 py-2 text-xs font-semibold uppercase text-white">
                 Opt-in Email
               </button>
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-xl border border-slate-200">
+          <div className="overflow-x-auto rounded-md border border-edge">
             <table className="min-w-full text-left text-xs">
-              <thead className="bg-slate-50/80 text-brand-muted">
+              <thead className="bg-surface-muted text-[10px] font-medium uppercase tracking-wide text-ink-muted border-b border-edge">
                 <tr>
-                  <th className="px-4 py-3 font-bold">Email</th>
-                  <th className="px-4 py-3 font-bold">Name</th>
-                  <th className="px-4 py-3 font-bold">Opt-in Type / Source</th>
+                  <th className="px-4 py-3 font-semibold">Email</th>
+                  <th className="px-4 py-3 font-semibold">Name</th>
+                  <th className="px-4 py-3 font-semibold">Opt-in Type / Source</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
+              <tbody className="divide-y divide-edge-subtle bg-white">
                 {subscribers.map((sub, i) => (
-                  <tr key={i} className="hover:bg-slate-50/60">
-                    <td className="px-4 py-3 font-bold text-brand-navy">{sub.email}</td>
-                    <td className="px-4 py-3 font-semibold text-slate-700">{sub.first_name} {sub.last_name || ''}</td>
-                    <td className="px-4 py-3 text-brand-muted"><span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide">{sub.source}</span></td>
+                  <tr key={i} className="hover:bg-surface-muted">
+                    <td className="px-4 py-3 font-semibold text-ink-primary">{sub.email}</td>
+                    <td className="px-4 py-3 font-semibold text-ink-secondary">{sub.first_name} {sub.last_name || ''}</td>
+                    <td className="px-4 py-3 text-brand-muted"><span className="inline-flex rounded-xs bg-surface-muted px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wide">{sub.source}</span></td>
                   </tr>
                 ))}
               </tbody>
@@ -4829,55 +4829,55 @@ function NewsletterTab({ authFetch }) {
 
       {activeSubTab === 'segments' && (
         <div className="space-y-4">
-          <div className="flex justify-between items-center bg-white border border-slate-200 p-4 rounded-2xl">
+          <div className="flex justify-between items-center bg-white border border-edge p-4 rounded-lg">
             <p className="text-xs text-brand-muted">{segments.length} segment configurations deployed</p>
-            <button onClick={() => setEditingSeg({ name: '', description: '', criteria: { min_orders: 1, min_spend: 50 } })} className="px-3 py-1.5 bg-brand-purple text-white font-bold rounded-lg uppercase text-xs inline-flex items-center gap-1"><Plus className="h-3.5 w-3.5" /> New Segment</button>
+            <button onClick={() => setEditingSeg({ name: '', description: '', criteria: { min_orders: 1, min_spend: 50 } })} className="px-3 py-1.5 bg-ink-primary text-white font-semibold rounded-sm uppercase text-xs inline-flex items-center gap-1"><Plus className="h-3.5 w-3.5" /> New Segment</button>
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
             {segments.map((seg) => (
-              <div key={seg.id} className="rounded-2xl border border-slate-200 bg-white p-4 flex flex-col justify-between">
+              <div key={seg.id} className="rounded-lg border border-edge bg-white shadow-card p-4 flex flex-col justify-between">
                 <div>
-                  <h4 className="text-sm font-bold text-brand-navy">{seg.name}</h4>
+                  <h4 className="text-sm font-semibold text-ink-primary">{seg.name}</h4>
                   <p className="text-xs text-brand-muted min-h-[30px]">{seg.description || 'No description provided.'}</p>
-                  <div className="mt-2 p-2 bg-slate-50 rounded-lg font-mono text-[10px] text-brand-purple">
+                  <div className="mt-2 p-2 bg-surface-muted rounded-lg font-mono text-[10px] text-ink-accent">
                     Criteria: Spend &gt; £{seg.criteria?.min_spend || 0} · Orders &gt;= {seg.criteria?.min_orders || 0}
                   </div>
                 </div>
-                <div className="mt-4 flex justify-end gap-2 border-t border-slate-50 pt-3">
-                  <button onClick={() => setEditingSeg({ ...seg })} className="text-xs px-2 py-1 rounded border border-slate-200 text-brand-navy hover:bg-slate-50 font-bold uppercase inline-flex items-center gap-0.5"><Pencil className="h-3 w-3" /> Edit</button>
-                  <button onClick={() => deleteSegment(seg.id)} className="text-xs px-2 py-1 rounded border border-red-200 text-red-500 hover:bg-red-50 font-bold uppercase inline-flex items-center gap-0.5"><X className="h-3 w-3" /> Delete</button>
+                <div className="mt-4 flex justify-end gap-2 border-t border-edge-subtle pt-3">
+                  <button onClick={() => setEditingSeg({ ...seg })} className="text-xs px-2 py-1 rounded border border-edge text-ink-primary hover:bg-surface-muted font-semibold uppercase inline-flex items-center gap-0.5"><Pencil className="h-3 w-3" /> Edit</button>
+                  <button onClick={() => deleteSegment(seg.id)} className="text-xs px-2 py-1 rounded border border-red-200 text-ink-danger hover:bg-red-50 font-semibold uppercase inline-flex items-center gap-0.5"><X className="h-3 w-3" /> Delete</button>
                 </div>
               </div>
             ))}
           </div>
 
           {editingSeg && (
-            <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-slate-50 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-              <div className="w-full max-w-md bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
-                <h3 className="text-lg font-black text-brand-navy">{editingSeg.id ? 'Edit Segment' : 'Create Segment'}</h3>
+            <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
+              <div className="w-full max-w-md bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
+                <h3 className="text-lg font-semibold text-ink-primary">{editingSeg.id ? 'Edit Segment' : 'Create Segment'}</h3>
                 <div className="space-y-3 text-xs">
                   <div>
-                    <label className="block font-bold text-brand-navy mb-1">Segment Name</label>
-                    <input value={editingSeg.name} onChange={(e) => setEditingSeg({ ...editingSeg, name: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2" />
+                    <label className="block font-semibold text-ink-primary mb-1">Segment Name</label>
+                    <input value={editingSeg.name} onChange={(e) => setEditingSeg({ ...editingSeg, name: e.target.value })} className="w-full rounded-sm border border-edge p-2" />
                   </div>
                   <div>
-                    <label className="block font-bold text-brand-navy mb-1">Description</label>
-                    <textarea value={editingSeg.description || ''} onChange={(e) => setEditingSeg({ ...editingSeg, description: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2" rows={2} />
+                    <label className="block font-semibold text-ink-primary mb-1">Description</label>
+                    <textarea value={editingSeg.description || ''} onChange={(e) => setEditingSeg({ ...editingSeg, description: e.target.value })} className="w-full rounded-sm border border-edge p-2" rows={2} />
                   </div>
-                  <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-2">
+                  <div className="grid grid-cols-2 gap-2 border-t border-edge-subtle pt-2">
                     <div>
-                      <label className="block font-bold text-slate-400 mb-1">Min Orders</label>
-                      <input type="number" value={editingSeg.criteria?.min_orders || 0} onChange={(e) => setEditingSeg({ ...editingSeg, criteria: { ...editingSeg.criteria, min_orders: Number(e.target.value) } })} className="w-full rounded-lg border border-slate-200 p-2" />
+                      <label className="block font-semibold text-ink-subtle mb-1">Min Orders</label>
+                      <input type="number" value={editingSeg.criteria?.min_orders || 0} onChange={(e) => setEditingSeg({ ...editingSeg, criteria: { ...editingSeg.criteria, min_orders: Number(e.target.value) } })} className="w-full rounded-sm border border-edge p-2" />
                     </div>
                     <div>
-                      <label className="block font-bold text-slate-400 mb-1">Min Spend (GBP)</label>
-                      <input type="number" value={editingSeg.criteria?.min_spend || 0} onChange={(e) => setEditingSeg({ ...editingSeg, criteria: { ...editingSeg.criteria, min_spend: Number(e.target.value) } })} className="w-full rounded-lg border border-slate-200 p-2" />
+                      <label className="block font-semibold text-ink-subtle mb-1">Min Spend (GBP)</label>
+                      <input type="number" value={editingSeg.criteria?.min_spend || 0} onChange={(e) => setEditingSeg({ ...editingSeg, criteria: { ...editingSeg.criteria, min_spend: Number(e.target.value) } })} className="w-full rounded-sm border border-edge p-2" />
                     </div>
                   </div>
                   <div className="flex gap-2 pt-2">
-                    <button onClick={saveSegment} className="btn-primary flex-1 py-2.5 text-xs bg-brand-purple text-white rounded-lg uppercase font-bold">Save Segment</button>
-                    <button onClick={() => setEditingSeg(null)} className="flex-1 rounded-lg border border-slate-200 py-2.5 text-xs font-bold uppercase">Cancel</button>
+                    <button onClick={saveSegment} className="btn-primary flex-1 py-2.5 text-xs uppercase font-semibold">Save Segment</button>
+                    <button onClick={() => setEditingSeg(null)} className="flex-1 rounded-sm border border-edge py-2.5 text-xs font-semibold uppercase">Cancel</button>
                   </div>
                 </div>
               </div>
@@ -4889,27 +4889,27 @@ function NewsletterTab({ authFetch }) {
       {activeSubTab === 'flows' && (
         <div className="grid gap-4">
           {flows.map((flow) => (
-            <div key={flow.id} className="bg-white rounded-2xl border border-slate-200 p-5 flex flex-col sm:flex-row justify-between gap-4">
+            <div key={flow.id} className="bg-white rounded-lg border border-edge p-5 flex flex-col sm:flex-row justify-between gap-4">
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <h4 className="text-sm font-bold text-brand-navy">{flow.name}</h4>
-                  <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${flow.is_enabled ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-400'}`}>{flow.is_enabled ? 'ACTIVE' : 'INACTIVE'}</span>
+                  <h4 className="text-sm font-semibold text-ink-primary">{flow.name}</h4>
+                  <span className={`rounded-xs px-2 py-0.5 text-[9px] font-semibold ${flow.is_enabled ? 'bg-brand-success/10 text-ink-success' : 'bg-surface-muted text-ink-subtle'}`}>{flow.is_enabled ? 'ACTIVE' : 'INACTIVE'}</span>
                 </div>
                 <div className="flex gap-4 text-xs font-semibold">
-                  <div><span className="text-[10px] text-slate-400 block font-normal">EMAILS SENT</span><span className="text-brand-navy">{flow.sent}</span></div>
-                  <div><span className="text-[10px] text-slate-400 block font-normal">RECOVERED</span><span className="text-brand-navy">{flow.recovered} ({flow.rate})</span></div>
+                  <div><span className="text-[10px] text-ink-subtle block font-normal">EMAILS SENT</span><span className="text-ink-primary">{flow.sent}</span></div>
+                  <div><span className="text-[10px] text-ink-subtle block font-normal">RECOVERED</span><span className="text-ink-primary">{flow.recovered} ({flow.rate})</span></div>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-[10px] uppercase font-bold text-brand-purple">Automated steps sequence:</p>
+                  <p className="text-[10px] uppercase font-semibold text-ink-accent">Automated steps sequence:</p>
                   <div className="flex flex-wrap gap-2">
                     {flow.steps.map((st, i) => (
-                      <span key={i} className="rounded bg-slate-50 border border-slate-150 p-1.5 text-[10px] font-mono text-brand-navy">{st}</span>
+                      <span key={i} className="rounded bg-surface-muted border border-edge-subtle p-1.5 text-[10px] font-mono text-ink-primary">{st}</span>
                     ))}
                   </div>
                 </div>
               </div>
               <div className="self-end sm:self-center">
-                <button onClick={() => toggleFlow(flow.id)} className={`px-4 py-2 text-xs font-bold uppercase rounded-lg border ${flow.is_enabled ? 'border-slate-200 text-slate-500 hover:bg-slate-50' : 'border-brand-purple text-brand-purple hover:bg-brand-purple/10'}`}>
+                <button onClick={() => toggleFlow(flow.id)} className={`px-4 py-2 text-xs font-semibold uppercase rounded-sm border ${flow.is_enabled ? 'border-edge text-ink-muted hover:bg-surface-muted' : 'border-ink-primary text-ink-accent hover:bg-surface-muted'}`}>
                   {flow.is_enabled ? 'Pause sequence' : 'Resume Flow'}
                 </button>
               </div>
@@ -4968,9 +4968,9 @@ function PagesAndBannersTab({ authFetch }) {
   const [tab, setTab] = useState('pages');
   return (
     <div className="space-y-4">
-      <div className="flex gap-2 border-b border-slate-100 pb-2">
-        <button onClick={() => setTab('pages')} className={`px-4 py-1.5 text-xs font-bold uppercase rounded-lg ${tab === 'pages' ? 'bg-brand-purple text-white' : 'text-brand-navy hover:bg-slate-50'}`}>Pages</button>
-        <button onClick={() => setTab('banners')} className={`px-4 py-1.5 text-xs font-bold uppercase rounded-lg ${tab === 'banners' ? 'bg-brand-purple text-white' : 'text-brand-navy hover:bg-slate-50'}`}>Banners</button>
+      <div className="flex gap-2 border-b border-edge-subtle pb-2">
+        <button onClick={() => setTab('pages')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm ${tab === 'pages' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Pages</button>
+        <button onClick={() => setTab('banners')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm ${tab === 'banners' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Banners</button>
       </div>
       {tab === 'pages' && <PagesTab authFetch={authFetch} />}
       {tab === 'banners' && <HeroBannersTab authFetch={authFetch} />}
@@ -5084,18 +5084,18 @@ function HeroBannersTab({ authFetch }) {
         <div>
           <p className="text-sm text-brand-muted">Manage homepage campaign slides, scheduling, responsive media, CTAs, and carousel timing.</p>
         </div>
-        <button onClick={startNew} className="btn-primary inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs uppercase">
+        <button onClick={startNew} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase">
           <Plus className="h-4 w-4" /> New banner
         </button>
       </div>
 
-      {notice && <p className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs font-semibold text-green-700">{notice}</p>}
-      {error && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{error}</p>}
+      {notice && <p className="rounded-lg border border-brand-success/30 bg-brand-success/10 px-3 py-2 text-xs font-semibold text-ink-success">{notice}</p>}
+      {error && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-ink-danger">{error}</p>}
 
       <div className="grid gap-4 lg:grid-cols-2">
         {slides.map((slide) => (
-          <div key={slide.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-            <div className="relative h-44 bg-slate-100">
+          <div key={slide.id} className="overflow-hidden rounded-lg border border-edge bg-white">
+            <div className="relative h-44 bg-surface-muted">
               {slide.desktop_media_url ? (
                 slide.media_type === 'VIDEO' ? (
                   <video src={slide.desktop_media_url} className="h-full w-full object-cover" muted />
@@ -5103,19 +5103,19 @@ function HeroBannersTab({ authFetch }) {
                   <img src={slide.desktop_media_url} alt={slide.alt_text || slide.heading} className="h-full w-full object-cover" />
                 )
               ) : (
-                <div className="flex h-full items-center justify-center text-xs font-bold uppercase text-slate-400">No media</div>
+                <div className="flex h-full items-center justify-center text-xs font-semibold uppercase text-ink-subtle">No media</div>
               )}
-              <span className={`absolute left-3 top-3 rounded-full px-2.5 py-1 text-[10px] font-bold ${slide.is_enabled ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+              <span className={`absolute left-3 top-3 rounded-xs px-2.5 py-1 text-[10px] font-semibold ${slide.is_enabled ? 'bg-brand-success/10 text-ink-success' : 'bg-surface-muted text-ink-muted'}`}>
                 {slide.is_enabled ? 'Enabled' : 'Disabled'}
               </span>
-              <span className="absolute right-3 top-3 rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-bold text-brand-navy">
+              <span className="absolute right-3 top-3 rounded-xs bg-white/90 px-2.5 py-1 text-[10px] font-semibold text-ink-primary">
                 #{slide.sort_order}
               </span>
             </div>
             <div className="space-y-3 p-4">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-brand-purple">{slide.eyebrow || 'Hero slide'}</p>
-                <h3 className="mt-1 text-base font-black text-brand-navy">{slide.heading}</h3>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-ink-accent">{slide.eyebrow || 'Hero slide'}</p>
+                <h3 className="mt-1 text-base font-semibold text-ink-primary">{slide.heading}</h3>
                 <p className="mt-1 line-clamp-2 text-xs text-brand-muted">{slide.subheading}</p>
               </div>
               <div className="flex flex-wrap gap-2 text-[10px] text-brand-muted">
@@ -5124,13 +5124,13 @@ function HeroBannersTab({ authFetch }) {
                 <span>{slide.text_position}</span>
               </div>
               <div className="flex justify-end gap-2">
-                <button onClick={() => toggle(slide)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-brand-navy hover:bg-slate-50">
+                <button onClick={() => toggle(slide)} className="rounded-sm border border-edge px-3 py-1.5 text-xs font-semibold text-ink-primary hover:bg-surface-muted">
                   {slide.is_enabled ? 'Disable' : 'Enable'}
                 </button>
-                <button onClick={() => startEdit(slide)} className="rounded-lg border border-slate-200 p-2 text-brand-purple hover:bg-slate-50" aria-label={`Edit ${slide.title}`}>
+                <button onClick={() => startEdit(slide)} className="rounded-sm border border-edge p-2 text-ink-accent hover:bg-surface-muted" aria-label={`Edit ${slide.title}`}>
                   <Pencil className="h-4 w-4" />
                 </button>
-                <button onClick={() => remove(slide)} className="rounded-lg border border-red-200 p-2 text-red-500 hover:bg-red-50" aria-label={`Delete ${slide.title}`}>
+                <button onClick={() => remove(slide)} className="rounded-sm border border-red-200 p-2 text-ink-danger hover:bg-red-50" aria-label={`Delete ${slide.title}`}>
                   <X className="h-4 w-4" />
                 </button>
               </div>
@@ -5140,21 +5140,21 @@ function HeroBannersTab({ authFetch }) {
       </div>
 
       {slides.length === 0 && (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
-          <p className="text-sm font-semibold text-brand-navy">No hero banner slides yet.</p>
+        <div className="rounded-lg border border-dashed border-edge-strong bg-white p-8 text-center">
+          <p className="text-sm font-semibold text-ink-primary">No hero banner slides yet.</p>
           <p className="mt-1 text-xs text-brand-muted">Create the first slide to control the homepage hero from the admin console.</p>
         </div>
       )}
 
       {editing && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-brand-navy/30 p-4 backdrop-blur-sm">
-          <div className="mx-auto my-6 max-w-5xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-surface-overlay p-4 backdrop-blur-sm">
+          <div className="mx-auto my-6 max-w-5xl overflow-hidden rounded-lg border border-edge bg-white shadow-overlay">
+            <div className="flex items-center justify-between border-b border-edge px-5 py-4">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-brand-purple">Homepage hero</p>
-                <h2 className="text-lg font-black text-brand-navy">{editing.id ? 'Edit banner slide' : 'New banner slide'}</h2>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-ink-accent">Homepage hero</p>
+                <h2 className="text-lg font-semibold text-ink-primary">{editing.id ? 'Edit banner slide' : 'New banner slide'}</h2>
               </div>
-              <button onClick={() => setEditing(null)} className="rounded-lg border border-slate-200 p-2 text-brand-muted hover:bg-slate-50" aria-label="Close hero banner editor">
+              <button onClick={() => setEditing(null)} className="rounded-sm border border-edge p-2 text-brand-muted hover:bg-surface-muted" aria-label="Close hero banner editor">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -5162,38 +5162,38 @@ function HeroBannersTab({ authFetch }) {
             <div className="grid gap-5 p-5 lg:grid-cols-2">
               <div className="space-y-4">
                 <div>
-                  <label className="mb-1 block text-[11px] font-bold uppercase text-brand-muted">Internal title</label>
-                  <input value={editing.title} onChange={(e) => setField('title', e.target.value)} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" placeholder="e.g. Summer joint care campaign" />
+                  <label className="kicker mb-1 block">Internal title</label>
+                  <input value={editing.title} onChange={(e) => setField('title', e.target.value)} className="w-full rounded-sm border border-edge p-2.5 text-sm" placeholder="e.g. Summer joint care campaign" />
                 </div>
                 <div>
-                  <label className="mb-1 block text-[11px] font-bold uppercase text-brand-muted">Eyebrow</label>
-                  <input value={editing.eyebrow} onChange={(e) => setField('eyebrow', e.target.value)} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" placeholder="BJC Bone & Joint Care" />
+                  <label className="kicker mb-1 block">Eyebrow</label>
+                  <input value={editing.eyebrow} onChange={(e) => setField('eyebrow', e.target.value)} className="w-full rounded-sm border border-edge p-2.5 text-sm" placeholder="BJC Bone & Joint Care" />
                 </div>
                 <div>
-                  <label className="mb-1 block text-[11px] font-bold uppercase text-brand-muted">Heading</label>
-                  <input value={editing.heading} onChange={(e) => setField('heading', e.target.value)} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" placeholder="Mobility support, backed by science." />
+                  <label className="kicker mb-1 block">Heading</label>
+                  <input value={editing.heading} onChange={(e) => setField('heading', e.target.value)} className="w-full rounded-sm border border-edge p-2.5 text-sm" placeholder="Mobility support, backed by science." />
                 </div>
                 <div>
-                  <label className="mb-1 block text-[11px] font-bold uppercase text-brand-muted">Subheading</label>
-                  <textarea rows={3} value={editing.subheading} onChange={(e) => setField('subheading', e.target.value)} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" placeholder="Short campaign message for the hero." />
+                  <label className="kicker mb-1 block">Subheading</label>
+                  <textarea rows={3} value={editing.subheading} onChange={(e) => setField('subheading', e.target.value)} className="w-full rounded-sm border border-edge p-2.5 text-sm" placeholder="Short campaign message for the hero." />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="mb-1 block text-[11px] font-bold uppercase text-brand-muted">Primary CTA label</label>
-                    <input value={editing.primary_cta_label} onChange={(e) => setField('primary_cta_label', e.target.value)} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" placeholder="Shop now" />
+                    <label className="kicker mb-1 block">Primary CTA label</label>
+                    <input value={editing.primary_cta_label} onChange={(e) => setField('primary_cta_label', e.target.value)} className="w-full rounded-sm border border-edge p-2.5 text-sm" placeholder="Shop now" />
                   </div>
                   <div>
-                    <label className="mb-1 block text-[11px] font-bold uppercase text-brand-muted">Primary CTA URL</label>
-                    <input value={editing.primary_cta_url} onChange={(e) => setField('primary_cta_url', e.target.value)} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" placeholder="/products" />
+                    <label className="kicker mb-1 block">Primary CTA URL</label>
+                    <input value={editing.primary_cta_url} onChange={(e) => setField('primary_cta_url', e.target.value)} className="w-full rounded-sm border border-edge p-2.5 text-sm" placeholder="/products" />
                   </div>
                   <div>
-                    <label className="mb-1 block text-[11px] font-bold uppercase text-brand-muted">Secondary CTA label</label>
-                    <input value={editing.secondary_cta_label} onChange={(e) => setField('secondary_cta_label', e.target.value)} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" placeholder="Learn more" />
+                    <label className="kicker mb-1 block">Secondary CTA label</label>
+                    <input value={editing.secondary_cta_label} onChange={(e) => setField('secondary_cta_label', e.target.value)} className="w-full rounded-sm border border-edge p-2.5 text-sm" placeholder="Learn more" />
                   </div>
                   <div>
-                    <label className="mb-1 block text-[11px] font-bold uppercase text-brand-muted">Secondary CTA URL</label>
-                    <input value={editing.secondary_cta_url} onChange={(e) => setField('secondary_cta_url', e.target.value)} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" placeholder="/policies/about" />
+                    <label className="kicker mb-1 block">Secondary CTA URL</label>
+                    <input value={editing.secondary_cta_url} onChange={(e) => setField('secondary_cta_url', e.target.value)} className="w-full rounded-sm border border-edge p-2.5 text-sm" placeholder="/policies/about" />
                   </div>
                 </div>
               </div>
@@ -5201,15 +5201,15 @@ function HeroBannersTab({ authFetch }) {
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="mb-1 block text-[11px] font-bold uppercase text-brand-muted">Media type</label>
-                    <select value={editing.media_type} onChange={(e) => setField('media_type', e.target.value)} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm">
+                    <label className="kicker mb-1 block">Media type</label>
+                    <select value={editing.media_type} onChange={(e) => setField('media_type', e.target.value)} className="w-full rounded-sm border border-edge p-2.5 text-sm">
                       <option value="IMAGE">Image</option>
                       <option value="VIDEO">Video</option>
                     </select>
                   </div>
                   <div>
-                    <label className="mb-1 block text-[11px] font-bold uppercase text-brand-muted">Text position</label>
-                    <select value={editing.text_position} onChange={(e) => setField('text_position', e.target.value)} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm">
+                    <label className="kicker mb-1 block">Text position</label>
+                    <select value={editing.text_position} onChange={(e) => setField('text_position', e.target.value)} className="w-full rounded-sm border border-edge p-2.5 text-sm">
                       <option value="LEFT">Left</option>
                       <option value="CENTER">Center</option>
                       <option value="RIGHT">Right</option>
@@ -5217,91 +5217,91 @@ function HeroBannersTab({ authFetch }) {
                   </div>
                 </div>
                 <div>
-                  <label className="mb-1 block text-[11px] font-bold uppercase text-brand-muted">Desktop image/video URL</label>
+                  <label className="kicker mb-1 block">Desktop image/video URL</label>
                   <div className="flex gap-2">
-                    <input value={editing.desktop_media_url} onChange={(e) => setField('desktop_media_url', e.target.value)} className="flex-1 rounded-lg border border-slate-200 p-2.5 text-sm" placeholder="https://..." />
-                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-bold text-brand-navy hover:border-brand-purple">
+                    <input value={editing.desktop_media_url} onChange={(e) => setField('desktop_media_url', e.target.value)} className="flex-1 rounded-sm border border-edge p-2.5 text-sm" placeholder="https://..." />
+                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-edge px-3 text-xs font-semibold text-ink-primary hover:border-ink-primary">
                       <Upload className="h-3.5 w-3.5" /> {uploadingMediaKey === 'desktop_media_url' ? 'Uploading' : 'Upload'}
                       <input type="file" accept="image/*,video/*" onChange={(e) => uploadHeroMedia('desktop_media_url', e.target.files?.[0])} className="hidden" />
                     </label>
                   </div>
                 </div>
                 <div>
-                  <label className="mb-1 block text-[11px] font-bold uppercase text-brand-muted">Tablet image URL optional</label>
+                  <label className="kicker mb-1 block">Tablet image URL optional</label>
                   <div className="flex gap-2">
-                    <input value={editing.tablet_media_url} onChange={(e) => setField('tablet_media_url', e.target.value)} className="flex-1 rounded-lg border border-slate-200 p-2.5 text-sm" placeholder="https://..." />
-                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-bold text-brand-navy hover:border-brand-purple">
+                    <input value={editing.tablet_media_url} onChange={(e) => setField('tablet_media_url', e.target.value)} className="flex-1 rounded-sm border border-edge p-2.5 text-sm" placeholder="https://..." />
+                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-edge px-3 text-xs font-semibold text-ink-primary hover:border-ink-primary">
                       <Upload className="h-3.5 w-3.5" /> {uploadingMediaKey === 'tablet_media_url' ? 'Uploading' : 'Upload'}
                       <input type="file" accept="image/*" onChange={(e) => uploadHeroMedia('tablet_media_url', e.target.files?.[0])} className="hidden" />
                     </label>
                   </div>
                 </div>
                 <div>
-                  <label className="mb-1 block text-[11px] font-bold uppercase text-brand-muted">Mobile image URL</label>
+                  <label className="kicker mb-1 block">Mobile image URL</label>
                   <div className="flex gap-2">
-                    <input value={editing.mobile_media_url} onChange={(e) => setField('mobile_media_url', e.target.value)} className="flex-1 rounded-lg border border-slate-200 p-2.5 text-sm" placeholder="https://..." />
-                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-bold text-brand-navy hover:border-brand-purple">
+                    <input value={editing.mobile_media_url} onChange={(e) => setField('mobile_media_url', e.target.value)} className="flex-1 rounded-sm border border-edge p-2.5 text-sm" placeholder="https://..." />
+                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-edge px-3 text-xs font-semibold text-ink-primary hover:border-ink-primary">
                       <Upload className="h-3.5 w-3.5" /> {uploadingMediaKey === 'mobile_media_url' ? 'Uploading' : 'Upload'}
                       <input type="file" accept="image/*" onChange={(e) => uploadHeroMedia('mobile_media_url', e.target.files?.[0])} className="hidden" />
                     </label>
                   </div>
                 </div>
                 <div>
-                  <label className="mb-1 block text-[11px] font-bold uppercase text-brand-muted">Alt text</label>
-                  <input value={editing.alt_text} onChange={(e) => setField('alt_text', e.target.value)} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" placeholder="Describe the banner media for accessibility and SEO" />
+                  <label className="kicker mb-1 block">Alt text</label>
+                  <input value={editing.alt_text} onChange={(e) => setField('alt_text', e.target.value)} className="w-full rounded-sm border border-edge p-2.5 text-sm" placeholder="Describe the banner media for accessibility and SEO" />
                 </div>
               </div>
 
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="mb-1 block text-[11px] font-bold uppercase text-brand-muted">Start date/time</label>
-                    <input type="datetime-local" value={editing.starts_at || ''} onChange={(e) => setField('starts_at', e.target.value)} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" />
+                    <label className="kicker mb-1 block">Start date/time</label>
+                    <input type="datetime-local" value={editing.starts_at || ''} onChange={(e) => setField('starts_at', e.target.value)} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
                   </div>
                   <div>
-                    <label className="mb-1 block text-[11px] font-bold uppercase text-brand-muted">End date/time</label>
-                    <input type="datetime-local" value={editing.ends_at || ''} onChange={(e) => setField('ends_at', e.target.value)} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" />
+                    <label className="kicker mb-1 block">End date/time</label>
+                    <input type="datetime-local" value={editing.ends_at || ''} onChange={(e) => setField('ends_at', e.target.value)} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
                   </div>
                   <div>
-                    <label className="mb-1 block text-[11px] font-bold uppercase text-brand-muted">Display order</label>
-                    <input type="number" value={editing.sort_order} onChange={(e) => setField('sort_order', e.target.value)} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" />
+                    <label className="kicker mb-1 block">Display order</label>
+                    <input type="number" value={editing.sort_order} onChange={(e) => setField('sort_order', e.target.value)} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
                   </div>
                   <div>
-                    <label className="mb-1 block text-[11px] font-bold uppercase text-brand-muted">Overlay opacity</label>
-                    <input type="number" min="0" max="90" value={editing.overlay_opacity} onChange={(e) => setField('overlay_opacity', e.target.value)} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" />
+                    <label className="kicker mb-1 block">Overlay opacity</label>
+                    <input type="number" min="0" max="90" value={editing.overlay_opacity} onChange={(e) => setField('overlay_opacity', e.target.value)} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
                   </div>
                   <div>
-                    <label className="mb-1 block text-[11px] font-bold uppercase text-brand-muted">Display duration ms</label>
-                    <input type="number" min="2500" step="100" value={editing.display_duration_ms} onChange={(e) => setField('display_duration_ms', e.target.value)} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" />
+                    <label className="kicker mb-1 block">Display duration ms</label>
+                    <input type="number" min="2500" step="100" value={editing.display_duration_ms} onChange={(e) => setField('display_duration_ms', e.target.value)} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
                   </div>
                   <div>
-                    <label className="mb-1 block text-[11px] font-bold uppercase text-brand-muted">Transition ms</label>
-                    <input type="number" min="0" step="50" value={editing.transition_ms} onChange={(e) => setField('transition_ms', e.target.value)} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" />
+                    <label className="kicker mb-1 block">Transition ms</label>
+                    <input type="number" min="0" step="50" value={editing.transition_ms} onChange={(e) => setField('transition_ms', e.target.value)} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-xs">
-                  <label className="flex items-center gap-2 rounded-lg border border-slate-200 p-3 font-semibold text-brand-navy">
-                    <input type="checkbox" checked={editing.is_enabled} onChange={(e) => setField('is_enabled', e.target.checked)} className="accent-brand-purple" /> Enabled
+                  <label className="flex items-center gap-2 rounded-lg border border-edge p-3 font-semibold text-ink-primary">
+                    <input type="checkbox" checked={editing.is_enabled} onChange={(e) => setField('is_enabled', e.target.checked)} className="accent-ink-primary" /> Enabled
                   </label>
-                  <label className="flex items-center gap-2 rounded-lg border border-slate-200 p-3 font-semibold text-brand-navy">
-                    <input type="checkbox" checked={editing.autoplay_enabled} onChange={(e) => setField('autoplay_enabled', e.target.checked)} className="accent-brand-purple" /> Autoplay
+                  <label className="flex items-center gap-2 rounded-lg border border-edge p-3 font-semibold text-ink-primary">
+                    <input type="checkbox" checked={editing.autoplay_enabled} onChange={(e) => setField('autoplay_enabled', e.target.checked)} className="accent-ink-primary" /> Autoplay
                   </label>
-                  <label className="flex items-center gap-2 rounded-lg border border-slate-200 p-3 font-semibold text-brand-navy">
-                    <input type="checkbox" checked={editing.show_indicators} onChange={(e) => setField('show_indicators', e.target.checked)} className="accent-brand-purple" /> Indicators
+                  <label className="flex items-center gap-2 rounded-lg border border-edge p-3 font-semibold text-ink-primary">
+                    <input type="checkbox" checked={editing.show_indicators} onChange={(e) => setField('show_indicators', e.target.checked)} className="accent-ink-primary" /> Indicators
                   </label>
                 </div>
               </div>
 
               <div className="space-y-4">
                 <div>
-                  <label className="mb-1 block text-[11px] font-bold uppercase text-brand-muted">SEO title</label>
-                  <input value={editing.seo_title} onChange={(e) => setField('seo_title', e.target.value)} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" maxLength={160} />
+                  <label className="kicker mb-1 block">SEO title</label>
+                  <input value={editing.seo_title} onChange={(e) => setField('seo_title', e.target.value)} className="w-full rounded-sm border border-edge p-2.5 text-sm" maxLength={160} />
                 </div>
                 <div>
-                  <label className="mb-1 block text-[11px] font-bold uppercase text-brand-muted">SEO description</label>
-                  <textarea rows={3} value={editing.seo_description} onChange={(e) => setField('seo_description', e.target.value)} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm" />
+                  <label className="kicker mb-1 block">SEO description</label>
+                  <textarea rows={3} value={editing.seo_description} onChange={(e) => setField('seo_description', e.target.value)} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
                 </div>
-                <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                <div className="overflow-hidden rounded-md border border-edge bg-surface-muted">
                   <div className="relative h-40">
                     {editing.desktop_media_url ? (
                       editing.media_type === 'VIDEO' ? (
@@ -5310,21 +5310,21 @@ function HeroBannersTab({ authFetch }) {
                         <img src={editing.desktop_media_url} alt={editing.alt_text || editing.heading || ''} className="h-full w-full object-cover" />
                       )
                     ) : (
-                      <div className="flex h-full items-center justify-center text-xs font-bold uppercase text-slate-400">Preview media</div>
+                      <div className="flex h-full items-center justify-center text-xs font-semibold uppercase text-ink-subtle">Preview media</div>
                     )}
                     <div className="absolute inset-0 bg-black/35" />
                     <div className="absolute bottom-4 left-4 right-4 text-white">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-white/75">{editing.eyebrow}</p>
-                      <p className="text-lg font-black leading-tight">{editing.heading || 'Banner heading preview'}</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-white/75">{editing.eyebrow}</p>
+                      <p className="text-lg font-semibold leading-tight">{editing.heading || 'Banner heading preview'}</p>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4">
-              <button onClick={() => setEditing(null)} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold uppercase text-brand-navy">Cancel</button>
-              <button onClick={save} disabled={saving} className="btn-primary rounded-lg px-5 py-2 text-xs uppercase">
+            <div className="flex justify-end gap-2 border-t border-edge bg-surface-muted px-5 py-4">
+              <button onClick={() => setEditing(null)} className="rounded-sm border border-edge bg-white px-4 py-2 text-xs font-semibold uppercase text-ink-primary">Cancel</button>
+              <button onClick={save} disabled={saving} className="btn-primary px-5 py-2 text-xs uppercase">
                 {saving ? 'Saving...' : 'Save banner'}
               </button>
             </div>
@@ -5419,26 +5419,26 @@ function BundlesTab({ authFetch, regions, products }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-brand-muted">{bundles.length} bundles</p>
-        <button onClick={startNew} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase bg-brand-purple text-white rounded-lg">
+        <button onClick={startNew} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase">
           <Plus className="h-4 w-4" /> New bundle
         </button>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+      <div className="overflow-x-auto rounded-md border border-edge bg-white shadow-card">
         <table className="w-full text-left text-xs">
-          <thead className="bg-slate-50 text-[10px] uppercase text-brand-muted">
+          <thead className="bg-surface-muted text-[10px] font-medium uppercase tracking-wide text-ink-muted border-b border-edge">
             <tr><th className="px-3 py-2">Name</th><th className="px-3 py-2">Slug</th><th className="px-3 py-2">Items</th><th className="px-3 py-2">Regions</th><th className="px-3 py-2">Active</th><th className="px-3 py-2"></th></tr>
           </thead>
           <tbody>
             {bundles.map((b) => (
-              <tr key={b.id} className="border-t border-slate-100">
-                <td className="px-3 py-3 font-semibold text-brand-navy">{b.name}</td>
+              <tr key={b.id} className="border-t border-edge-subtle">
+                <td className="px-3 py-3 font-semibold text-ink-primary">{b.name}</td>
                 <td className="px-3 py-3 font-mono text-brand-muted">/{b.slug}</td>
-                <td className="px-3 py-3 text-brand-navy">{(b.items || []).length}</td>
+                <td className="px-3 py-3 text-ink-primary">{(b.items || []).length}</td>
                 <td className="px-3 py-3 text-brand-muted">{(b.regional_configs || []).map((c) => c.region_code).join(', ')}</td>
-                <td className="px-3 py-3">{b.is_active ? <span className="rounded bg-green-100 px-2 py-0.5 font-bold text-green-700">ON</span> : <span className="rounded bg-slate-100 px-2 py-0.5 font-bold text-slate-500">OFF</span>}</td>
+                <td className="px-3 py-3">{b.is_active ? <span className="rounded bg-brand-success/10 px-2 py-0.5 font-semibold text-ink-success">ON</span> : <span className="rounded bg-surface-muted px-2 py-0.5 font-semibold text-ink-muted">OFF</span>}</td>
                 <td className="px-3 py-3 text-right">
-                  <button onClick={() => startEdit(b)} className="text-brand-purple"><Pencil className="h-4 w-4" /></button>
+                  <button onClick={() => startEdit(b)} className="text-ink-accent"><Pencil className="h-4 w-4" /></button>
                   <button onClick={() => remove(b)} className="ml-2 text-brand-muted hover:text-brand-danger"><X className="h-4 w-4" /></button>
                 </td>
               </tr>
@@ -5449,37 +5449,37 @@ function BundlesTab({ authFetch, regions, products }) {
       </div>
 
       {editing && (
-        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-slate-50 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-          <div className="my-8 w-full max-w-2xl bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
+        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
+          <div className="my-8 w-full max-w-2xl bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-black text-brand-navy">{editing.id ? 'Edit bundle' : 'New bundle'}</h3>
+              <h3 className="text-lg font-semibold text-ink-primary">{editing.id ? 'Edit bundle' : 'New bundle'}</h3>
               <button onClick={() => setEditing(null)} className="text-brand-muted"><X className="h-5 w-5" /></button>
             </div>
 
             <div className="grid grid-cols-2 gap-3 text-xs">
-              <input placeholder="Bundle name" value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} className="col-span-2 rounded-lg border border-slate-200 p-2.5 text-sm" />
-              <input placeholder="slug-here" value={editing.slug} onChange={(e) => setEditing({ ...editing, slug: e.target.value })} className="rounded-lg border border-slate-200 p-2.5 font-mono" />
-              <input type="number" placeholder="Sort order" value={editing.sort_order} onChange={(e) => setEditing({ ...editing, sort_order: e.target.value })} className="rounded-lg border border-slate-200 p-2.5" />
-              <textarea placeholder="Description" value={editing.description || ''} onChange={(e) => setEditing({ ...editing, description: e.target.value })} className="col-span-2 rounded-lg border border-slate-200 p-2.5" rows={2} />
-              <label className="col-span-2 flex items-center gap-2 text-brand-navy font-bold"><input type="checkbox" checked={editing.is_active} onChange={(e) => setEditing({ ...editing, is_active: e.target.checked })} className="accent-brand-purple" /> Active</label>
+              <input placeholder="Bundle name" value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} className="col-span-2 rounded-sm border border-edge p-2.5 text-sm" />
+              <input placeholder="slug-here" value={editing.slug} onChange={(e) => setEditing({ ...editing, slug: e.target.value })} className="rounded-sm border border-edge p-2.5 font-mono" />
+              <input type="number" placeholder="Sort order" value={editing.sort_order} onChange={(e) => setEditing({ ...editing, sort_order: e.target.value })} className="rounded-sm border border-edge p-2.5" />
+              <textarea placeholder="Description" value={editing.description || ''} onChange={(e) => setEditing({ ...editing, description: e.target.value })} className="col-span-2 rounded-sm border border-edge p-2.5" rows={2} />
+              <label className="col-span-2 flex items-center gap-2 text-ink-primary font-semibold"><input type="checkbox" checked={editing.is_active} onChange={(e) => setEditing({ ...editing, is_active: e.target.checked })} className="accent-ink-primary" /> Active</label>
             </div>
 
             <div>
-              <p className="text-xs font-bold uppercase text-brand-muted mb-2">Items</p>
+              <p className="text-xs font-semibold uppercase text-brand-muted mb-2">Items</p>
               <div className="flex gap-2 mb-2">
-                <select onChange={(e) => { addItem(e.target.value); e.target.value = ''; }} className="flex-1 rounded-lg border border-slate-200 p-2 text-xs">
+                <select onChange={(e) => { addItem(e.target.value); e.target.value = ''; }} className="flex-1 rounded-sm border border-edge p-2 text-xs">
                   <option value="">+ Add product…</option>
                   {products.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>)}
                 </select>
               </div>
               <div className="space-y-2">
                 {editing._items.map((it) => (
-                  <div key={it.product_id} className="flex items-center gap-2 rounded-lg border border-slate-200 p-2">
+                  <div key={it.product_id} className="flex items-center gap-2 rounded-lg border border-edge p-2">
                     <div className="flex-1">
-                      <p className="text-xs font-semibold text-brand-navy">{it.name}</p>
+                      <p className="text-xs font-semibold text-ink-primary">{it.name}</p>
                       <p className="text-[10px] text-brand-muted font-mono">{it.sku}</p>
                     </div>
-                    <input type="number" min="1" value={it.quantity} onChange={(e) => setItemQty(it.product_id, e.target.value)} className="w-16 rounded border border-slate-200 p-1 text-xs" />
+                    <input type="number" min="1" value={it.quantity} onChange={(e) => setItemQty(it.product_id, e.target.value)} className="w-16 rounded border border-edge p-1 text-xs" />
                     <button onClick={() => removeItem(it.product_id)} className="text-brand-muted hover:text-brand-danger"><X className="h-4 w-4" /></button>
                   </div>
                 ))}
@@ -5488,22 +5488,22 @@ function BundlesTab({ authFetch, regions, products }) {
             </div>
 
             <div>
-              <p className="text-xs font-bold uppercase text-brand-muted mb-2">Regional pricing</p>
+              <p className="text-xs font-semibold uppercase text-brand-muted mb-2">Regional pricing</p>
               <div className="space-y-2">
                 {editing._configs.map((c) => (
-                  <div key={c.region} className="grid grid-cols-[60px,1fr,1fr,auto] items-center gap-2 rounded-lg border border-slate-200 p-2">
-                    <span className="font-mono text-xs text-brand-navy">{c.region_code}</span>
-                    <input type="number" step="0.01" placeholder="Price" value={c.price} onChange={(e) => setConfig(c.region, 'price', e.target.value)} className="rounded border border-slate-200 p-1.5 text-xs" />
-                    <input type="number" step="0.01" placeholder="Promo (opt)" value={c.promotional_price} onChange={(e) => setConfig(c.region, 'promotional_price', e.target.value)} className="rounded border border-slate-200 p-1.5 text-xs" />
-                    <label className="text-[10px] font-bold text-brand-navy"><input type="checkbox" checked={c.is_visible} onChange={(e) => setConfig(c.region, 'is_visible', e.target.checked)} className="mr-1 accent-brand-purple" />Visible</label>
+                  <div key={c.region} className="grid grid-cols-[60px,1fr,1fr,auto] items-center gap-2 rounded-lg border border-edge p-2">
+                    <span className="font-mono text-xs text-ink-primary">{c.region_code}</span>
+                    <input type="number" step="0.01" placeholder="Price" value={c.price} onChange={(e) => setConfig(c.region, 'price', e.target.value)} className="rounded border border-edge p-1.5 text-xs" />
+                    <input type="number" step="0.01" placeholder="Promo (opt)" value={c.promotional_price} onChange={(e) => setConfig(c.region, 'promotional_price', e.target.value)} className="rounded border border-edge p-1.5 text-xs" />
+                    <label className="text-[10px] font-semibold text-ink-primary"><input type="checkbox" checked={c.is_visible} onChange={(e) => setConfig(c.region, 'is_visible', e.target.checked)} className="mr-1 accent-ink-primary" />Visible</label>
                   </div>
                 ))}
               </div>
             </div>
 
             <div className="flex gap-2 pt-2">
-              <button onClick={save} className="btn-primary flex-1 py-2.5 text-xs bg-brand-purple text-white rounded-lg uppercase">Save bundle</button>
-              <button onClick={() => setEditing(null)} className="flex-1 rounded-lg border border-slate-200 py-2.5 text-xs font-bold uppercase">Cancel</button>
+              <button onClick={save} className="btn-primary flex-1 py-2.5 text-xs uppercase">Save bundle</button>
+              <button onClick={() => setEditing(null)} className="flex-1 rounded-sm border border-edge py-2.5 text-xs font-semibold uppercase">Cancel</button>
             </div>
           </div>
         </div>
@@ -5577,30 +5577,30 @@ function DiscountsTab({ authFetch, regions }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-brand-muted">{coupons.length} coupon codes</p>
-        <button onClick={startNew} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase bg-brand-purple text-white rounded-lg">
+        <button onClick={startNew} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase">
           <Plus className="h-4 w-4" /> New discount
         </button>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+      <div className="overflow-x-auto rounded-md border border-edge bg-white shadow-card">
         <table className="w-full text-left text-xs">
-          <thead className="bg-slate-50 text-[10px] uppercase text-brand-muted">
+          <thead className="bg-surface-muted text-[10px] font-medium uppercase tracking-wide text-ink-muted border-b border-edge">
             <tr><th className="px-3 py-2">Code</th><th className="px-3 py-2">Type</th><th className="px-3 py-2">Value</th><th className="px-3 py-2">Region</th><th className="px-3 py-2">Window</th><th className="px-3 py-2">Usage</th><th className="px-3 py-2">Active</th><th className="px-3 py-2"></th></tr>
           </thead>
           <tbody>
             {coupons.map((c) => (
-              <tr key={c.id} className="border-t border-slate-100">
-                <td className="px-3 py-3 font-mono font-semibold text-brand-navy">{c.code}</td>
+              <tr key={c.id} className="border-t border-edge-subtle">
+                <td className="px-3 py-3 font-mono font-semibold text-ink-primary">{c.code}</td>
                 <td className="px-3 py-3 text-brand-muted">{c.discount_type}</td>
-                <td className="px-3 py-3 font-semibold text-brand-navy">{c.discount_type === 'PERCENTAGE' ? `${c.value}%` : c.value}</td>
+                <td className="px-3 py-3 font-semibold text-ink-primary">{c.discount_type === 'PERCENTAGE' ? `${c.value}%` : c.value}</td>
                 <td className="px-3 py-3 text-brand-muted">{c.region_code || 'GLOBAL'}</td>
                 <td className="px-3 py-3 text-brand-muted">{c.start_date ? formatDate(c.start_date) : '—'} → {c.end_date ? formatDate(c.end_date) : '—'}</td>
-                <td className="px-3 py-3 text-brand-navy">{c.usage_count}{c.usage_limit ? ` / ${c.usage_limit}` : ''}</td>
+                <td className="px-3 py-3 text-ink-primary">{c.usage_count}{c.usage_limit ? ` / ${c.usage_limit}` : ''}</td>
                 <td className="px-3 py-3">
-                  <button onClick={() => toggleActive(c)} className={`rounded px-2 py-0.5 text-[10px] font-bold ${c.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>{c.is_active ? 'ON' : 'OFF'}</button>
+                  <button onClick={() => toggleActive(c)} className={`rounded px-2 py-0.5 text-[10px] font-semibold ${c.is_active ? 'bg-brand-success/10 text-ink-success' : 'bg-surface-muted text-ink-muted'}`}>{c.is_active ? 'ON' : 'OFF'}</button>
                 </td>
                 <td className="px-3 py-3 text-right">
-                  <button onClick={() => startEdit(c)} className="text-brand-purple"><Pencil className="h-4 w-4" /></button>
+                  <button onClick={() => startEdit(c)} className="text-ink-accent"><Pencil className="h-4 w-4" /></button>
                   <button onClick={() => remove(c)} className="ml-2 text-brand-muted hover:text-brand-danger"><X className="h-4 w-4" /></button>
                 </td>
               </tr>
@@ -5611,33 +5611,33 @@ function DiscountsTab({ authFetch, regions }) {
       </div>
 
       {editing && (
-        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-slate-50 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-          <div className="my-8 w-full max-w-lg bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-3">
+        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
+          <div className="my-8 w-full max-w-lg bg-white rounded-lg border border-edge p-6 shadow-card space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-black text-brand-navy">{editing.id ? 'Edit discount' : 'New discount'}</h3>
+              <h3 className="text-lg font-semibold text-ink-primary">{editing.id ? 'Edit discount' : 'New discount'}</h3>
               <button onClick={() => setEditing(null)} className="text-brand-muted"><X className="h-5 w-5" /></button>
             </div>
-            <input placeholder="CODE" value={editing.code} onChange={(e) => setEditing({ ...editing, code: e.target.value.toUpperCase() })} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm font-mono uppercase" />
+            <input placeholder="CODE" value={editing.code} onChange={(e) => setEditing({ ...editing, code: e.target.value.toUpperCase() })} className="w-full rounded-sm border border-edge p-2.5 text-sm font-mono uppercase" />
             <div className="grid grid-cols-2 gap-2 text-xs">
-              <select value={editing.discount_type} onChange={(e) => setEditing({ ...editing, discount_type: e.target.value })} className="rounded-lg border border-slate-200 p-2">
+              <select value={editing.discount_type} onChange={(e) => setEditing({ ...editing, discount_type: e.target.value })} className="rounded-sm border border-edge p-2">
                 <option value="PERCENTAGE">Percentage off</option>
                 <option value="FIXED_AMOUNT">Fixed amount</option>
                 <option value="TIERED">Tiered</option>
               </select>
-              <input type="number" step="0.01" placeholder="Value" value={editing.value} onChange={(e) => setEditing({ ...editing, value: e.target.value })} className="rounded-lg border border-slate-200 p-2" />
-              <select value={editing.region || ''} onChange={(e) => setEditing({ ...editing, region: e.target.value ? Number(e.target.value) : null })} className="rounded-lg border border-slate-200 p-2">
+              <input type="number" step="0.01" placeholder="Value" value={editing.value} onChange={(e) => setEditing({ ...editing, value: e.target.value })} className="rounded-sm border border-edge p-2" />
+              <select value={editing.region || ''} onChange={(e) => setEditing({ ...editing, region: e.target.value ? Number(e.target.value) : null })} className="rounded-sm border border-edge p-2">
                 <option value="">All regions</option>
                 {regions.map((r) => <option key={r.id} value={r.id}>{r.code} — {r.name}</option>)}
               </select>
-              <input type="number" step="0.01" placeholder="Min spend" value={editing.min_spend} onChange={(e) => setEditing({ ...editing, min_spend: e.target.value })} className="rounded-lg border border-slate-200 p-2" />
-              <input type="datetime-local" value={editing.start_date} onChange={(e) => setEditing({ ...editing, start_date: e.target.value })} className="rounded-lg border border-slate-200 p-2" />
-              <input type="datetime-local" value={editing.end_date} onChange={(e) => setEditing({ ...editing, end_date: e.target.value })} className="rounded-lg border border-slate-200 p-2" />
-              <input type="number" placeholder="Usage limit (optional)" value={editing.usage_limit} onChange={(e) => setEditing({ ...editing, usage_limit: e.target.value })} className="col-span-2 rounded-lg border border-slate-200 p-2" />
+              <input type="number" step="0.01" placeholder="Min spend" value={editing.min_spend} onChange={(e) => setEditing({ ...editing, min_spend: e.target.value })} className="rounded-sm border border-edge p-2" />
+              <input type="datetime-local" value={editing.start_date} onChange={(e) => setEditing({ ...editing, start_date: e.target.value })} className="rounded-sm border border-edge p-2" />
+              <input type="datetime-local" value={editing.end_date} onChange={(e) => setEditing({ ...editing, end_date: e.target.value })} className="rounded-sm border border-edge p-2" />
+              <input type="number" placeholder="Usage limit (optional)" value={editing.usage_limit} onChange={(e) => setEditing({ ...editing, usage_limit: e.target.value })} className="col-span-2 rounded-sm border border-edge p-2" />
             </div>
-            <label className="flex items-center gap-2 text-sm text-brand-navy"><input type="checkbox" checked={editing.is_active} onChange={(e) => setEditing({ ...editing, is_active: e.target.checked })} className="accent-brand-purple" /> Active</label>
+            <label className="flex items-center gap-2 text-sm text-ink-primary"><input type="checkbox" checked={editing.is_active} onChange={(e) => setEditing({ ...editing, is_active: e.target.checked })} className="accent-ink-primary" /> Active</label>
             <div className="flex gap-2 pt-1">
-              <button onClick={save} className="btn-primary flex-1 py-2.5 text-xs bg-brand-purple text-white rounded-lg uppercase">Save</button>
-              <button onClick={() => setEditing(null)} className="flex-1 rounded-lg border border-slate-200 py-2.5 text-xs font-bold uppercase">Cancel</button>
+              <button onClick={save} className="btn-primary flex-1 py-2.5 text-xs uppercase">Save</button>
+              <button onClick={() => setEditing(null)} className="flex-1 rounded-sm border border-edge py-2.5 text-xs font-semibold uppercase">Cancel</button>
             </div>
           </div>
         </div>
@@ -5777,16 +5777,16 @@ function StaffTab({ authFetch, regions }) {
   return (
     <div className="space-y-4">
       {/* Subtab Navigation */}
-      <div className="flex gap-2 border-b border-slate-150 pb-2">
-        <button onClick={() => setActiveSubTab('members')} className={`px-4 py-1.5 text-xs font-bold uppercase rounded-lg transition-colors ${activeSubTab === 'members' ? 'bg-brand-purple text-white' : 'text-brand-navy hover:bg-slate-50'}`}>Staff Directory</button>
-        <button onClick={() => setActiveSubTab('roles')} className={`px-4 py-1.5 text-xs font-bold uppercase rounded-lg transition-colors ${activeSubTab === 'roles' ? 'bg-brand-purple text-white' : 'text-brand-navy hover:bg-slate-50'}`}>Roles &amp; Permissions</button>
+      <div className="flex gap-2 border-b border-edge-subtle pb-2">
+        <button onClick={() => setActiveSubTab('members')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm transition-colors ${activeSubTab === 'members' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Staff Directory</button>
+        <button onClick={() => setActiveSubTab('roles')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm transition-colors ${activeSubTab === 'roles' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Roles &amp; Permissions</button>
       </div>
 
       {activeSubTab === 'members' ? (
         <div className="space-y-4">
-          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+          <div className="overflow-x-auto rounded-md border border-edge bg-white shadow-card">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 text-brand-muted font-bold">
+              <thead className="bg-surface-muted text-[10px] font-medium uppercase tracking-wide text-ink-muted border-b border-edge">
                 <tr>
                   <th className="px-3 py-3">Staff Member</th>
                   <th className="px-3 py-3">Roles</th>
@@ -5798,31 +5798,31 @@ function StaffTab({ authFetch, regions }) {
               </thead>
               <tbody>
                 {staff.map((s) => (
-                  <tr key={s.id} className="border-t border-slate-100 align-middle">
+                  <tr key={s.id} className="border-t border-edge-subtle align-middle">
                     <td className="px-3 py-3">
-                      <p className="font-semibold text-brand-navy">{s.first_name} {s.last_name}</p>
+                      <p className="font-semibold text-ink-primary">{s.first_name} {s.last_name}</p>
                       <p className="font-mono text-[10px] text-brand-muted">{s.email}</p>
                     </td>
                     <td className="px-3 py-3">
                       <div className="flex flex-wrap gap-1">
                         {(s.roles || []).map((rId) => {
                           const r = roles.find((x) => x.id === rId);
-                          return r ? <span key={rId} className="rounded bg-brand-purple/10 text-brand-purple px-1.5 py-0.5 text-[10px] font-bold">{r.name}</span> : null;
+                          return r ? <span key={rId} className="rounded bg-surface-muted text-ink-accent px-1.5 py-0.5 text-[10px] font-semibold">{r.name}</span> : null;
                         })}
-                        {!(s.roles || []).length && <span className="text-slate-400">—</span>}
+                        {!(s.roles || []).length && <span className="text-ink-subtle">—</span>}
                       </div>
                     </td>
-                    <td className="px-3 py-3 font-semibold text-slate-600">
+                    <td className="px-3 py-3 font-semibold text-ink-secondary">
                       {s.assigned_regions_codes?.join(', ') || 'Global (All Regions)'}
                     </td>
-                    <td className="px-3 py-3 font-mono text-slate-500">
+                    <td className="px-3 py-3 font-mono text-ink-muted">
                       {s.allowed_ip_range || 'Any IP Address'}
                     </td>
                     <td className="px-3 py-3">
-                      {s.two_factor_enabled ? <span className="rounded bg-green-100 text-green-700 px-1.5 py-0.5 text-[10px] font-bold">ENABLED</span> : <span className="rounded bg-slate-100 text-slate-400 px-1.5 py-0.5 text-[10px] font-bold">DISABLED</span>}
+                      {s.two_factor_enabled ? <span className="rounded bg-brand-success/10 text-ink-success px-1.5 py-0.5 text-[10px] font-semibold">ENABLED</span> : <span className="rounded bg-surface-muted text-ink-subtle px-1.5 py-0.5 text-[10px] font-semibold">DISABLED</span>}
                     </td>
                     <td className="px-3 py-3 text-right">
-                      <button onClick={() => setEditingStaff({ ...s })} className="text-brand-purple hover:opacity-70 font-semibold inline-flex items-center gap-1"><Pencil className="h-3.5 w-3.5" /> Edit</button>
+                      <button onClick={() => setEditingStaff({ ...s })} className="text-ink-accent hover:opacity-70 font-semibold inline-flex items-center gap-1"><Pencil className="h-3.5 w-3.5" /> Edit</button>
                     </td>
                   </tr>
                 ))}
@@ -5831,29 +5831,29 @@ function StaffTab({ authFetch, regions }) {
           </div>
 
           {editingStaff && (
-            <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-slate-50 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-              <div className="my-8 w-full max-w-lg bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
-                <div className="flex justify-between items-center pb-2 border-b border-slate-100">
-                  <h3 className="text-lg font-black text-brand-navy">Edit Permissions: {editingStaff.email}</h3>
+            <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
+              <div className="my-8 w-full max-w-lg bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
+                <div className="flex justify-between items-center pb-2 border-b border-edge-subtle">
+                  <h3 className="text-lg font-semibold text-ink-primary">Edit Permissions: {editingStaff.email}</h3>
                   <button onClick={() => setEditingStaff(null)}><X className="h-5 w-5 text-brand-muted" /></button>
                 </div>
                 <div className="space-y-4 text-xs">
                   <div className="grid grid-cols-2 gap-3">
-                    <label className="flex items-center gap-2 font-semibold text-brand-navy cursor-pointer"><input type="checkbox" checked={editingStaff.is_staff} onChange={(e) => setEditingStaff({ ...editingStaff, is_staff: e.target.checked })} className="accent-brand-purple" /> Staff Access</label>
-                    <label className="flex items-center gap-2 font-semibold text-brand-navy cursor-pointer"><input type="checkbox" checked={editingStaff.is_active} onChange={(e) => setEditingStaff({ ...editingStaff, is_active: e.target.checked })} className="accent-brand-purple" /> Active Account</label>
+                    <label className="flex items-center gap-2 font-semibold text-ink-primary cursor-pointer"><input type="checkbox" checked={editingStaff.is_staff} onChange={(e) => setEditingStaff({ ...editingStaff, is_staff: e.target.checked })} className="accent-ink-primary" /> Staff Access</label>
+                    <label className="flex items-center gap-2 font-semibold text-ink-primary cursor-pointer"><input type="checkbox" checked={editingStaff.is_active} onChange={(e) => setEditingStaff({ ...editingStaff, is_active: e.target.checked })} className="accent-ink-primary" /> Active Account</label>
                   </div>
 
                   <div>
-                    <p className="font-bold text-brand-muted mb-1 uppercase">ASSIGN ROLES</p>
-                    <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto border border-slate-200 p-2 rounded-lg bg-slate-50">
+                    <p className="font-semibold text-brand-muted mb-1 uppercase">ASSIGN ROLES</p>
+                    <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto border border-edge p-2 rounded-lg bg-surface-muted">
                       {roles.map((r) => {
                         const hasRole = editingStaff.roles.includes(r.id);
                         return (
-                          <label key={r.id} className="flex items-center gap-1.5 cursor-pointer font-medium text-slate-700">
+                          <label key={r.id} className="flex items-center gap-1.5 cursor-pointer font-medium text-ink-secondary">
                             <input type="checkbox" checked={hasRole} onChange={(e) => {
                               const newRoles = e.target.checked ? [...editingStaff.roles, r.id] : editingStaff.roles.filter(x => x !== r.id);
                               setEditingStaff({ ...editingStaff, roles: newRoles });
-                            }} className="accent-brand-purple" />
+                            }} className="accent-ink-primary" />
                             {r.name}
                           </label>
                         );
@@ -5862,42 +5862,42 @@ function StaffTab({ authFetch, regions }) {
                   </div>
 
                   <div>
-                    <p className="font-bold text-brand-muted mb-1 uppercase">REGIONAL ACCESS SCOPE (COUNTRY MANAGER)</p>
-                    <div className="flex gap-4 p-2 border border-slate-200 rounded-lg bg-slate-50">
+                    <p className="font-semibold text-brand-muted mb-1 uppercase">REGIONAL ACCESS SCOPE (COUNTRY MANAGER)</p>
+                    <div className="flex gap-4 p-2 border border-edge rounded-lg bg-surface-muted">
                       {regions.map((r) => {
                         const isAssigned = editingStaff.assigned_regions.includes(r.id);
                         return (
-                          <label key={r.id} className="flex items-center gap-1.5 cursor-pointer font-bold text-slate-700">
+                          <label key={r.id} className="flex items-center gap-1.5 cursor-pointer font-semibold text-ink-secondary">
                             <input type="checkbox" checked={isAssigned} onChange={(e) => {
                               const newRegs = e.target.checked ? [...editingStaff.assigned_regions, r.id] : editingStaff.assigned_regions.filter(x => x !== r.id);
                               setEditingStaff({ ...editingStaff, assigned_regions: newRegs });
-                            }} className="accent-brand-purple" />
+                            }} className="accent-ink-primary" />
                             {r.code} ({r.name})
                           </label>
                         );
                       })}
-                      {regions.length === 0 && <p className="text-slate-400">No regions populated.</p>}
+                      {regions.length === 0 && <p className="text-ink-subtle">No regions populated.</p>}
                     </div>
-                    <p className="text-[10px] text-slate-400 mt-1">If no regions are selected, the user has global scope (can access UK &amp; India).</p>
+                    <p className="text-[10px] text-ink-subtle mt-1">If no regions are selected, the user has global scope (can access UK &amp; India).</p>
                   </div>
 
                   <div>
-                    <p className="font-bold text-brand-muted mb-1 uppercase">ALLOWED IP WHITELIST</p>
-                    <input placeholder="e.g. 127.0.0.1, 192.168.1.15" value={editingStaff.allowed_ip_range || ''} onChange={(e) => setEditingStaff({ ...editingStaff, allowed_ip_range: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2 text-xs font-mono" />
-                    <p className="text-[10px] text-slate-400 mt-1">Comma-separated IP addresses. Leave empty to allow any connection.</p>
+                    <p className="font-semibold text-brand-muted mb-1 uppercase">ALLOWED IP WHITELIST</p>
+                    <input placeholder="e.g. 127.0.0.1, 192.168.1.15" value={editingStaff.allowed_ip_range || ''} onChange={(e) => setEditingStaff({ ...editingStaff, allowed_ip_range: e.target.value })} className="w-full rounded-sm border border-edge p-2 text-xs font-mono" />
+                    <p className="text-[10px] text-ink-subtle mt-1">Comma-separated IP addresses. Leave empty to allow any connection.</p>
                   </div>
 
                   <div>
-                    <p className="font-bold text-brand-muted mb-1 uppercase">SECURITY</p>
-                    <label className="flex items-center gap-1.5 cursor-pointer font-bold text-brand-navy"><input type="checkbox" checked={editingStaff.two_factor_enabled} onChange={(e) => setEditingStaff({ ...editingStaff, two_factor_enabled: e.target.checked })} className="accent-brand-purple" /> Enforce Two-Factor Authentication (2FA)</label>
+                    <p className="font-semibold text-brand-muted mb-1 uppercase">SECURITY</p>
+                    <label className="flex items-center gap-1.5 cursor-pointer font-semibold text-ink-primary"><input type="checkbox" checked={editingStaff.two_factor_enabled} onChange={(e) => setEditingStaff({ ...editingStaff, two_factor_enabled: e.target.checked })} className="accent-ink-primary" /> Enforce Two-Factor Authentication (2FA)</label>
                   </div>
 
                   {editingStaff.current_devices?.length > 0 && (
                     <div>
-                      <p className="font-bold text-brand-muted mb-1 uppercase">ACTIVE LOGGED-IN SESSIONS ({editingStaff.current_devices.length})</p>
-                      <div className="space-y-1.5 max-h-24 overflow-y-auto border border-slate-200 p-2 rounded-lg bg-slate-50 text-[10px] font-mono text-brand-muted">
+                      <p className="font-semibold text-brand-muted mb-1 uppercase">ACTIVE LOGGED-IN SESSIONS ({editingStaff.current_devices.length})</p>
+                      <div className="space-y-1.5 max-h-24 overflow-y-auto border border-edge p-2 rounded-lg bg-surface-muted text-[10px] font-mono text-brand-muted">
                         {editingStaff.current_devices.map((dev, idx) => (
-                          <div key={idx} className="flex justify-between border-b border-slate-100 pb-1">
+                          <div key={idx} className="flex justify-between border-b border-edge-subtle pb-1">
                             <span>{dev.ip} · {dev.user_agent.substring(0, 30)}...</span>
                             <span>{new Date(dev.last_active).toLocaleDateString()}</span>
                           </div>
@@ -5907,7 +5907,7 @@ function StaffTab({ authFetch, regions }) {
                   )}
 
                   {error && <p className="rounded bg-brand-danger/10 p-2 text-xs text-brand-danger">{error}</p>}
-                  <button onClick={saveStaff} className="btn-primary w-full py-2.5 text-xs bg-brand-purple text-white rounded-lg uppercase font-bold">Save Settings</button>
+                  <button onClick={saveStaff} className="btn-primary w-full py-2.5 text-xs uppercase font-semibold">Save Settings</button>
                 </div>
               </div>
             </div>
@@ -5917,24 +5917,24 @@ function StaffTab({ authFetch, regions }) {
         <div className="space-y-4">
           <div className="mb-2 flex justify-between items-center">
             <p className="text-xs text-brand-muted">{roles.length} roles seeded in the registry</p>
-            <button onClick={() => setEditingRole({ name: '', description: '', permissions: [] })} className="btn-primary inline-flex items-center gap-1 px-3 py-1.5 text-xs uppercase bg-brand-purple text-white rounded-lg"><Plus className="h-3.5 w-3.5" /> Create Custom Role</button>
+            <button onClick={() => setEditingRole({ name: '', description: '', permissions: [] })} className="btn-primary inline-flex items-center gap-1 px-3 py-1.5 text-xs uppercase"><Plus className="h-3.5 w-3.5" /> Create Custom Role</button>
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
             {roles.map((r) => (
-              <div key={r.id} className="rounded-2xl border border-slate-200 bg-white p-4 flex flex-col justify-between">
+              <div key={r.id} className="rounded-lg border border-edge bg-white shadow-card p-4 flex flex-col justify-between">
                 <div>
                   <div className="flex justify-between items-start mb-2">
-                    <h4 className="text-sm font-bold text-brand-navy">{r.name}</h4>
-                    {r.is_system && <span className="rounded bg-slate-100 text-slate-500 px-1.5 py-0.5 text-[9px] font-bold">SYSTEM</span>}
+                    <h4 className="text-sm font-semibold text-ink-primary">{r.name}</h4>
+                    {r.is_system && <span className="rounded bg-surface-muted text-ink-muted px-1.5 py-0.5 text-[9px] font-semibold">SYSTEM</span>}
                   </div>
                   <p className="text-xs text-brand-muted min-h-[30px]">{r.description || 'No description provided.'}</p>
-                  <p className="mt-2 text-[10px] text-brand-purple font-semibold font-mono">{r.permissions.length} permission keys active</p>
+                  <p className="mt-2 text-[10px] text-ink-accent font-semibold font-mono">{r.permissions.length} permission keys active</p>
                 </div>
-                <div className="mt-4 flex justify-end gap-2 border-t border-slate-50 pt-3">
-                  <button onClick={() => setEditingRole({ ...r })} className="text-xs px-2.5 py-1.2 rounded border border-slate-200 text-brand-navy hover:bg-slate-50 font-bold uppercase inline-flex items-center gap-1"><Pencil className="h-3 w-3" /> Edit</button>
+                <div className="mt-4 flex justify-end gap-2 border-t border-edge-subtle pt-3">
+                  <button onClick={() => setEditingRole({ ...r })} className="text-xs px-2.5 py-1.2 rounded border border-edge text-ink-primary hover:bg-surface-muted font-semibold uppercase inline-flex items-center gap-1"><Pencil className="h-3 w-3" /> Edit</button>
                   {!r.is_system && (
-                    <button onClick={() => deleteRole(r)} className="text-xs px-2.5 py-1.2 rounded border border-red-200 text-red-500 hover:bg-red-50 font-bold uppercase inline-flex items-center gap-1"><X className="h-3 w-3" /> Delete</button>
+                    <button onClick={() => deleteRole(r)} className="text-xs px-2.5 py-1.2 rounded border border-red-200 text-ink-danger hover:bg-red-50 font-semibold uppercase inline-flex items-center gap-1"><X className="h-3 w-3" /> Delete</button>
                   )}
                 </div>
               </div>
@@ -5942,38 +5942,38 @@ function StaffTab({ authFetch, regions }) {
           </div>
 
           {editingRole && (
-            <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-slate-50 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-              <div className="my-8 w-full max-w-xl bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
-                <div className="flex justify-between items-center pb-2 border-b border-slate-100">
-                  <h3 className="text-lg font-black text-brand-navy">{editingRole.id ? 'Edit Role' : 'Create Role'}</h3>
+            <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
+              <div className="my-8 w-full max-w-xl bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
+                <div className="flex justify-between items-center pb-2 border-b border-edge-subtle">
+                  <h3 className="text-lg font-semibold text-ink-primary">{editingRole.id ? 'Edit Role' : 'Create Role'}</h3>
                   <button onClick={() => setEditingRole(null)}><X className="h-5 w-5 text-brand-muted" /></button>
                 </div>
                 <div className="space-y-4 text-xs">
                   <div className="grid gap-3">
-                    <input placeholder="Role Name" value={editingRole.name} disabled={editingRole.is_system} onChange={(e) => setEditingRole({ ...editingRole, name: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2.5 text-sm disabled:bg-slate-50" />
-                    <textarea placeholder="Description" value={editingRole.description} onChange={(e) => setEditingRole({ ...editingRole, description: e.target.value })} className="w-full rounded-lg border border-slate-200 p-2.5 text-xs" rows={2} />
+                    <input placeholder="Role Name" value={editingRole.name} disabled={editingRole.is_system} onChange={(e) => setEditingRole({ ...editingRole, name: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-sm disabled:bg-surface-muted" />
+                    <textarea placeholder="Description" value={editingRole.description} onChange={(e) => setEditingRole({ ...editingRole, description: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-xs" rows={2} />
                   </div>
 
                   <div>
-                    <p className="font-bold text-brand-muted mb-2 uppercase">ASSIGN PERMISSIONS ({editingRole.permissions.length} SELECTED)</p>
-                    <div className="border border-slate-200 rounded-lg max-h-60 overflow-y-auto p-3 bg-slate-50 grid gap-3 grid-cols-2">
+                    <p className="font-semibold text-brand-muted mb-2 uppercase">ASSIGN PERMISSIONS ({editingRole.permissions.length} SELECTED)</p>
+                    <div className="border border-edge rounded-lg max-h-60 overflow-y-auto p-3 bg-surface-muted grid gap-3 grid-cols-2">
                       {/* Group permission keys by category prefix */}
                       {['dashboard', 'products', 'inventory', 'orders', 'customers', 'content', 'marketing', 'reports', 'finance', 'staff', 'security'].map((cat) => {
                         const items = permCatalog.filter(p => p.key.startsWith(cat + '.'));
                         if (items.length === 0) return null;
                         return (
-                          <div key={cat} className="space-y-1.5 col-span-2 md:col-span-1 border-b border-slate-200/50 pb-2">
-                            <p className="font-bold text-brand-purple uppercase text-[10px] tracking-wide">{cat} privileges</p>
+                          <div key={cat} className="space-y-1.5 col-span-2 md:col-span-1 border-b border-edge pb-2">
+                            <p className="font-semibold text-ink-accent uppercase text-[10px] tracking-wide">{cat} privileges</p>
                             {items.map((p) => {
                               const active = editingRole.permissions.includes(p.key);
                               return (
-                                <label key={p.key} className="flex items-start gap-1.5 cursor-pointer font-medium text-slate-700 leading-tight">
+                                <label key={p.key} className="flex items-start gap-1.5 cursor-pointer font-medium text-ink-secondary leading-tight">
                                   <input type="checkbox" checked={active} disabled={editingRole.is_system} onChange={(e) => {
                                     const nextPerms = e.target.checked ? [...editingRole.permissions, p.key] : editingRole.permissions.filter(x => x !== p.key);
                                     setEditingRole({ ...editingRole, permissions: nextPerms });
-                                  }} className="mt-0.5 accent-brand-purple" />
+                                  }} className="mt-0.5 accent-ink-primary" />
                                   <span>
-                                    <span className="block text-[11px] font-semibold text-brand-navy">{p.key}</span>
+                                    <span className="block text-[11px] font-semibold text-ink-primary">{p.key}</span>
                                     <span className="block text-[9px] text-brand-muted">{p.label}</span>
                                   </span>
                                 </label>
@@ -5987,10 +5987,10 @@ function StaffTab({ authFetch, regions }) {
 
                   {error && <p className="rounded bg-brand-danger/10 p-2 text-xs text-brand-danger">{error}</p>}
                   {!editingRole.is_system && (
-                    <button onClick={saveRole} className="btn-primary w-full py-2.5 text-xs bg-brand-purple text-white rounded-lg uppercase font-bold">Save Role</button>
+                    <button onClick={saveRole} className="btn-primary w-full py-2.5 text-xs uppercase font-semibold">Save Role</button>
                   )}
                   {editingRole.is_system && (
-                    <p className="text-center text-slate-400 font-semibold">System roles are read-only and cannot be mutated.</p>
+                    <p className="text-center text-ink-subtle font-semibold">System roles are read-only and cannot be mutated.</p>
                   )}
                 </div>
               </div>
@@ -6057,48 +6057,48 @@ function ApprovalsTab({ authFetch }) {
   return (
     <div className="space-y-4">
       {/* Subtab Navigation */}
-      <div className="flex gap-2 border-b border-slate-150 pb-2">
-        <button onClick={() => setActiveSubTab('pending')} className={`px-4 py-1.5 text-xs font-bold uppercase rounded-lg transition-colors ${activeSubTab === 'pending' ? 'bg-brand-purple text-white' : 'text-brand-navy hover:bg-slate-50'}`}>Pending Queue</button>
-        <button onClick={() => setActiveSubTab('resolved')} className={`px-4 py-1.5 text-xs font-bold uppercase rounded-lg transition-colors ${activeSubTab === 'resolved' ? 'bg-brand-purple text-white' : 'text-brand-navy hover:bg-slate-50'}`}>History log</button>
+      <div className="flex gap-2 border-b border-edge-subtle pb-2">
+        <button onClick={() => setActiveSubTab('pending')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm transition-colors ${activeSubTab === 'pending' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Pending Queue</button>
+        <button onClick={() => setActiveSubTab('resolved')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm transition-colors ${activeSubTab === 'resolved' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>History log</button>
       </div>
 
       {error && <p className="rounded bg-brand-danger/10 p-2 text-xs text-brand-danger">{error}</p>}
 
       <div className="space-y-3">
         {filtered.map((req) => (
-          <div key={req.id} className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3 shadow-xs">
-            <div className="flex flex-wrap justify-between items-start gap-2 border-b border-slate-50 pb-2">
+          <div key={req.id} className="rounded-lg border border-edge bg-white p-5 space-y-3 shadow-card">
+            <div className="flex flex-wrap justify-between items-start gap-2 border-b border-edge-subtle pb-2">
               <div>
-                <span className="rounded bg-amber-100 text-amber-700 px-2 py-0.5 text-[9px] font-bold uppercase">{req.request_type}</span>
-                <h4 className="text-sm font-bold text-brand-navy mt-1">{req.summary}</h4>
-                <p className="text-[10px] text-brand-muted mt-0.5">Submitted by <span className="font-semibold text-brand-navy">{req.requester_email}</span> on {formatDateTime(req.created_at)}</p>
+                <span className="rounded bg-amber-50 text-ink-accent px-2 py-0.5 text-[9px] font-semibold uppercase">{req.request_type}</span>
+                <h4 className="text-sm font-semibold text-ink-primary mt-1">{req.summary}</h4>
+                <p className="text-[10px] text-brand-muted mt-0.5">Submitted by <span className="font-semibold text-ink-primary">{req.requester_email}</span> on {formatDateTime(req.created_at)}</p>
               </div>
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${req.status === 'PENDING' ? 'bg-amber-100 text-amber-700' : req.status === 'APPROVED' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+              <span className={`rounded-xs px-2 py-0.5 text-[10px] font-semibold ${req.status === 'PENDING' ? 'bg-amber-50 text-ink-accent' : req.status === 'APPROVED' ? 'bg-brand-success/10 text-ink-success' : 'bg-red-50 text-ink-danger'}`}>
                 {req.status}
               </span>
             </div>
 
-            <div className="grid gap-2 sm:grid-cols-2 text-xs text-brand-muted p-3 bg-slate-50 rounded-xl border border-slate-100 font-mono">
+            <div className="grid gap-2 sm:grid-cols-2 text-xs text-brand-muted p-3 bg-surface-muted rounded-md border border-edge-subtle font-mono">
               <div>
-                <p className="font-bold text-slate-400 uppercase text-[9px] tracking-wide mb-0.5">Threshold Details</p>
+                <p className="font-semibold text-ink-subtle uppercase text-[9px] tracking-wide mb-0.5">Threshold Details</p>
                 <pre className="text-[10px] leading-tight overflow-x-auto whitespace-pre-wrap">{JSON.stringify(req.details, null, 2)}</pre>
               </div>
               <div>
-                <p className="font-bold text-slate-400 uppercase text-[9px] tracking-wide mb-0.5">Action payload</p>
+                <p className="font-semibold text-ink-subtle uppercase text-[9px] tracking-wide mb-0.5">Action payload</p>
                 <pre className="text-[10px] leading-tight overflow-x-auto whitespace-pre-wrap">{JSON.stringify(req.payload, null, 2)}</pre>
               </div>
             </div>
 
             {req.status === 'PENDING' ? (
               <div className="flex justify-end gap-2 pt-1">
-                <button onClick={() => setRejectingReq(req)} className="text-xs px-4 py-2 border border-red-200 text-red-500 hover:bg-red-50 font-bold rounded-lg uppercase flex items-center gap-1"><X className="h-3.5 w-3.5" /> Reject</button>
-                <button onClick={() => handleApprove(req.id)} className="text-xs px-4 py-2 bg-green-600 text-white hover:bg-green-700 font-bold rounded-lg uppercase flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5" /> Approve &amp; Execute</button>
+                <button onClick={() => setRejectingReq(req)} className="text-xs px-4 py-2 border border-red-200 text-ink-danger hover:bg-red-50 font-semibold rounded-sm uppercase flex items-center gap-1"><X className="h-3.5 w-3.5" /> Reject</button>
+                <button onClick={() => handleApprove(req.id)} className="text-xs px-4 py-2 bg-ink-success text-white hover:bg-ink-success/90 font-semibold rounded-sm uppercase flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5" /> Approve &amp; Execute</button>
               </div>
             ) : (
-              <div className="text-[10px] text-brand-muted border-t border-slate-50 pt-2 flex flex-wrap gap-x-4">
-                <span>Resolved by: <span className="font-semibold text-brand-navy">{req.approver_email || 'system'}</span></span>
+              <div className="text-[10px] text-brand-muted border-t border-edge-subtle pt-2 flex flex-wrap gap-x-4">
+                <span>Resolved by: <span className="font-semibold text-ink-primary">{req.approver_email || 'system'}</span></span>
                 {req.resolved_at && <span>Resolved on: {formatDateTime(req.resolved_at)}</span>}
-                {req.rejection_reason && <span className="block w-full text-red-600 mt-1 font-semibold">Rejection reason: {req.rejection_reason}</span>}
+                {req.rejection_reason && <span className="block w-full text-ink-danger mt-1 font-semibold">Rejection reason: {req.rejection_reason}</span>}
               </div>
             )}
           </div>
@@ -6107,15 +6107,15 @@ function ApprovalsTab({ authFetch }) {
       </div>
 
       {rejectingReq && (
-        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-slate-50 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-          <div className="w-full max-w-md bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
-            <h3 className="text-lg font-black text-brand-navy">Reject Approval Request</h3>
+        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
+          <div className="w-full max-w-md bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
+            <h3 className="text-lg font-semibold text-ink-primary">Reject Approval Request</h3>
             <div className="space-y-3 text-xs">
               <p className="text-brand-muted">Please specify the reason for rejecting this change:</p>
-              <textarea rows={3} value={rejectionReason} onChange={(e) => setRejectionReason(e.target.value)} placeholder="Provide rejection feedback..." className="w-full rounded-lg border border-slate-200 p-2.5 text-xs" />
+              <textarea rows={3} value={rejectionReason} onChange={(e) => setRejectionReason(e.target.value)} placeholder="Provide rejection feedback..." className="w-full rounded-sm border border-edge p-2.5 text-xs" />
               <div className="flex gap-2">
-                <button onClick={handleReject} disabled={!rejectionReason.trim()} className="btn-primary flex-1 py-2.5 text-xs bg-red-600 text-white rounded-lg uppercase font-bold">Confirm Reject</button>
-                <button onClick={() => { setRejectingReq(null); setRejectionReason(''); }} className="flex-1 rounded-lg border border-slate-200 py-2.5 text-xs font-bold uppercase">Cancel</button>
+                <button onClick={handleReject} disabled={!rejectionReason.trim()} className="btn-primary flex-1 py-2.5 text-xs bg-red-700 uppercase font-semibold">Confirm Reject</button>
+                <button onClick={() => { setRejectingReq(null); setRejectionReason(''); }} className="flex-1 rounded-sm border border-edge py-2.5 text-xs font-semibold uppercase">Cancel</button>
               </div>
             </div>
           </div>
@@ -6177,25 +6177,25 @@ function AuditTab({ authFetch }) {
   return (
     <div className="space-y-4">
       {/* Filters bar */}
-      <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-3 md:grid-cols-[1fr_200px_200px_auto]">
+      <div className="grid gap-3 rounded-md border border-edge bg-white p-3 md:grid-cols-[1fr_200px_200px_auto]">
         <label className="relative block">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-muted" />
-          <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search audit summaries..." className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-xs focus:outline-none" />
+          <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search audit summaries..." className="w-full rounded-sm border border-edge py-2 pl-9 pr-3 text-xs focus:outline-none" />
         </label>
-        <select value={filterAction} onChange={(e) => setFilterAction(e.target.value)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs bg-white focus:outline-none">
+        <select value={filterAction} onChange={(e) => setFilterAction(e.target.value)} className="rounded-sm border border-edge px-3 py-2 text-xs bg-white focus:outline-none">
           <option value="ALL">All Actions</option>
           {actions.map((act) => <option key={act} value={act}>{act}</option>)}
         </select>
-        <input value={filterActor} onChange={(e) => setFilterActor(e.target.value)} placeholder="Filter actor email" className="rounded-lg border border-slate-200 px-3 py-2 text-xs focus:outline-none" />
-        <button onClick={loadLogs} className="btn-primary px-4 py-2 bg-brand-purple text-white text-xs uppercase font-bold rounded-lg hover:opacity-90">Apply</button>
+        <input value={filterActor} onChange={(e) => setFilterActor(e.target.value)} placeholder="Filter actor email" className="rounded-sm border border-edge px-3 py-2 text-xs focus:outline-none" />
+        <button onClick={loadLogs} className="btn-primary px-4 py-2 text-xs uppercase font-semibold">Apply</button>
       </div>
 
       {loading && logs.length === 0 ? (
         <p className="text-sm text-brand-muted">Querying audit logs trail...</p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-md border border-edge bg-white shadow-card">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 text-brand-muted font-bold">
+            <thead className="bg-surface-muted text-[10px] font-medium uppercase tracking-wide text-ink-muted border-b border-edge">
               <tr>
                 <th className="px-3 py-3">Timestamp</th>
                 <th className="px-3 py-3">Actor</th>
@@ -6207,13 +6207,13 @@ function AuditTab({ authFetch }) {
             </thead>
             <tbody>
               {logs.map((log) => (
-                <tr key={log.id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50" onClick={() => setSelectedLog(log)}>
+                <tr key={log.id} className="cursor-pointer border-t border-edge-subtle hover:bg-surface-muted" onClick={() => setSelectedLog(log)}>
                   <td className="px-3 py-3 font-mono text-[10px] text-brand-muted">{formatDateTime(log.created_at)}</td>
-                  <td className="px-3 py-3 font-bold text-brand-navy">{log.actor_email}</td>
-                  <td className="px-3 py-3 font-mono text-[10px]"><span className="rounded bg-slate-100 px-1.5 py-0.5 text-brand-purple">{log.action}</span></td>
-                  <td className="px-3 py-3 text-slate-500 font-mono text-[10px]">{log.target_type} #{log.target_id}</td>
-                  <td className="px-3 py-3 font-semibold text-brand-navy truncate max-w-[200px]">{log.summary}</td>
-                  <td className="px-3 py-3 font-mono text-slate-500">{log.ip_address}</td>
+                  <td className="px-3 py-3 font-semibold text-ink-primary">{log.actor_email}</td>
+                  <td className="px-3 py-3 font-mono text-[10px]"><span className="rounded bg-surface-muted px-1.5 py-0.5 text-ink-accent">{log.action}</span></td>
+                  <td className="px-3 py-3 text-ink-muted font-mono text-[10px]">{log.target_type} #{log.target_id}</td>
+                  <td className="px-3 py-3 font-semibold text-ink-primary truncate max-w-[200px]">{log.summary}</td>
+                  <td className="px-3 py-3 font-mono text-ink-muted">{log.ip_address}</td>
                 </tr>
               ))}
               {logs.length === 0 && <tr><td colSpan={6} className="px-3 py-8 text-center text-brand-muted text-xs">No audit logs matching query parameters.</td></tr>}
@@ -6233,37 +6233,37 @@ function AuditTab({ authFetch }) {
       )}
 
       {selectedLog && (
-        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-slate-50 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-          <div className="w-full max-w-lg bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
-            <div className="flex justify-between items-center pb-2 border-b border-slate-100">
-              <h3 className="text-lg font-black text-brand-navy">Audit Log Details</h3>
+        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
+          <div className="w-full max-w-lg bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
+            <div className="flex justify-between items-center pb-2 border-b border-edge-subtle">
+              <h3 className="text-lg font-semibold text-ink-primary">Audit Log Details</h3>
               <button onClick={() => setSelectedLog(null)}><X className="h-5 w-5 text-brand-muted" /></button>
             </div>
             <div className="space-y-3 text-xs">
-              <p><span className="font-bold uppercase text-brand-muted">Timestamp:</span> {formatDateTime(selectedLog.created_at)}</p>
-              <p><span className="font-bold uppercase text-brand-muted">Actor:</span> {selectedLog.actor_email} (IP: {selectedLog.ip_address})</p>
-              <p><span className="font-bold uppercase text-brand-muted">Action:</span> {selectedLog.action}</p>
-              <p><span className="font-bold uppercase text-brand-muted">Target:</span> {selectedLog.target_type} #{selectedLog.target_id}</p>
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                <p className="font-bold text-slate-400 mb-1">SUMMARY</p>
-                <p className="text-brand-navy font-semibold">{selectedLog.summary}</p>
+              <p><span className="font-semibold uppercase text-brand-muted">Timestamp:</span> {formatDateTime(selectedLog.created_at)}</p>
+              <p><span className="font-semibold uppercase text-brand-muted">Actor:</span> {selectedLog.actor_email} (IP: {selectedLog.ip_address})</p>
+              <p><span className="font-semibold uppercase text-brand-muted">Action:</span> {selectedLog.action}</p>
+              <p><span className="font-semibold uppercase text-brand-muted">Target:</span> {selectedLog.target_type} #{selectedLog.target_id}</p>
+              <div className="p-3 bg-surface-muted rounded-md border border-edge-subtle">
+                <p className="font-semibold text-ink-subtle mb-1">SUMMARY</p>
+                <p className="text-ink-primary font-semibold">{selectedLog.summary}</p>
               </div>
               <div>
-                <p className="font-bold text-brand-muted mb-1">DEVICE USER AGENT</p>
-                <p className="font-mono text-[10px] text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100">{selectedLog.user_agent}</p>
+                <p className="font-semibold text-brand-muted mb-1">DEVICE USER AGENT</p>
+                <p className="font-mono text-[10px] text-ink-muted bg-surface-muted p-2 rounded-lg border border-edge-subtle">{selectedLog.user_agent}</p>
               </div>
               {selectedLog.changes && Object.keys(selectedLog.changes).length > 0 && (
                 <div>
-                  <p className="font-bold text-brand-muted mb-1">CHANGESET DIFF (BEFORE → AFTER)</p>
-                  <div className="space-y-1 max-h-40 overflow-y-auto bg-slate-50 p-2 rounded-lg border border-slate-100 font-mono text-[10px] mb-2">
+                  <p className="font-semibold text-brand-muted mb-1">CHANGESET DIFF (BEFORE → AFTER)</p>
+                  <div className="space-y-1 max-h-40 overflow-y-auto bg-surface-muted p-2 rounded-lg border border-edge-subtle font-mono text-[10px] mb-2">
                     {Object.entries(selectedLog.changes).map(([field, val]) => {
                       const before = Array.isArray(val) ? val[0] : '—';
                       const after = Array.isArray(val) ? val[1] : val;
                       return (
-                        <div key={field} className="border-b border-slate-200/50 pb-1">
-                          <span className="font-semibold text-brand-purple">{field}:</span>
-                          <span className="text-red-500 line-through ml-1">{JSON.stringify(before)}</span>
-                          <span className="text-green-600 ml-1">→ {JSON.stringify(after)}</span>
+                        <div key={field} className="border-b border-edge pb-1">
+                          <span className="font-semibold text-ink-accent">{field}:</span>
+                          <span className="text-ink-danger line-through ml-1">{JSON.stringify(before)}</span>
+                          <span className="text-ink-success ml-1">→ {JSON.stringify(after)}</span>
                         </div>
                       );
                     })}
@@ -6283,7 +6283,7 @@ function AuditTab({ authFetch }) {
                           .catch((e) => alert(e.message));
                       }
                     }}
-                    className="w-full mt-2 py-2 bg-brand-orange hover:bg-brand-orange/90 text-white font-bold rounded-lg uppercase text-[10px]"
+                    className="w-full mt-2 py-2 bg-brand-accent hover:bg-brand-accent/90 text-white font-semibold rounded-lg uppercase text-[10px]"
                   >
                     Rollback Configuration Changes
                   </button>
@@ -6349,62 +6349,62 @@ function SecurityCenterTab({ authFetch, user, onSaved }) {
   };
 
   return (
-    <div className="space-y-6 text-xs bg-white rounded-2xl border border-slate-200 p-5 shadow-xs">
+    <div className="space-y-6 text-xs bg-white rounded-lg border border-edge p-5 shadow-card">
       <div>
-        <h3 className="text-sm font-bold text-brand-navy mb-1 uppercase">Account Security Status</h3>
+        <h3 className="text-sm font-semibold text-ink-primary mb-1 uppercase">Account Security Status</h3>
         <p className="text-brand-muted mb-3">Manage Two-Factor Authentication and whitelist range settings for your staff profile.</p>
         
-        {success && <p className="rounded bg-green-100 p-2.5 text-xs text-green-700 font-bold mb-3">{success}</p>}
-        {error && <p className="rounded bg-brand-danger/10 p-2.5 text-xs text-brand-danger font-bold mb-3">{error}</p>}
+        {success && <p className="rounded bg-brand-success/10 p-2.5 text-xs text-ink-success font-semibold mb-3">{success}</p>}
+        {error && <p className="rounded bg-brand-danger/10 p-2.5 text-xs text-brand-danger font-semibold mb-3">{error}</p>}
         
         <div className="space-y-3">
-          <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 cursor-pointer">
-            <input type="checkbox" checked={user.two_factor_enabled} disabled={saving} onChange={handleToggle2FA} className="mt-0.5 h-4 w-4 accent-brand-purple" />
+          <label className="flex items-start gap-3 rounded-md border border-edge bg-white shadow-card p-4 cursor-pointer">
+            <input type="checkbox" checked={user.two_factor_enabled} disabled={saving} onChange={handleToggle2FA} className="mt-0.5 h-4 w-4 accent-ink-primary" />
             <span>
-              <span className="block text-sm font-semibold text-brand-navy">Enable 2-Step OTP Authentication</span>
+              <span className="block text-sm font-semibold text-ink-primary">Enable 2-Step OTP Authentication</span>
               <span className="block text-xs text-brand-muted mt-0.5">Enforces a 6-digit OTP code sent to your registered email ({user.email}) during sign-in.</span>
             </span>
           </label>
           
           {user.allowed_ip_range && (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 font-mono">
-              <span className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Active IP Whitelist restrictions</span>
-              <span className="text-brand-navy font-semibold">{user.allowed_ip_range}</span>
-              <p className="text-[10px] text-slate-400 mt-1 font-sans">You are restricted to connecting only from these IP addresses. Contact Super Admin to update your IP scope.</p>
+            <div className="rounded-md border border-edge bg-surface-muted p-4 font-mono">
+              <span className="block text-[10px] font-semibold text-ink-subtle uppercase mb-1">Active IP Whitelist restrictions</span>
+              <span className="text-ink-primary font-semibold">{user.allowed_ip_range}</span>
+              <p className="text-[10px] text-ink-subtle mt-1 font-sans">You are restricted to connecting only from these IP addresses. Contact Super Admin to update your IP scope.</p>
             </div>
           )}
         </div>
       </div>
 
-      <div className="border-t border-slate-100 pt-4">
-        <h3 className="text-xs font-bold text-brand-navy mb-1 uppercase">Active login sessions</h3>
+      <div className="border-t border-edge-subtle pt-4">
+        <h3 className="text-xs font-semibold text-ink-primary mb-1 uppercase">Active login sessions</h3>
         <p className="text-brand-muted mb-3">These devices are currently logged in. Terminating other sessions logs out all other browsers.</p>
         
         <div className="space-y-2 mb-4">
           {(user.current_devices || []).map((dev, idx) => {
             const isCurrent = dev.id === currentSessionId;
             return (
-              <div key={idx} className="flex justify-between items-center p-3 rounded-lg border border-slate-100 bg-slate-50 font-mono text-[10px]">
+              <div key={idx} className="flex justify-between items-center p-3 rounded-lg border border-edge-subtle bg-surface-muted font-mono text-[10px]">
                 <div className="space-y-0.5">
-                  <span className="font-bold text-brand-navy">{dev.ip}</span>
-                  <span className="block text-slate-400 font-sans">{dev.user_agent.substring(0, 50)}...</span>
+                  <span className="font-semibold text-ink-primary">{dev.ip}</span>
+                  <span className="block text-ink-subtle font-sans">{dev.user_agent.substring(0, 50)}...</span>
                 </div>
                 <div className="text-right">
                   {isCurrent ? (
-                    <span className="rounded bg-brand-purple/10 text-brand-purple px-1.5 py-0.5 text-[9px] font-bold font-sans">CURRENT SESSION</span>
+                    <span className="rounded bg-surface-muted text-ink-accent px-1.5 py-0.5 text-[9px] font-semibold font-sans">CURRENT SESSION</span>
                   ) : (
-                    <span className="text-slate-400 font-sans">Active: {new Date(dev.last_active).toLocaleDateString()}</span>
+                    <span className="text-ink-subtle font-sans">Active: {new Date(dev.last_active).toLocaleDateString()}</span>
                   )}
                 </div>
               </div>
             );
           })}
           {(!user.current_devices || user.current_devices.length === 0) && (
-            <p className="text-slate-400 italic">No device session logging enabled.</p>
+            <p className="text-ink-subtle italic">No device session logging enabled.</p>
           )}
         </div>
         
-        <button onClick={handleTerminateSessions} disabled={saving || (user.current_devices || []).length <= 1} className="btn-secondary w-full py-2.5 border border-red-200 text-red-500 hover:bg-red-50 font-bold rounded-lg uppercase disabled:opacity-50">Log Out of Other Devices</button>
+        <button onClick={handleTerminateSessions} disabled={saving || (user.current_devices || []).length <= 1} className="btn-secondary w-full py-2.5 border border-red-200 text-ink-danger hover:bg-red-50 font-semibold rounded-sm uppercase disabled:opacity-50">Log Out of Other Devices</button>
       </div>
     </div>
   );
@@ -6454,9 +6454,9 @@ export default function AdminPage() {
       <StoreShell showFooter={false}>
         <div className="mx-auto max-w-2xl px-4 py-16 text-center">
           <ShieldAlert className="mx-auto mb-3 h-10 w-10 text-brand-muted" />
-          <h1 className="mb-2 text-xl font-black text-brand-navy">Admin access</h1>
+          <h1 className="mb-2 text-xl font-semibold text-ink-primary">Admin access</h1>
           <p className="mb-4 text-sm text-brand-muted">Please log in with an administrator account.</p>
-          <Link href="/account" className="btn-primary inline-flex px-5 py-2.5 text-xs uppercase bg-brand-purple text-white rounded-lg">Go to login</Link>
+          <Link href="/account" className="btn-primary inline-flex px-5 py-2.5 text-xs uppercase">Go to login</Link>
         </div>
       </StoreShell>
     );
@@ -6466,7 +6466,7 @@ export default function AdminPage() {
       <StoreShell showFooter={false}>
         <div className="mx-auto max-w-2xl px-4 py-16 text-center">
           <ShieldAlert className="mx-auto mb-3 h-10 w-10 text-brand-danger" />
-          <h1 className="mb-2 text-xl font-black text-brand-navy">Not authorised</h1>
+          <h1 className="mb-2 text-xl font-semibold text-ink-primary">Not authorised</h1>
           <p className="text-sm text-brand-muted">Your account ({user.email}) does not have admin access.</p>
         </div>
       </StoreShell>
@@ -6477,12 +6477,12 @@ export default function AdminPage() {
 
   const SidebarContent = ({ isMobile = false, onClose = () => {} }) => (
     <div className="flex flex-col h-full">
-      <div className="mb-3 flex items-center gap-2 px-2 pb-3 border-b border-slate-100">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-purple text-white">
+      <div className="mb-3 flex items-center gap-2 px-2 pb-3 border-b border-edge-subtle">
+        <span className="flex h-8 w-8 items-center justify-center rounded-sm bg-ink-primary text-white">
           <LayoutDashboard className="h-4 w-4" />
         </span>
         <div className="leading-tight">
-          <span className="block text-sm font-black text-brand-navy">Admin</span>
+          <span className="block text-sm font-semibold text-ink-primary">Admin</span>
           <span className="block text-[10px] text-brand-muted">Sclero Proteins</span>
         </div>
       </div>
@@ -6490,14 +6490,14 @@ export default function AdminPage() {
         {NAV_GROUPS.map((group, gi) => (
           <div key={gi} className="mb-1">
             {group.title && (
-              <p className="px-2 pb-1 pt-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">{group.title}</p>
+              <p className="kicker px-2 pb-1 pt-3">{group.title}</p>
             )}
             {group.items.map((n) => (
               <button key={n.key} onClick={() => { setSection(n.key); if (isMobile) onClose(); }}
-                className={`relative flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-semibold transition-colors ${
-                  section === n.key ? 'bg-brand-purple/10 text-brand-purple' : 'text-brand-navy hover:bg-slate-50'
+                className={`relative flex w-full items-center gap-2.5 rounded-sm px-2.5 py-2 text-[13px] font-medium transition-colors ${
+                  section === n.key ? 'bg-surface-muted text-ink-primary' : 'text-ink-secondary hover:bg-surface-muted hover:text-ink-primary'
                 }`}>
-                {section === n.key && <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-brand-purple" />}
+                {section === n.key && <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-ink-primary" />}
                 <n.icon className="h-4 w-4" /> {n.label}
               </button>
             ))}
@@ -6509,9 +6509,9 @@ export default function AdminPage() {
 
   return (
     <StoreShell showFooter={false}>
-      <div className="flex min-h-[calc(100vh-65px)] bg-slate-50 relative">
+      <div className="flex min-h-[calc(100vh-65px)] bg-brand-bg relative">
         {/* Desktop Sidebar (Fixed Left) */}
-        <aside className="hidden md:block w-64 border-r border-slate-200 bg-white fixed left-0 top-[65px] bottom-0 z-30 p-4">
+        <aside className="hidden md:block w-64 border-r border-edge bg-white fixed left-0 top-[65px] bottom-0 z-30 p-4">
           <SidebarContent />
         </aside>
 
@@ -6519,12 +6519,12 @@ export default function AdminPage() {
         {mobileMenuOpen && (
           <div className="fixed inset-0 z-50 flex md:hidden">
             {/* Backdrop */}
-            <div className="fixed inset-0 bg-brand-navy/30 backdrop-blur-xs" onClick={() => setMobileMenuOpen(false)} />
-            
+            <div className="fixed inset-0 bg-surface-overlay backdrop-blur-sm" onClick={() => setMobileMenuOpen(false)} />
+
             {/* Drawer Content */}
-            <aside className="relative flex w-64 max-w-xs flex-col bg-white p-4 shadow-2xl z-10 h-full">
+            <aside className="relative flex w-64 max-w-xs flex-col bg-white p-4 shadow-overlay z-10 h-full">
               <div className="absolute right-2 top-2">
-                <button onClick={() => setMobileMenuOpen(false)} className="rounded-lg p-2 text-brand-muted hover:bg-slate-50">
+                <button onClick={() => setMobileMenuOpen(false)} className="rounded-sm p-2 text-brand-muted hover:bg-surface-muted">
                   <X className="h-5 w-5" />
                 </button>
               </div>
@@ -6536,18 +6536,18 @@ export default function AdminPage() {
         {/* Main Content Pane */}
         <main className="flex-1 min-w-0 py-4 pr-4 pl-4 sm:py-6 sm:pr-6 sm:pl-6 lg:py-8 lg:pr-8 md:pl-[280px] lg:pl-[288px] space-y-6">
           {/* Top Control Bar for Mobile (sticky) */}
-        <div className="sticky top-[65px] z-20 -mx-4 sm:-mx-6 mb-3 flex items-center justify-between gap-3 border-b border-slate-200 bg-white/95 px-4 sm:px-6 py-2.5 backdrop-blur md:hidden">
-          <button onClick={() => setMobileMenuOpen(true)} aria-label="Open admin menu" className="inline-flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-brand-navy">
+        <div className="sticky top-[65px] z-20 -mx-4 sm:-mx-6 mb-3 flex items-center justify-between gap-3 border-b border-edge bg-white/95 px-4 sm:px-6 py-2.5 backdrop-blur md:hidden">
+          <button onClick={() => setMobileMenuOpen(true)} aria-label="Open admin menu" className="inline-flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-sm border border-edge bg-white px-3 text-xs font-semibold text-ink-primary">
             <MenuIcon className="h-5 w-5" />
             <span className="sr-only sm:not-sr-only">Menu</span>
           </button>
-          <span className="flex-1 truncate text-center text-sm font-bold text-brand-navy capitalize">{active?.label}</span>
+          <span className="flex-1 truncate text-center text-sm font-semibold text-ink-primary capitalize">{active?.label}</span>
         </div>
 
           <div className="mb-6 hidden md:flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-brand-purple font-mono">Admin Console</p>
-              <h1 className="mt-1 text-2xl font-black text-brand-navy">{active?.label}</h1>
+              <p className="kicker">Admin Console</p>
+              <h1 className="mt-1 font-display font-medium text-[26px] text-ink-primary">{active?.label}</h1>
             </div>
           </div>
 

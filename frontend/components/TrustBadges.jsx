@@ -16,37 +16,37 @@ export default function TrustBadges({
     'GMP': {
       label: 'GMP Certified',
       icon: <CheckCircle className="h-4 w-4" />,
-      color: 'bg-blue-50 text-blue-700 border-blue-200',
+      color: 'bg-surface-muted text-ink-secondary border-edge',
       description: 'Good Manufacturing Practice certified facility'
     },
     'ISO 22000': {
       label: 'ISO 22000',
       icon: <Shield className="h-4 w-4" />,
-      color: 'bg-green-50 text-green-700 border-green-200',
+      color: 'bg-surface-muted text-ink-secondary border-edge',
       description: 'Food Safety Management certified'
     },
     'HACCP': {
       label: 'HACCP Compliant',
       icon: <CheckCircle className="h-4 w-4" />,
-      color: 'bg-purple-50 text-purple-700 border-purple-200',
+      color: 'bg-surface-muted text-ink-secondary border-edge',
       description: 'Hazard Analysis & Critical Control Points'
     },
     'Lab Tested': {
       label: 'Lab Tested',
       icon: <Award className="h-4 w-4" />,
-      color: 'bg-amber-50 text-amber-700 border-amber-200',
+      color: 'bg-surface-muted text-ink-secondary border-edge',
       description: 'Third-party laboratory tested'
     },
     'Money-Back Guarantee': {
       label: '30-Day Guarantee',
       icon: <CheckCircle className="h-4 w-4" />,
-      color: 'bg-red-50 text-red-700 border-red-200',
+      color: 'bg-surface-muted text-ink-secondary border-edge',
       description: 'Risk-free 30-day money-back guarantee'
     },
     'Trustpilot': {
       label: 'Trustpilot Verified',
       icon: <Star className="h-4 w-4" />,
-      color: 'bg-yellow-50 text-yellow-700 border-yellow-200',
+      color: 'bg-surface-muted text-ink-secondary border-edge',
       description: 'Verified customer reviews on Trustpilot'
     }
   };
@@ -87,14 +87,14 @@ export default function TrustBadges({
       {badges.map((badge) => (
         <div
           key={badge.type}
-          className={`inline-flex items-center gap-1 rounded-full border ${badge.color} ${sizeClasses[size]} font-semibold whitespace-nowrap group relative cursor-help`}
+          className={`inline-flex items-center gap-1 rounded-xs border ${badge.color} ${sizeClasses[size]} font-medium uppercase tracking-wide whitespace-nowrap group relative cursor-help`}
           title={badge.description}
         >
           {badge.icon}
           <span>{badge.label}</span>
 
           {/* Tooltip on hover */}
-          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block bg-slate-900 text-white text-[11px] px-2 py-1 rounded whitespace-nowrap z-10">
+          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block bg-surface-inverse text-white text-[11px] px-2 py-1 rounded-xs whitespace-nowrap z-10">
             {badge.description}
           </div>
         </div>
@@ -102,7 +102,7 @@ export default function TrustBadges({
 
       {/* Customer Count Badge */}
       {customerCount && (
-        <div className={`inline-flex items-center gap-1 rounded-full border bg-slate-50 text-slate-700 border-slate-200 ${sizeClasses[size]} font-semibold whitespace-nowrap`}>
+        <div className={`inline-flex items-center gap-1 rounded-xs border bg-surface-muted text-ink-secondary border-edge ${sizeClasses[size]} font-medium uppercase tracking-wide whitespace-nowrap`}>
           <CheckCircle className="h-4 w-4" />
           <span>{customerCount.toLocaleString()}+ customers</span>
         </div>
@@ -114,10 +114,10 @@ export default function TrustBadges({
 // Export a compact version for product cards
 export function CompactTrustBadges({ certifications = [], size = 'sm' }) {
   const certIcons = {
-    'GMP': { icon: '✓', color: 'bg-blue-50 text-blue-700' },
-    'ISO 22000': { icon: '✓', color: 'bg-green-50 text-green-700' },
-    'HACCP': { icon: '✓', color: 'bg-purple-50 text-purple-700' },
-    'Lab Tested': { icon: '✓', color: 'bg-amber-50 text-amber-700' },
+    'GMP': { icon: '✓', color: 'bg-surface-muted text-ink-accent' },
+    'ISO 22000': { icon: '✓', color: 'bg-surface-muted text-ink-accent' },
+    'HACCP': { icon: '✓', color: 'bg-surface-muted text-ink-accent' },
+    'Lab Tested': { icon: '✓', color: 'bg-surface-muted text-ink-accent' },
   };
 
   return (
@@ -125,15 +125,15 @@ export function CompactTrustBadges({ certifications = [], size = 'sm' }) {
       {certifications.slice(0, 3).map((cert) => (
         <span
           key={cert}
-          className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-            certIcons[cert]?.color || 'bg-slate-100 text-slate-700'
+          className={`px-1.5 py-0.5 rounded-xs text-[10px] font-semibold uppercase tracking-wide ${
+            certIcons[cert]?.color || 'bg-surface-muted text-ink-secondary'
           }`}
         >
           {cert}
         </span>
       ))}
       {certifications.length > 3 && (
-        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">
+        <span className="px-1.5 py-0.5 rounded-xs text-[10px] font-semibold uppercase tracking-wide bg-surface-muted text-ink-secondary">
           +{certifications.length - 3}
         </span>
       )}

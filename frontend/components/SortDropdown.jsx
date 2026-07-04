@@ -26,7 +26,7 @@ export default function SortDropdown({ onSortChange = () => {}, currentSort = 'p
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-brand-navy hover:border-brand-purple transition-colors"
+        className="flex items-center gap-2 rounded-sm border border-edge bg-surface px-4 py-2.5 text-sm font-medium text-ink-primary hover:border-edge-strong transition-colors"
       >
         {currentLabel}
         <ChevronDown
@@ -35,19 +35,19 @@ export default function SortDropdown({ onSortChange = () => {}, currentSort = 'p
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-56 rounded-lg border border-slate-200 bg-white shadow-lg z-30">
+        <div className="absolute right-0 mt-2 w-56 overflow-hidden rounded-md border border-edge bg-surface shadow-elevated z-30">
           {sortOptions.map((option) => (
             <button
               key={option.value}
               onClick={() => handleSort(option.value)}
-              className={`w-full px-4 py-3 text-left border-b border-slate-100 last:border-b-0 transition-colors ${
+              className={`w-full px-4 py-3 text-left border-b border-edge-subtle last:border-b-0 transition-colors ${
                 currentSort === option.value
-                  ? 'bg-brand-purple/10 text-brand-purple'
-                  : 'hover:bg-slate-50 text-brand-text'
+                  ? 'bg-surface-muted text-ink-accent'
+                  : 'hover:bg-surface-muted/60 text-ink-secondary'
               }`}
             >
-              <div className="font-semibold text-sm">{option.label}</div>
-              <div className="text-[11px] text-brand-muted">{option.description}</div>
+              <div className="font-medium text-sm">{option.label}</div>
+              <div className="text-[11px] text-ink-muted">{option.description}</div>
             </button>
           ))}
         </div>

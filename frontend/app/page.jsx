@@ -3,7 +3,7 @@ import { getApiUrl } from '../lib/api';
 import HomePageClient from './HomePageClient';
 
 export const metadata = {
-  title: 'Home | Sclero Proteins',
+  title: 'Home',
   description: 'Sclero Proteins — clinically-formulated bone, joint, and active-nutrition supplements. Lab-certified, label-transparent, shipped across the UK and India.',
   alternates: {
     canonical: '/',

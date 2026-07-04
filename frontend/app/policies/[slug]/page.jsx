@@ -204,17 +204,17 @@ export default async function PolicyPage({ params }) {
 
   return (
     <StoreShell>
-      <div className="bg-slate-50 py-12 border-b border-slate-200/80">
+      <div className="bg-surface-muted py-16 md:py-20 border-b border-edge">
         <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-purple/10 text-brand-purple">
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-md border border-edge bg-surface text-brand-accent">
               <IconComponent className="h-6 w-6" />
             </div>
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-brand-purple">
+              <p className="kicker">
                 Legal & Info Center
               </p>
-              <h1 className="text-3xl font-black text-brand-navy tracking-tight mt-1">
+              <h1 className="text-heading-1 mt-1">
                 {policy.title}
               </h1>
             </div>
@@ -227,7 +227,7 @@ export default async function PolicyPage({ params }) {
           
           {/* Policy Links Navigation */}
           <aside className="md:col-span-3 space-y-2">
-            <p className="text-[10px] font-extrabold uppercase tracking-wider text-brand-muted px-2.5">
+            <p className="kicker px-2.5">
               Available Pages
             </p>
             <nav className="flex flex-col gap-1.5">
@@ -235,10 +235,10 @@ export default async function PolicyPage({ params }) {
                 <Link
                   key={k}
                   href={`/policies/${k}`}
-                  className={`rounded-xl px-3 py-2 text-xs font-semibold transition-all ${
+                  className={`rounded-sm px-3 py-2 text-xs font-medium transition-all ${
                     slug === k
-                      ? 'bg-brand-purple/10 text-brand-purple font-bold'
-                      : 'text-brand-navy hover:bg-slate-50'
+                      ? 'bg-surface-muted text-ink-accent font-semibold'
+                      : 'text-ink-secondary hover:bg-surface-muted hover:text-ink-primary'
                   }`}
                 >
                   {val.title}
@@ -249,28 +249,28 @@ export default async function PolicyPage({ params }) {
 
           {/* Main content body */}
           <main className="md:col-span-9 space-y-8">
-            <div className="flex items-center justify-between border-b border-slate-200/80 pb-4">
-              <span className="text-[11px] font-medium text-brand-muted">
+            <div className="flex items-center justify-between border-b border-edge pb-4">
+              <span className="text-[11px] font-medium text-ink-muted">
                 Last updated: {policy.lastUpdated}
               </span>
-              <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-brand-navy">
+              <span className="rounded-full border border-edge bg-surface-muted px-2.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-ink-muted">
                 Official Document
               </span>
             </div>
 
-            <div className="space-y-6">
+            <div className="divide-y divide-edge">
               {policy.sections.map((sec, i) => (
-                <div key={i} className="space-y-2">
-                  <h2 className="text-base font-black text-brand-navy">{sec.heading}</h2>
-                  <p className="text-sm leading-relaxed text-brand-muted">{sec.text}</p>
+                <div key={i} className="space-y-2 py-6 first:pt-0 last:pb-0">
+                  <h2 className="text-heading-3">{sec.heading}</h2>
+                  <p className="text-[15px] leading-[1.8] text-ink-secondary">{sec.text}</p>
                 </div>
               ))}
             </div>
 
             {/* Special Contact Us Form */}
             {policy.isContactForm && (
-              <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-                <h3 className="text-sm font-black text-brand-navy uppercase tracking-wider mb-4">
+              <div className="rounded-md border border-edge bg-surface p-6 shadow-card">
+                <h3 className="kicker mb-4 !text-ink-accent">
                   Send a Support Ticket
                 </h3>
                 <ContactForm />

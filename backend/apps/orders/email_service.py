@@ -59,7 +59,7 @@ def _get_smtp_config():
         'username': _get('EMAIL_HOST_USER', getattr(settings, 'EMAIL_HOST_USER', '')),
         'password': _get('EMAIL_HOST_PASSWORD', getattr(settings, 'EMAIL_HOST_PASSWORD', '')),
         'use_tls': use_tls,
-        'from_email': _get('DEFAULT_FROM_EMAIL', getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@scleroproteins.co.uk')),
+        'from_email': _get('DEFAULT_FROM_EMAIL', getattr(settings, 'DEFAULT_FROM_EMAIL', 'support@scleroproteins.co.uk')),
     }
 
 

@@ -209,7 +209,7 @@ export default function QuizComponent({ onComplete = () => {}, variant = 'modal'
 
   if (isCompleted) {
     return (
-      <div className="rounded-3xl border-2 border-brand-purple bg-gradient-to-b from-brand-purple/10 to-transparent p-8 text-center">
+      <div className="rounded-lg border border-edge bg-surface p-8 text-center shadow-card">
         {/* Success Icon */}
         <div className="mb-6 flex justify-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-brand-success text-4xl">
@@ -218,31 +218,31 @@ export default function QuizComponent({ onComplete = () => {}, variant = 'modal'
         </div>
 
         {/* Recommendation */}
-        <h2 className="mb-2 text-2xl font-black text-brand-navy">Perfect Match Found!</h2>
-        <p className="mb-6 text-sm text-brand-muted">
+        <h2 className="mb-2 font-display text-2xl font-medium text-ink-primary">Perfect Match Found!</h2>
+        <p className="mb-6 text-sm text-ink-muted">
           Based on your answers, we found the ideal product for you
         </p>
 
         {/* Product Card */}
-        <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-6">
+        <div className="mb-6 rounded-md border border-edge bg-surface p-6 shadow-card">
           <div className="mb-4 text-center">
-            <span className="inline-block rounded-full bg-brand-purple/10 px-4 py-2 text-xs font-bold text-brand-purple">
+            <span className="inline-block rounded-xs bg-surface-muted px-4 py-2 text-xs font-semibold uppercase tracking-wide text-ink-accent">
               {recommendation.match} Match
             </span>
           </div>
 
-          <h3 className="mb-2 text-xl font-bold text-brand-navy">{recommendation.name}</h3>
-          <p className="mb-4 text-sm text-brand-muted">{recommendation.reason}</p>
+          <h3 className="mb-2 font-display text-xl font-medium text-ink-primary">{recommendation.name}</h3>
+          <p className="mb-4 text-sm text-ink-muted">{recommendation.reason}</p>
 
           <button
             onClick={handleAddToCart}
-            className="w-full rounded-lg bg-brand-purple py-3 font-bold uppercase text-white hover:bg-brand-purple/90 transition-colors mb-2"
+            className="btn-primary mb-2 w-full px-6 py-3 text-sm"
           >
             Add to Cart
           </button>
           <button
             onClick={handleReset}
-            className="w-full rounded-lg border border-slate-200 bg-white py-3 font-bold uppercase text-brand-navy hover:bg-slate-50 transition-colors flex items-center justify-center gap-2"
+            className="btn-ghost flex w-full items-center justify-center gap-2 px-6 py-3 text-sm"
           >
             <RotateCcw className="h-4 w-4" />
             Start Over
@@ -250,16 +250,16 @@ export default function QuizComponent({ onComplete = () => {}, variant = 'modal'
         </div>
 
         {/* Your Answers Summary */}
-        <div className="rounded-lg bg-slate-50 p-4 text-left">
-          <p className="mb-3 text-xs font-bold uppercase text-brand-muted">Your Preferences</p>
+        <div className="rounded-md bg-surface-muted p-4 text-left">
+          <p className="kicker mb-3">Your Preferences</p>
           <div className="space-y-2 text-xs">
             {Object.entries(answers).map(([key, value]) => {
               const stepData = QUIZ_STEPS.find((s) => s.id === key);
               const option = stepData?.options.find((o) => o.value === value);
               return (
                 <div key={key} className="flex justify-between">
-                  <span className="text-brand-muted">{stepData?.title}:</span>
-                  <span className="font-bold text-brand-navy">{option?.label}</span>
+                  <span className="text-ink-muted">{stepData?.title}:</span>
+                  <span className="font-semibold text-ink-primary">{option?.label}</span>
                 </div>
               );
             })}
@@ -270,24 +270,24 @@ export default function QuizComponent({ onComplete = () => {}, variant = 'modal'
   }
 
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-8">
+    <div className="rounded-lg border border-edge bg-surface p-8 shadow-card">
       {/* Progress Indicator */}
       <div className="mb-8">
-        <div className="mb-2 flex justify-between text-xs font-bold text-brand-muted">
+        <div className="mb-2 flex justify-between text-xs font-medium text-ink-muted">
           <span>Question {currentStep + 1}</span>
           <span>{currentStep + 1} of {QUIZ_STEPS.length}</span>
         </div>
-        <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+        <div className="h-1 overflow-hidden rounded-full bg-edge-subtle">
           <div
-            className="h-full bg-brand-purple transition-all duration-300"
+            className="h-full bg-ink-primary transition-all duration-300"
             style={{ width: `${((currentStep + 1) / QUIZ_STEPS.length) * 100}%` }}
           />
         </div>
       </div>
 
       {/* Question */}
-      <h2 className="mb-2 text-2xl font-black text-brand-navy">{step.title}</h2>
-      <p className="mb-6 text-sm text-brand-muted">{step.subtitle}</p>
+      <h2 className="mb-2 font-display text-2xl font-medium text-ink-primary">{step.title}</h2>
+      <p className="mb-6 text-sm text-ink-muted">{step.subtitle}</p>
 
       {/* Options */}
       <div className="mb-8 space-y-3">
@@ -295,16 +295,16 @@ export default function QuizComponent({ onComplete = () => {}, variant = 'modal'
           <button
             key={option.value}
             onClick={() => handleSelectOption(option.value)}
-            className={`w-full rounded-xl border-2 p-4 text-left transition-all ${
+            className={`w-full rounded-md border p-4 text-left transition-all duration-300 ${
               answers[step.id] === option.value
-                ? 'border-brand-purple bg-brand-purple/10'
-                : 'border-slate-200 bg-white hover:border-brand-purple/50'
+                ? 'border-ink-primary bg-surface shadow-card'
+                : 'border-edge bg-surface hover:border-edge-strong hover:shadow-card'
             }`}
           >
             <div className="flex items-start justify-between">
               <div className="flex-1">
-                <div className="font-bold text-brand-navy">{option.label}</div>
-                <div className="text-xs text-brand-muted">{option.description}</div>
+                <div className="font-semibold text-ink-primary">{option.label}</div>
+                <div className="text-xs text-ink-muted">{option.description}</div>
               </div>
               <span className="ml-3 text-2xl">{option.icon}</span>
             </div>
@@ -317,14 +317,14 @@ export default function QuizComponent({ onComplete = () => {}, variant = 'modal'
         <button
           onClick={handleGoBack}
           disabled={currentStep === 0}
-          className="flex-1 rounded-lg border border-slate-200 bg-white py-3 font-bold uppercase text-brand-navy hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="btn-ghost flex-1 px-6 py-3 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Back
         </button>
         <button
           onClick={() => handleSelectOption(answers[step.id])}
           disabled={!answers[step.id]}
-          className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-brand-purple py-3 font-bold uppercase text-white hover:bg-brand-purple/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="btn-primary flex-1 flex items-center justify-center gap-2 px-6 py-3 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isLastStep ? 'Get Recommendation' : 'Next'}
           <ChevronRight className="h-4 w-4" />

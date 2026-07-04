@@ -18,31 +18,31 @@ export default function BlogArticle({ slug }) {
       .finally(() => setLoading(false));
   }, [slug]);
 
-  if (loading) return <p className="text-sm text-brand-muted">Loading article...</p>;
+  if (loading) return <p className="text-sm text-ink-muted">Loading article...</p>;
 
   if (!post) {
     return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center">
-        <h1 className="text-xl font-black text-brand-navy">Article not found</h1>
-        <Link href="/blog" className="mt-4 inline-flex text-sm font-bold text-brand-purple">Back to Science Library</Link>
+      <div className="rounded-md border border-edge bg-surface p-8 text-center shadow-card">
+        <h1 className="text-heading-3">Article not found</h1>
+        <Link href="/blog" className="mt-4 inline-flex text-sm font-medium text-ink-accent">Back to Science Library</Link>
       </div>
     );
   }
 
   return (
     <article className="mx-auto max-w-3xl">
-      <Link href="/blog" className="mb-8 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-brand-purple">
+      <Link href="/blog" className="kicker mb-8 inline-flex items-center gap-2 !text-ink-accent">
         <ArrowLeft className="h-4 w-4" /> Science Library
       </Link>
       {post.cover_image_url && (
-        <img src={post.cover_image_url} alt={post.title} className="mb-8 h-72 w-full rounded-2xl object-cover" />
+        <img src={post.cover_image_url} alt={post.title} className="mb-8 h-72 w-full rounded-md object-cover" />
       )}
-      <p className="text-xs font-black uppercase tracking-widest text-brand-purple">{post.author}</p>
-      <h1 className="mt-3 text-4xl font-black tracking-tight text-brand-navy">{post.title}</h1>
+      <p className="kicker !text-ink-accent">{post.author}</p>
+      <h1 className="text-heading-1 mt-3">{post.title}</h1>
       {post.published_at && (
-        <p className="mt-3 text-xs text-brand-muted">Published {new Date(post.published_at).toLocaleDateString()}</p>
+        <p className="mt-3 text-xs text-ink-subtle">Published {new Date(post.published_at).toLocaleDateString()}</p>
       )}
-      <div className="mt-8 whitespace-pre-line text-sm leading-8 text-brand-muted">
+      <div className="mt-8 whitespace-pre-line text-[15px] leading-[1.8] text-ink-secondary">
         {post.content}
       </div>
       <script

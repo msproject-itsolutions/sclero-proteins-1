@@ -316,38 +316,38 @@ function CheckoutModalInner({ onClose }) {
     const invoiceNum = invoice ? invoice.invoice_number : `SP-2026-${completedOrder.id}`;
 
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-navy/25 p-4 backdrop-blur-sm">
-        <div className="glass-panel w-full max-w-md rounded-3xl p-6 text-center shadow-2xl relative">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-overlay p-4 backdrop-blur-sm">
+        <div className="w-full max-w-md rounded-lg border border-edge bg-surface shadow-overlay p-6 text-center relative">
           <button
             onClick={onClose}
             aria-label="Close order confirmation"
-            className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full bg-slate-50 border border-slate-200 text-brand-text hover:bg-slate-100"
+            className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-sm bg-surface-muted border border-edge text-ink-secondary hover:bg-edge-subtle"
           >
             <X className="h-4 w-4" />
           </button>
 
           <CheckCircle className="h-16 w-16 text-brand-success mx-auto mb-4 animate-bounce" />
-          <h2 className="text-xl font-black text-brand-navy mb-2">Order Confirmed!</h2>
-          <p className="text-xs text-brand-muted mb-6">
+          <h2 className="font-display text-[24px] font-medium text-ink-primary mb-2">Order Confirmed!</h2>
+          <p className="text-xs text-ink-muted mb-6">
             Thank you for shopping with Sclero Proteins. Your order has been registered and is being processed.
           </p>
 
-          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-left text-xs mb-6 space-y-2.5">
-            <div className="flex justify-between border-b border-slate-200/60 pb-2">
-              <span className="text-brand-muted">Order ID:</span>
-              <span className="font-bold text-brand-text">#{completedOrder.id}</span>
+          <div className="bg-surface-muted border border-edge rounded-md p-4 text-left text-xs mb-6 space-y-2.5">
+            <div className="flex justify-between border-b border-edge pb-2">
+              <span className="text-ink-muted">Order ID:</span>
+              <span className="font-medium text-ink-primary">#{completedOrder.id}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-brand-muted">Invoice Number:</span>
-              <span className="font-bold text-brand-text font-mono">{invoiceNum}</span>
+              <span className="text-ink-muted">Invoice Number:</span>
+              <span className="font-medium text-ink-primary font-mono">{invoiceNum}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-brand-muted">Amount Paid:</span>
-              <span className="font-black text-brand-purple">{currencySymbol}{parseFloat(completedOrder.total).toFixed(2)}</span>
+              <span className="text-ink-muted">Amount Paid:</span>
+              <span className="font-display font-medium text-ink-primary">{currencySymbol}{parseFloat(completedOrder.total).toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-brand-muted">Region Store:</span>
-              <span className="font-bold text-brand-navy uppercase">{currentRegion} ({currencySymbol})</span>
+              <span className="text-ink-muted">Region Store:</span>
+              <span className="font-medium text-ink-primary uppercase">{currentRegion} ({currencySymbol})</span>
             </div>
           </div>
 
@@ -356,14 +356,14 @@ function CheckoutModalInner({ onClose }) {
               href={pdfUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center justify-center gap-2 w-full bg-brand-gradient text-white rounded-xl py-3 text-xs font-bold uppercase tracking-wider hover:opacity-90 shadow-md shadow-brand-purple/15"
+              className="btn-primary w-full py-3 text-sm"
             >
               <Download className="h-4 w-4" />
               Download {taxName} Invoice PDF
             </a>
             <button
               onClick={onClose}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 text-xs font-bold text-brand-text hover:bg-slate-100"
+              className="w-full rounded-sm border border-edge-strong bg-surface py-3 text-sm font-medium text-ink-primary transition hover:border-ink-primary"
             >
               Back to Storefront
             </button>
@@ -374,30 +374,30 @@ function CheckoutModalInner({ onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-navy/25 p-4 backdrop-blur-sm overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-overlay p-4 backdrop-blur-sm overflow-y-auto">
       <div
         ref={modalRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="checkout-title"
-        className="glass-panel w-full max-w-3xl rounded-3xl overflow-hidden flex flex-col md:flex-row shadow-2xl relative my-8"
+        className="w-full max-w-3xl rounded-lg border border-edge bg-surface shadow-overlay overflow-hidden flex flex-col md:flex-row relative my-8"
       >
         
         {/* Close */}
         <button
           onClick={onClose}
           aria-label="Close checkout"
-          className="absolute right-4 top-4 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-slate-50 border border-slate-200 text-brand-text hover:bg-slate-100"
+          className="absolute right-4 top-4 z-20 flex h-8 w-8 items-center justify-center rounded-sm bg-surface-muted border border-edge text-ink-secondary hover:bg-edge-subtle"
         >
           <X className="h-4 w-4" />
         </button>
 
         {/* Left Side: Checkout Form */}
         <form onSubmit={handleSubmit} className="w-full md:w-3/5 p-6 space-y-4">
-          <h2 id="checkout-title" className="text-lg font-black text-brand-navy border-b border-slate-100 pb-2">Delivery & Shipping Address</h2>
-          {errorMsg && <p className="text-xs text-brand-danger font-semibold bg-brand-danger/10 border border-brand-danger/20 p-2.5 rounded-lg">{errorMsg}</p>}
+          <h2 id="checkout-title" className="font-display text-[24px] font-medium text-ink-primary border-b border-edge pb-2">Delivery & Shipping Address</h2>
+          {errorMsg && <p className="text-xs text-ink-danger font-medium bg-brand-danger/5 border border-brand-danger/20 p-2.5 rounded-md">{errorMsg}</p>}
           {guestCheckoutBlocked && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] font-semibold text-amber-800">
+            <div className="rounded-md border border-brand-warning/20 bg-brand-warning/5 p-3 text-[11px] font-medium text-brand-warning">
               Guest checkout is currently disabled. Please sign in to continue with your order.
             </div>
           )}
@@ -405,79 +405,79 @@ function CheckoutModalInner({ onClose }) {
           <div className="space-y-3.5">
             <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col gap-1">
-                <label className="text-[9px] uppercase font-bold text-brand-muted">Name</label>
+                <label className="text-xs font-medium uppercase tracking-wide text-ink-muted">Name</label>
                 <input
                   type="text"
                   autoComplete="name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="bg-white border border-slate-200 rounded-xl p-2.5 text-xs text-brand-text focus:outline-none focus:border-brand-purple"
+                  className="bg-surface border border-edge rounded-sm p-2.5 text-xs text-ink-primary focus:outline-none focus:border-ink-primary"
                   required
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-[9px] uppercase font-bold text-brand-muted">Email</label>
+                <label className="text-xs font-medium uppercase tracking-wide text-ink-muted">Email</label>
                 <input
                   type="email"
                   autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="bg-white border border-slate-200 rounded-xl p-2.5 text-xs text-brand-text focus:outline-none focus:border-brand-purple"
+                  className="bg-surface border border-edge rounded-sm p-2.5 text-xs text-ink-primary focus:outline-none focus:border-ink-primary"
                   required
                 />
               </div>
             </div>
 
             <div className="flex flex-col gap-1">
-              <label className="text-[9px] uppercase font-bold text-brand-muted">Phone Number</label>
+              <label className="text-xs font-medium uppercase tracking-wide text-ink-muted">Phone Number</label>
               <input
                 type="tel"
                 autoComplete="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="+91..."
-                className="bg-white border border-slate-200 rounded-xl p-2.5 text-xs text-brand-text focus:outline-none focus:border-brand-purple"
+                className="bg-surface border border-edge rounded-sm p-2.5 text-xs text-ink-primary focus:outline-none focus:border-ink-primary"
                 required
               />
             </div>
 
             <div className="flex flex-col gap-1">
-              <label className="text-[9px] uppercase font-bold text-brand-muted">Address Line 1</label>
+              <label className="text-xs font-medium uppercase tracking-wide text-ink-muted">Address Line 1</label>
               <input
                 type="text"
                 autoComplete="address-line1"
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
-                className="bg-white border border-slate-200 rounded-xl p-2.5 text-xs text-brand-text focus:outline-none focus:border-brand-purple"
+                className="bg-surface border border-edge rounded-sm p-2.5 text-xs text-ink-primary focus:outline-none focus:border-ink-primary"
                 required
               />
             </div>
 
             <div className="grid grid-cols-3 gap-3">
               <div className="flex flex-col gap-1">
-                <label className="text-[9px] uppercase font-bold text-brand-muted">City</label>
+                <label className="text-xs font-medium uppercase tracking-wide text-ink-muted">City</label>
                 <input
                   type="text"
                   autoComplete="address-level2"
                   value={city}
                   onChange={(e) => setCity(e.target.value)}
-                  className="bg-white border border-slate-200 rounded-xl p-2.5 text-xs text-brand-text focus:outline-none focus:border-brand-purple"
+                  className="bg-surface border border-edge rounded-sm p-2.5 text-xs text-ink-primary focus:outline-none focus:border-ink-primary"
                   required
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-[9px] uppercase font-bold text-brand-muted">State / Region</label>
+                <label className="text-xs font-medium uppercase tracking-wide text-ink-muted">State / Region</label>
                 <input
                   type="text"
                   autoComplete="address-level1"
                   value={stateVal}
                   onChange={(e) => setStateVal(e.target.value)}
-                  className="bg-white border border-slate-200 rounded-xl p-2.5 text-xs text-brand-text focus:outline-none focus:border-brand-purple"
+                  className="bg-surface border border-edge rounded-sm p-2.5 text-xs text-ink-primary focus:outline-none focus:border-ink-primary"
                   required
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-[9px] uppercase font-bold text-brand-muted">
+                <label className="text-xs font-medium uppercase tracking-wide text-ink-muted">
                   {currentRegion === 'IN' ? 'PIN Code' : 'Postal Code'}
                 </label>
                 <input
@@ -486,15 +486,15 @@ function CheckoutModalInner({ onClose }) {
                   value={zip}
                   onChange={(e) => setZip(e.target.value)}
                   placeholder={currentRegion === 'IN' ? '560001' : 'SW1A 1AA'}
-                  className="bg-white border border-slate-200 rounded-xl p-2.5 text-xs text-brand-text focus:outline-none focus:border-brand-purple"
+                  className="bg-surface border border-edge rounded-sm p-2.5 text-xs text-ink-primary focus:outline-none focus:border-ink-primary"
                   required
                 />
               </div>
             </div>
             {pinLookup.status !== 'idle' && (
-              <p className={`text-[10px] font-semibold ${
-                pinLookup.status === 'ok' ? 'text-brand-success'
-                : pinLookup.status === 'miss' ? 'text-amber-600' : 'text-brand-muted'
+              <p className={`text-[10px] font-medium ${
+                pinLookup.status === 'ok' ? 'text-ink-success'
+                : pinLookup.status === 'miss' ? 'text-brand-warning' : 'text-ink-muted'
               }`}>
                 {pinLookup.msg}
               </p>
@@ -504,7 +504,7 @@ function CheckoutModalInner({ onClose }) {
           {/* Apple Pay / Google Pay (UK only, requires Stripe gateway enabled + browser support) */}
           {currentRegion === 'UK' && STRIPE_PK && gateways.some((g) => g.code === 'STRIPE') && (
             <div className="pt-2">
-              <h3 className="text-xs font-extrabold text-brand-navy uppercase tracking-wider mb-2.5">
+              <h3 className="kicker mb-2.5">
                 Apple Pay / Google Pay
               </h3>
               <StripePaymentRequest
@@ -519,18 +519,18 @@ function CheckoutModalInner({ onClose }) {
 
           {/* Payment method selector — driven by admin-configured gateways for this region */}
           <div className="pt-2">
-            <h3 className="text-xs font-extrabold text-brand-navy uppercase tracking-wider mb-2.5">
+            <h3 className="kicker mb-2.5">
               Select payment option
             </h3>
             {gateways.length === 0 ? (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-center">
-                <p className="text-[11px] text-brand-muted mb-2">
+              <div className="rounded-md border border-edge bg-surface-muted p-4 text-center">
+                <p className="text-[11px] text-ink-muted mb-2">
                   {gatewayError ? 'Failed to connect to payment gateways.' : 'No payment options loaded for this region.'}
                 </p>
                 <button
                   type="button"
                   onClick={fetchGateways}
-                  className="rounded-lg bg-brand-purple/10 px-3.5 py-1.5 text-[10px] font-bold text-brand-purple hover:bg-brand-purple/20 transition-all"
+                  className="rounded-sm border border-edge bg-surface px-3.5 py-1.5 text-[10px] font-medium text-ink-primary hover:border-ink-primary transition-all"
                 >
                   Retry Loading Options
                 </button>
@@ -545,13 +545,13 @@ function CheckoutModalInner({ onClose }) {
                       key={g.code}
                       type="button"
                       onClick={() => setPaymentMethod(g.code)}
-                      className={`flex items-center gap-2 border rounded-2xl p-3 text-xs font-bold transition-all ${
+                      className={`flex items-center gap-2 border rounded-md p-3 text-xs font-medium transition-all ${
                         active
-                          ? 'border-brand-purple bg-brand-purple/5 text-brand-purple font-extrabold'
-                          : 'border-slate-200 bg-white text-brand-muted hover:border-slate-300'
+                          ? 'border-ink-primary bg-surface-muted text-ink-primary'
+                          : 'border-edge bg-surface text-ink-muted hover:border-edge-strong'
                       }`}
                     >
-                      <Icon className="h-4 w-4 shrink-0 text-brand-purple" />
+                      <Icon className="h-4 w-4 shrink-0 text-brand-accent" />
                       <span className="text-left leading-tight">{g.display_name}</span>
                     </button>
                   );
@@ -563,16 +563,16 @@ function CheckoutModalInner({ onClose }) {
           <button
             type="submit"
             disabled={loading || !paymentMethod || guestCheckoutBlocked}
-            className="btn-primary w-full py-3.5 text-xs uppercase tracking-wider disabled:opacity-60"
+            className="btn-primary w-full py-3.5 text-sm disabled:opacity-60"
           >
             {loading ? 'Processing Order...' : `Pay & Finalize Order (${currencySymbol}${grandTotal.toFixed(2)})`}
           </button>
         </form>
 
         {/* Right Side: Order Summary */}
-        <div className="w-full md:w-2/5 bg-slate-50/50 p-6 border-t md:border-t-0 md:border-l border-slate-100 flex flex-col justify-between">
+        <div className="w-full md:w-2/5 bg-surface-muted/50 p-6 border-t md:border-t-0 md:border-l border-edge flex flex-col justify-between">
           <div>
-            <h3 className="text-base font-black text-brand-navy mb-4 border-b border-slate-100 pb-2">Order Review</h3>
+            <h3 className="font-display text-xl font-medium text-ink-primary mb-4 border-b border-edge pb-2">Order Review</h3>
             <div className="space-y-3.5 max-h-64 overflow-y-auto pr-2 mb-4">
               {cartItems.map((item) => {
                 const p = item.product;
@@ -580,17 +580,17 @@ function CheckoutModalInner({ onClose }) {
                 return (
                   <div key={item.id} className="flex justify-between items-center text-xs">
                     <div>
-                      <span className="font-bold text-brand-navy block">{p.name}</span>
-                      <span className="text-[10px] text-brand-muted">Qty: {item.quantity}</span>
+                      <span className="font-medium text-ink-primary block">{p.name}</span>
+                      <span className="text-[10px] text-ink-muted">Qty: {item.quantity}</span>
                     </div>
-                    <span className="font-bold text-brand-navy">{currencySymbol}{(price * item.quantity).toFixed(2)}</span>
+                    <span className="font-display font-medium text-ink-primary">{currencySymbol}{(price * item.quantity).toFixed(2)}</span>
                   </div>
                 );
               })}
             </div>
             {/* Coupon Code Block */}
-            <div className="border-t border-slate-100 pt-4 mb-4">
-              <label className="text-[10px] font-extrabold uppercase text-brand-navy block mb-1.5">
+            <div className="border-t border-edge pt-4 mb-4">
+              <label className="kicker block mb-1.5">
                 Have a coupon?
               </label>
               <div className="flex gap-2">
@@ -600,48 +600,48 @@ function CheckoutModalInner({ onClose }) {
                   placeholder="Promo code"
                   value={couponCode}
                   onChange={(e) => setCouponCode(e.target.value)}
-                  className="bg-white border border-slate-200 rounded-xl py-1.5 px-3 text-xs text-brand-text focus:outline-none focus:border-brand-purple flex-1"
+                  className="bg-surface border border-edge rounded-sm py-1.5 px-3 text-xs text-ink-primary focus:outline-none focus:border-ink-primary flex-1"
                 />
                 <button
                   type="button"
                   onClick={handleApplyCoupon}
-                  className="bg-brand-navy hover:bg-brand-navy/90 text-white rounded-xl px-3 py-1.5 text-xs font-bold transition-all"
+                  className="btn-primary px-3 py-1.5 text-xs"
                 >
                   Apply
                 </button>
               </div>
-              {couponError && <p className="text-[10px] text-brand-danger font-semibold mt-1">{couponError}</p>}
+              {couponError && <p className="text-[10px] text-ink-danger font-medium mt-1">{couponError}</p>}
               {activeCoupon && (
-                <div className="flex items-center justify-between bg-brand-success/5 border border-brand-success/20 rounded-xl p-2 mt-2 text-brand-success text-[10px] font-bold">
+                <div className="flex items-center justify-between bg-brand-success/5 border border-brand-success/20 rounded-md p-2 mt-2 text-ink-success text-[10px] font-medium">
                   <span>✓ Coupon "{activeCoupon.code}" applied</span>
-                  <button type="button" onClick={() => { setActiveCoupon(null); setCouponCode(''); }} className="hover:text-brand-danger">Remove</button>
+                  <button type="button" onClick={() => { setActiveCoupon(null); setCouponCode(''); }} className="hover:text-ink-danger">Remove</button>
                 </div>
               )}
             </div>
           </div>
 
-          <div className="border-t border-slate-100 pt-4 space-y-2.5 text-xs text-brand-muted">
+          <div className="border-t border-edge pt-4 space-y-2.5 text-xs text-ink-muted">
             <div className="flex justify-between">
               <span>Subtotal</span>
-              <span className="text-brand-text">{currencySymbol}{subtotal.toFixed(2)}</span>
+              <span className="text-ink-primary">{currencySymbol}{subtotal.toFixed(2)}</span>
             </div>
             {discountAmount > 0 && (
-              <div className="flex justify-between text-brand-success font-bold">
+              <div className="flex justify-between text-ink-success font-medium">
                 <span>Discount ({activeCoupon?.code})</span>
                 <span>-{currencySymbol}{discountAmount.toFixed(2)}</span>
               </div>
             )}
             <div className="flex justify-between">
               <span>{taxInclusive ? `Includes ${taxName} (${taxRate}%)` : `${taxName} (${taxRate}%)`}</span>
-              <span className="text-brand-text">{currencySymbol}{taxAmount.toFixed(2)}</span>
+              <span className="text-ink-primary">{currencySymbol}{taxAmount.toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
               <span>Shipping cost</span>
-              <span className="text-brand-text">{shippingCost === 0 ? 'FREE' : `${currencySymbol}${shippingCost.toFixed(2)}`}</span>
+              <span className="text-ink-primary">{shippingCost === 0 ? 'FREE' : `${currencySymbol}${shippingCost.toFixed(2)}`}</span>
             </div>
-            <div className="flex justify-between border-t border-slate-100 pt-2.5 font-extrabold text-sm text-brand-navy">
+            <div className="flex justify-between items-baseline border-t border-edge pt-2.5 font-medium text-sm text-ink-primary">
               <span>Grand Total</span>
-              <span className="text-brand-purple text-base font-black">{currencySymbol}{grandTotal.toFixed(2)}</span>
+              <span className="font-display text-[20px] font-medium text-ink-primary">{currencySymbol}{grandTotal.toFixed(2)}</span>
             </div>
           </div>
         </div>

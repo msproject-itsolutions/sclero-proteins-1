@@ -53,8 +53,8 @@ export default function ProductGallery({ images = [], productName = '' }) {
 
   if (!images || images.length === 0) {
     return (
-      <div className="rounded-2xl bg-slate-100 aspect-square flex items-center justify-center">
-        <div className="text-center text-slate-400">
+      <div className="rounded-lg border border-edge bg-surface-muted aspect-square flex items-center justify-center">
+        <div className="text-center text-ink-subtle">
           <p>No images available</p>
         </div>
       </div>
@@ -68,7 +68,7 @@ export default function ProductGallery({ images = [], productName = '' }) {
   return (
     <div className="space-y-4">
       {/* Main Media */}
-      <div className="relative rounded-2xl overflow-hidden bg-slate-100 aspect-square group">
+      <div className="relative rounded-lg border border-edge overflow-hidden bg-surface-muted aspect-square group">
         {current.kind === 'image' && (
           <img
             src={current.src}
@@ -112,10 +112,10 @@ export default function ProductGallery({ images = [], productName = '' }) {
         {!isVideo && (
           <button
             onClick={() => setIsZoomed(!isZoomed)}
-            className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-md hover:shadow-lg transition-shadow"
+            className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-sm border border-edge bg-surface shadow-card hover:shadow-elevated transition-shadow"
             aria-label="Zoom image"
           >
-            <ZoomIn className="h-5 w-5 text-brand-navy" />
+            <ZoomIn className="h-5 w-5 text-ink-primary" />
           </button>
         )}
 
@@ -124,23 +124,23 @@ export default function ProductGallery({ images = [], productName = '' }) {
           <>
             <button
               onClick={goToPrevious}
-              className="absolute left-4 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-full bg-white/80 hover:bg-white transition-colors opacity-0 group-hover:opacity-100"
+              className="absolute left-4 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-sm bg-surface/90 hover:bg-surface transition-colors opacity-0 group-hover:opacity-100"
               aria-label="Previous media"
             >
-              <ChevronLeft className="h-5 w-5 text-brand-navy" />
+              <ChevronLeft className="h-5 w-5 text-ink-primary" />
             </button>
             <button
               onClick={goToNext}
-              className="absolute right-4 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-full bg-white/80 hover:bg-white transition-colors opacity-0 group-hover:opacity-100"
+              className="absolute right-4 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-sm bg-surface/90 hover:bg-surface transition-colors opacity-0 group-hover:opacity-100"
               aria-label="Next media"
             >
-              <ChevronRight className="h-5 w-5 text-brand-navy" />
+              <ChevronRight className="h-5 w-5 text-ink-primary" />
             </button>
           </>
         )}
 
         {/* Counter */}
-        <div className="absolute bottom-4 right-4 rounded-full bg-black/60 px-3 py-1 text-xs font-bold text-white">
+        <div className="absolute bottom-4 right-4 rounded-xs bg-surface-inverse/70 px-3 py-1 text-xs font-medium text-white">
           {selectedIndex + 1}/{images.length}
         </div>
       </div>
@@ -157,8 +157,8 @@ export default function ProductGallery({ images = [], productName = '' }) {
                 key={index}
                 onClick={() => setSelectedIndex(index)}
                 aria-label={`Show ${isVid ? 'video' : 'image'} ${index + 1}`}
-                className={`relative h-16 w-16 flex-shrink-0 rounded-lg overflow-hidden border-2 transition-colors ${
-                  selectedIndex === index ? 'border-brand-purple' : 'border-slate-200 hover:border-brand-purple/50'
+                className={`relative h-16 w-16 flex-shrink-0 rounded-sm overflow-hidden border transition-colors ${
+                  selectedIndex === index ? 'border-ink-primary' : 'border-edge hover:border-edge-strong'
                 }`}
               >
                 {thumbSrc ? (
@@ -168,8 +168,8 @@ export default function ProductGallery({ images = [], productName = '' }) {
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <div className="w-full h-full bg-slate-900 flex items-center justify-center">
-                    <span className="text-[9px] font-bold tracking-widest text-white">VIDEO</span>
+                  <div className="w-full h-full bg-surface-inverse flex items-center justify-center">
+                    <span className="text-[9px] font-medium tracking-widest text-white">VIDEO</span>
                   </div>
                 )}
                 {isVid && (

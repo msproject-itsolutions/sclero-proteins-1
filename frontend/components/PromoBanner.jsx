@@ -34,7 +34,7 @@ export default function PromoBanner() {
 
   return (
     <div
-      className="relative w-full bg-brand-gradient text-white animate-[fadeDown_0.3s_ease-out]"
+      className="relative w-full bg-surface-inverse text-white animate-[fadeDown_0.3s_ease-out]"
       role="region"
       aria-label="Site-wide promotion"
     >
@@ -44,7 +44,7 @@ export default function PromoBanner() {
           to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
-      <div className="mx-auto flex max-w-7xl items-center justify-center px-4 py-2 text-[11px] font-semibold tracking-wide sm:text-xs sm:px-6 lg:px-8">
+      <div className="mx-auto flex max-w-container items-center justify-center px-4 py-2 text-[10.5px] font-medium uppercase tracking-[0.14em] sm:px-6 lg:px-8">
         <span className="text-center">{message}</span>
         <button
           type="button"

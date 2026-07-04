@@ -34,8 +34,8 @@ function toText(value) {
 }
 
 const PRESET_OPTIONS = ['Color', 'Size', 'Weight', 'Material', 'Style', 'Capacity', 'Flavor', 'Scent', 'Dimensions'];
-const LABEL_CLS = 'block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-1';
-const INPUT_CLS = 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400 transition';
+const LABEL_CLS = 'kicker block mb-1';
+const INPUT_CLS = 'w-full rounded-sm border border-edge bg-white px-3 py-2.5 text-sm text-ink-primary placeholder:text-ink-subtle focus:outline-none focus:ring-2 focus:ring-edge-focus/30 focus:border-ink-primary transition';
 const TABS = [
   { id: 'general',    icon: FileText,   label: 'General'    },
   { id: 'media',      icon: ImageIcon,  label: 'Media'      },
@@ -128,15 +128,15 @@ function MediaEditor({ media, onChange, authFetch }) {
         onDragLeave={() => setDragOver(false)}
         onDrop={handleDropZone}
         onClick={() => fileRef.current?.click()}
-        className={`flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed py-10 cursor-pointer transition-all
-          ${dragOver ? 'border-violet-400 bg-violet-50' : 'border-slate-200 bg-slate-50 hover:border-violet-300 hover:bg-violet-50/50'}`}
+        className={`flex flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed py-10 cursor-pointer transition-all
+          ${dragOver ? 'border-ink-primary bg-surface-muted' : 'border-edge bg-surface-muted hover:border-edge-strong hover:bg-surface-muted'}`}
       >
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-100">
-          <Upload className="h-6 w-6 text-violet-600" />
+        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-surface-muted">
+          <Upload className="h-6 w-6 text-ink-accent" />
         </div>
         <div className="text-center">
-          <p className="text-sm font-semibold text-slate-700">{uploading ? 'Uploading files...' : 'Drop files here or click to upload'}</p>
-          <p className="mt-0.5 text-xs text-slate-400">Supports JPG, PNG, GIF, MP4, WebM</p>
+          <p className="text-sm font-semibold text-ink-secondary">{uploading ? 'Uploading files...' : 'Drop files here or click to upload'}</p>
+          <p className="mt-0.5 text-xs text-ink-subtle">Supports JPG, PNG, GIF, MP4, WebM</p>
         </div>
         <input ref={fileRef} type="file" multiple accept="image/*,video/*" className="hidden"
           disabled={uploading}
@@ -146,16 +146,16 @@ function MediaEditor({ media, onChange, authFetch }) {
       {/* URL input row */}
       <div className="flex items-center gap-2">
         <select value={urlType} onChange={(e) => setUrlType(e.target.value)}
-          className="rounded-lg border border-slate-200 bg-white px-2 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500/30">
+          className="rounded-sm border border-edge bg-white px-2 py-2.5 text-sm text-ink-secondary focus:outline-none focus:ring-2 focus:ring-edge-focus/30">
           <option value="IMAGE">Image URL</option>
           <option value="VIDEO">Video / YouTube</option>
         </select>
         <input value={urlInput} onChange={(e) => setUrlInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleAddUrl()}
           placeholder="Paste image or YouTube URL…"
-          className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400" />
+          className="flex-1 rounded-sm border border-edge bg-white px-3 py-2.5 text-sm placeholder:text-ink-subtle focus:outline-none focus:ring-2 focus:ring-edge-focus/30 focus:border-ink-primary" />
         <button onClick={handleAddUrl} type="button"
-          className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-700 transition">
+          className="btn-primary px-4 py-2.5 text-sm">
           <Plus className="h-4 w-4" /> Add
         </button>
       </div>
@@ -169,28 +169,28 @@ function MediaEditor({ media, onChange, authFetch }) {
             return (
               <div key={i} draggable onDragStart={(e) => dragStart(e, i)}
                 onDragEnter={(e) => dragEnter(e, i)} onDragEnd={dragEnd}
-                className={`group relative overflow-hidden rounded-xl border-2 transition cursor-grab active:cursor-grabbing
-                  ${i === 0 ? 'border-violet-400' : 'border-slate-200'}
+                className={`group relative overflow-hidden rounded-md border-2 transition cursor-grab active:cursor-grabbing
+                  ${i === 0 ? 'border-ink-primary' : 'border-edge'}
                   ${dragIdx === i ? 'opacity-50 scale-95' : 'opacity-100'}`}>
                 {/* Cover badge */}
                 {i === 0 && (
-                  <span className="absolute left-2 top-2 z-10 rounded-full bg-violet-600 px-2 py-0.5 text-[9px] font-bold uppercase text-white tracking-wide">
+                  <span className="absolute left-2 top-2 z-10 rounded-xs bg-ink-primary px-2 py-0.5 text-[9px] font-semibold uppercase text-white tracking-wide">
                     Cover
                   </span>
                 )}
                 {/* Preview */}
-                <div className="aspect-square bg-slate-100 flex items-center justify-center overflow-hidden">
+                <div className="aspect-square bg-surface-muted flex items-center justify-center overflow-hidden">
                   {thumb ? (
                     <img src={thumb} alt="" className="h-full w-full object-cover" />
                   ) : isVideo ? (
-                    <Film className="h-8 w-8 text-slate-400" />
+                    <Film className="h-8 w-8 text-ink-subtle" />
                   ) : (
-                    <ImageIcon className="h-8 w-8 text-slate-400" />
+                    <ImageIcon className="h-8 w-8 text-ink-subtle" />
                   )}
                   {isVideo && thumb && (
                     <div className="absolute inset-0 flex items-center justify-center bg-black/20">
                       <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/90 shadow">
-                        <Film className="h-4 w-4 text-slate-700" />
+                        <Film className="h-4 w-4 text-ink-secondary" />
                       </div>
                     </div>
                   )}
@@ -204,11 +204,11 @@ function MediaEditor({ media, onChange, authFetch }) {
                     {i !== 0 && (
                       <button onClick={() => { const m2 = [...media]; const [it] = m2.splice(i, 1); m2.unshift(it); onChange(m2); }}
                         type="button" title="Set as cover"
-                        className="rounded-lg bg-white/90 p-1.5 text-slate-700 hover:bg-violet-600 hover:text-white transition">
+                        className="rounded-sm bg-white/90 p-1.5 text-ink-secondary hover:bg-ink-primary hover:text-white transition">
                         <Eye className="h-3.5 w-3.5" />
                       </button>
                     )}
-                    <label title="Replace" className="cursor-pointer rounded-lg bg-white/90 p-1.5 text-slate-700 hover:bg-blue-500 hover:text-white transition">
+                    <label title="Replace" className="cursor-pointer rounded-sm bg-white/90 p-1.5 text-ink-secondary hover:bg-ink-primary hover:text-white transition">
                       <RefreshCw className="h-3.5 w-3.5" />
                       <input type="file" accept="image/*,video/*" className="hidden"
                         onChange={async (e) => {
@@ -223,7 +223,7 @@ function MediaEditor({ media, onChange, authFetch }) {
                         }} />
                     </label>
                     <button onClick={() => removeMedia(i)} type="button" title="Remove"
-                      className="rounded-lg bg-white/90 p-1.5 text-slate-700 hover:bg-red-500 hover:text-white transition">
+                      className="rounded-sm bg-white/90 p-1.5 text-ink-secondary hover:bg-red-700 hover:text-white transition">
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
@@ -238,7 +238,7 @@ function MediaEditor({ media, onChange, authFetch }) {
         </div>
       )}
       {media.length === 0 && (
-        <p className="text-center text-sm text-slate-400 py-2">No media added yet. Upload files or add URLs above.</p>
+        <p className="text-center text-sm text-ink-subtle py-2">No media added yet. Upload files or add URLs above.</p>
       )}
     </div>
   );
@@ -322,19 +322,19 @@ function VariantsEditor({ editing, onChange, media }) {
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-bold text-slate-800">Option Types</p>
-            <p className="text-xs text-slate-500">Define the axes of variation (e.g. Color, Size)</p>
+            <p className="text-sm font-semibold text-ink-primary">Option Types</p>
+            <p className="text-xs text-ink-muted">Define the axes of variation (e.g. Color, Size)</p>
           </div>
           {options.length < 3 && (
             <button onClick={addOption} type="button"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:border-violet-400 hover:text-violet-700 transition">
+              className="inline-flex items-center gap-1.5 rounded-sm border border-edge bg-white px-3 py-2 text-xs font-semibold text-ink-secondary hover:border-edge-strong hover:text-ink-accent transition">
               <Plus className="h-3.5 w-3.5" /> Add option
             </button>
           )}
         </div>
 
         {options.map((opt, i) => (
-          <div key={i} className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+          <div key={i} className="rounded-md border border-edge bg-white shadow-card p-4 space-y-3">
             <div className="flex items-center gap-2">
               {/* Option name — preset or custom */}
               <div className="relative flex-1">
@@ -344,26 +344,26 @@ function VariantsEditor({ editing, onChange, media }) {
                     if (e.target.value === '__custom__') updateOption(i, { name: '' });
                     else updateOption(i, { name: e.target.value });
                   }}
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/30">
+                  className="w-full rounded-sm border border-edge bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-edge-focus/30">
                   {PRESET_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
                   <option value="__custom__">Custom…</option>
                 </select>
               </div>
               {(!PRESET_OPTIONS.includes(opt.name) || opt.name === '') && (
                 <input value={opt.name} onChange={(e) => updateOption(i, { name: e.target.value })}
-                  placeholder="Custom name" className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/30" />
+                  placeholder="Custom name" className="flex-1 rounded-sm border border-edge px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-edge-focus/30" />
               )}
               <button onClick={() => removeOption(i)} type="button"
-                className="rounded-lg border border-slate-200 p-2 text-slate-400 hover:border-red-300 hover:text-red-500 transition">
+                className="rounded-sm border border-edge p-2 text-ink-subtle hover:border-red-300 hover:text-ink-danger transition">
                 <X className="h-4 w-4" />
               </button>
             </div>
             {/* Value chips */}
             <div className="flex flex-wrap gap-1.5 items-center">
               {(opt.values || []).map((v, vi) => (
-                <span key={vi} className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-semibold text-violet-700">
+                <span key={vi} className="inline-flex items-center gap-1 rounded-xs bg-surface-muted px-2.5 py-0.5 text-xs font-semibold text-ink-accent">
                   {v}
-                  <button onClick={() => removeValue(i, vi)} type="button" className="ml-0.5 text-violet-500 hover:text-red-600 transition">
+                  <button onClick={() => removeValue(i, vi)} type="button" className="ml-0.5 text-ink-accent hover:text-ink-danger transition">
                     <X className="h-3 w-3" />
                   </button>
                 </span>
@@ -379,15 +379,15 @@ function VariantsEditor({ editing, onChange, media }) {
                   }
                 }}
                 placeholder="Add value, press Enter…"
-                className="min-w-[160px] rounded-full border border-dashed border-slate-300 bg-transparent px-3 py-0.5 text-xs text-slate-600 placeholder:text-slate-400 focus:outline-none focus:border-violet-400" />
+                className="min-w-[160px] rounded-sm border border-dashed border-edge-strong bg-transparent px-3 py-0.5 text-xs text-ink-secondary placeholder:text-ink-subtle focus:outline-none focus:border-ink-primary" />
             </div>
           </div>
         ))}
 
         {options.length === 0 && (
-          <div className="flex flex-col items-center gap-2 rounded-xl border-2 border-dashed border-slate-200 py-8">
-            <Layers className="h-8 w-8 text-slate-300" />
-            <p className="text-sm text-slate-400">No options yet. Click "Add option" to start.</p>
+          <div className="flex flex-col items-center gap-2 rounded-md border-2 border-dashed border-edge py-8">
+            <Layers className="h-8 w-8 text-ink-subtle" />
+            <p className="text-sm text-ink-subtle">No options yet. Click "Add option" to start.</p>
           </div>
         )}
       </div>
@@ -395,7 +395,7 @@ function VariantsEditor({ editing, onChange, media }) {
       {/* Generate button */}
       {options.some(o => o.name && o.values?.length) && (
         <button onClick={() => regenerate()} type="button"
-          className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-3 text-sm font-bold text-white hover:bg-violet-700 transition">
+          className="w-full inline-flex items-center justify-center gap-2 rounded-md bg-ink-primary px-4 py-3 text-sm font-semibold text-white hover:bg-ink-primary/90 transition">
           <Zap className="h-4 w-4" /> Generate {cartesian(options.filter(o => o.name && o.values?.length).map(o => o.values)).length} variant combinations
         </button>
       )}
@@ -404,16 +404,16 @@ function VariantsEditor({ editing, onChange, media }) {
       {variants.length > 0 && (
         <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm font-bold text-slate-800">{variants.length} Variants</p>
+            <p className="text-sm font-semibold text-ink-primary">{variants.length} Variants</p>
             <div className="flex items-center gap-2">
               {selectedRows.size > 0 && (
                 <>
                   <input value={bulkPrice} onChange={(e) => setBulkPrice(e.target.value)}
-                    placeholder="Bulk price" className="w-24 rounded-lg border border-slate-200 px-2 py-1.5 text-xs" />
+                    placeholder="Bulk price" className="w-24 rounded-sm border border-edge px-2 py-1.5 text-xs" />
                   <input value={bulkStock} onChange={(e) => setBulkStock(e.target.value)}
-                    placeholder="Bulk stock" className="w-24 rounded-lg border border-slate-200 px-2 py-1.5 text-xs" />
+                    placeholder="Bulk stock" className="w-24 rounded-sm border border-edge px-2 py-1.5 text-xs" />
                   <button onClick={bulkApply} type="button"
-                    className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-violet-700 transition">
+                    className="btn-primary px-3 py-1.5 text-xs">
                     Apply to {selectedRows.size}
                   </button>
                 </>
@@ -421,71 +421,71 @@ function VariantsEditor({ editing, onChange, media }) {
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+          <div className="overflow-x-auto rounded-md border border-edge bg-white shadow-card">
             <table className="w-full text-left text-xs min-w-[720px]">
-              <thead className="bg-slate-50 border-b border-slate-200">
+              <thead className="bg-surface-muted text-[10px] font-medium uppercase tracking-wide text-ink-muted border-b border-edge">
                 <tr>
                   <th className="px-3 py-2.5">
-                    <input type="checkbox" className="accent-violet-600"
+                    <input type="checkbox" className="accent-ink-primary"
                       checked={selectedRows.size === variants.length && variants.length > 0}
                       onChange={toggleAll} />
                   </th>
-                  <th className="px-3 py-2.5 font-semibold text-slate-600">Variant</th>
-                  <th className="px-3 py-2.5 font-semibold text-slate-600">SKU</th>
-                  <th className="px-3 py-2.5 font-semibold text-slate-600">Price</th>
-                  <th className="px-3 py-2.5 font-semibold text-slate-600">Compare</th>
-                  <th className="px-3 py-2.5 font-semibold text-slate-600">Stock</th>
-                  <th className="px-3 py-2.5 font-semibold text-slate-600">Weight (g)</th>
-                  <th className="px-3 py-2.5 font-semibold text-slate-600">Barcode</th>
-                  <th className="px-3 py-2.5 font-semibold text-slate-600">Image</th>
+                  <th className="px-3 py-2.5 font-semibold text-ink-secondary">Variant</th>
+                  <th className="px-3 py-2.5 font-semibold text-ink-secondary">SKU</th>
+                  <th className="px-3 py-2.5 font-semibold text-ink-secondary">Price</th>
+                  <th className="px-3 py-2.5 font-semibold text-ink-secondary">Compare</th>
+                  <th className="px-3 py-2.5 font-semibold text-ink-secondary">Stock</th>
+                  <th className="px-3 py-2.5 font-semibold text-ink-secondary">Weight (g)</th>
+                  <th className="px-3 py-2.5 font-semibold text-ink-secondary">Barcode</th>
+                  <th className="px-3 py-2.5 font-semibold text-ink-secondary">Image</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-edge-subtle">
                 {variants.map((v, i) => (
-                  <tr key={i} className={`hover:bg-slate-50/70 transition ${selectedRows.has(i) ? 'bg-violet-50' : ''}`}>
+                  <tr key={i} className={`hover:bg-surface-muted transition ${selectedRows.has(i) ? 'bg-surface-muted' : ''}`}>
                     <td className="px-3 py-2">
-                      <input type="checkbox" className="accent-violet-600"
+                      <input type="checkbox" className="accent-ink-primary"
                         checked={selectedRows.has(i)} onChange={() => toggleRow(i)} />
                     </td>
                     <td className="px-3 py-2">
                       <div className="flex flex-wrap gap-1">
                         {(v.combination || []).map((val, ci) => (
-                          <span key={ci} className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">{val}</span>
+                          <span key={ci} className="rounded-xs bg-surface-muted px-2 py-0.5 text-[10px] font-semibold text-ink-secondary">{val}</span>
                         ))}
                       </div>
                     </td>
                     <td className="px-3 py-2">
                       <input value={v.sku} onChange={(e) => updateVariant(i, { sku: e.target.value })}
-                        className="w-28 rounded border border-slate-200 px-2 py-1 text-xs font-mono focus:outline-none focus:border-violet-400" />
+                        className="w-28 rounded border border-edge px-2 py-1 text-xs font-mono focus:outline-none focus:border-ink-primary" />
                     </td>
                     <td className="px-3 py-2">
                       <input value={v.price} onChange={(e) => updateVariant(i, { price: e.target.value })}
-                        placeholder="0.00" className="w-20 rounded border border-slate-200 px-2 py-1 text-xs focus:outline-none focus:border-violet-400" />
+                        placeholder="0.00" className="w-20 rounded border border-edge px-2 py-1 text-xs focus:outline-none focus:border-ink-primary" />
                     </td>
                     <td className="px-3 py-2">
                       <input value={v.compare_price} onChange={(e) => updateVariant(i, { compare_price: e.target.value })}
-                        placeholder="0.00" className="w-20 rounded border border-slate-200 px-2 py-1 text-xs focus:outline-none focus:border-violet-400" />
+                        placeholder="0.00" className="w-20 rounded border border-edge px-2 py-1 text-xs focus:outline-none focus:border-ink-primary" />
                     </td>
                     <td className="px-3 py-2">
                       <input value={v.stock} onChange={(e) => updateVariant(i, { stock: e.target.value })}
-                        placeholder="0" type="number" className="w-16 rounded border border-slate-200 px-2 py-1 text-xs focus:outline-none focus:border-violet-400" />
+                        placeholder="0" type="number" className="w-16 rounded border border-edge px-2 py-1 text-xs focus:outline-none focus:border-ink-primary" />
                     </td>
                     <td className="px-3 py-2">
                       <input value={v.weight} onChange={(e) => updateVariant(i, { weight: e.target.value })}
-                        placeholder="0" className="w-16 rounded border border-slate-200 px-2 py-1 text-xs focus:outline-none focus:border-violet-400" />
+                        placeholder="0" className="w-16 rounded border border-edge px-2 py-1 text-xs focus:outline-none focus:border-ink-primary" />
                     </td>
                     <td className="px-3 py-2">
                       <input value={v.barcode} onChange={(e) => updateVariant(i, { barcode: e.target.value })}
-                        placeholder="UPC/EAN" className="w-24 rounded border border-slate-200 px-2 py-1 text-xs font-mono focus:outline-none focus:border-violet-400" />
+                        placeholder="UPC/EAN" className="w-24 rounded border border-edge px-2 py-1 text-xs font-mono focus:outline-none focus:border-ink-primary" />
                     </td>
                     <td className="px-3 py-2">
                       <button onClick={() => setShowImagePicker(i)} type="button"
-                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 hover:border-violet-400 transition overflow-hidden">
+                        className="flex h-8 w-8 items-center justify-center rounded-sm border border-edge hover:border-edge-strong transition overflow-hidden">
                         {v.image_idx !== null && media[v.image_idx] ? (
                           <img src={media[v.image_idx]._preview || media[v.image_idx].file_url} alt=""
                             className="h-full w-full object-cover" />
                         ) : (
-                          <ImageIcon className="h-4 w-4 text-slate-300" />
+                          <ImageIcon className="h-4 w-4 text-ink-subtle" />
                         )}
                       </button>
                     </td>
@@ -499,17 +499,17 @@ function VariantsEditor({ editing, onChange, media }) {
 
       {/* Image picker overlay */}
       {showImagePicker !== null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-overlay backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-overlay">
             <div className="mb-4 flex items-center justify-between">
-              <p className="font-bold text-slate-800">Pick image for variant</p>
-              <button onClick={() => setShowImagePicker(null)} type="button" className="text-slate-400 hover:text-slate-600">
+              <p className="font-semibold text-ink-primary">Pick image for variant</p>
+              <button onClick={() => setShowImagePicker(null)} type="button" className="text-ink-subtle hover:text-ink-secondary">
                 <X className="h-5 w-5" />
               </button>
             </div>
             <div className="grid grid-cols-4 gap-2">
               <button onClick={() => { updateVariant(showImagePicker, { image_idx: null }); setShowImagePicker(null); }}
-                type="button" className="flex aspect-square items-center justify-center rounded-xl border-2 border-dashed border-slate-200 text-slate-400 hover:border-red-400 hover:text-red-400 transition text-xs">
+                type="button" className="flex aspect-square items-center justify-center rounded-md border-2 border-dashed border-edge text-ink-subtle hover:border-red-400 hover:text-ink-danger transition text-xs">
                 None
               </button>
               {media.map((m, mi) => {
@@ -517,11 +517,11 @@ function VariantsEditor({ editing, onChange, media }) {
                 return (
                   <button key={mi} onClick={() => { updateVariant(showImagePicker, { image_idx: mi }); setShowImagePicker(null); }}
                     type="button"
-                    className={`relative aspect-square overflow-hidden rounded-xl border-2 transition
-                      ${variants[showImagePicker]?.image_idx === mi ? 'border-violet-500' : 'border-slate-200 hover:border-violet-400'}`}>
-                    {thumb ? <img src={thumb} alt="" className="h-full w-full object-cover" /> : <Film className="h-5 w-5 text-slate-400" />}
+                    className={`relative aspect-square overflow-hidden rounded-md border-2 transition
+                      ${variants[showImagePicker]?.image_idx === mi ? 'border-ink-primary' : 'border-edge hover:border-edge-strong'}`}>
+                    {thumb ? <img src={thumb} alt="" className="h-full w-full object-cover" /> : <Film className="h-5 w-5 text-ink-subtle" />}
                     {variants[showImagePicker]?.image_idx === mi && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-violet-600/30">
+                      <div className="absolute inset-0 flex items-center justify-center bg-ink-primary/30">
                         <Check className="h-5 w-5 text-white" />
                       </div>
                     )}
@@ -565,14 +565,14 @@ function AttributesEditor({ editing, onChange }) {
   return (
     <div className="space-y-6">
       {/* Specifications */}
-      <section className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+      <section className="rounded-md border border-edge bg-white shadow-card p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-bold text-slate-800">Product Specifications</p>
-            <p className="text-xs text-slate-500">e.g. Protein: 25g, Calories: 120</p>
+            <p className="text-sm font-semibold text-ink-primary">Product Specifications</p>
+            <p className="text-xs text-ink-muted">e.g. Protein: 25g, Calories: 120</p>
           </div>
           <button onClick={addSpec} type="button"
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-violet-400 transition">
+            className="inline-flex items-center gap-1 rounded-sm border border-edge px-3 py-1.5 text-xs font-semibold text-ink-secondary hover:border-edge-strong transition">
             <Plus className="h-3.5 w-3.5" /> Add row
           </button>
         </div>
@@ -580,23 +580,23 @@ function AttributesEditor({ editing, onChange }) {
           {specs.map((s, i) => (
             <div key={i} className="flex items-center gap-2">
               <input value={s.key} onChange={(e) => updateSpec(i, { key: e.target.value })}
-                placeholder="Label" className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400" />
+                placeholder="Label" className="flex-1 rounded-sm border border-edge px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-edge-focus/30 focus:border-ink-primary" />
               <input value={s.value} onChange={(e) => updateSpec(i, { value: e.target.value })}
-                placeholder="Value" className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400" />
-              <button onClick={() => removeSpec(i)} type="button" className="text-slate-400 hover:text-red-500 transition">
+                placeholder="Value" className="flex-1 rounded-sm border border-edge px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-edge-focus/30 focus:border-ink-primary" />
+              <button onClick={() => removeSpec(i)} type="button" className="text-ink-subtle hover:text-ink-danger transition">
                 <Trash2 className="h-4 w-4" />
               </button>
             </div>
           ))}
-          {specs.length === 0 && <p className="text-xs text-slate-400">No specifications yet.</p>}
+          {specs.length === 0 && <p className="text-xs text-ink-subtle">No specifications yet.</p>}
         </div>
       </section>
 
       {/* Shipping */}
-      <section className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+      <section className="rounded-md border border-edge bg-white shadow-card p-4 space-y-3">
         <div className="flex items-center gap-2">
-          <Truck className="h-4 w-4 text-violet-600" />
-          <p className="text-sm font-bold text-slate-800">Shipping & Physical Info</p>
+          <Truck className="h-4 w-4 text-ink-accent" />
+          <p className="text-sm font-semibold text-ink-primary">Shipping & Physical Info</p>
         </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[
@@ -612,55 +612,55 @@ function AttributesEditor({ editing, onChange }) {
             </div>
           ))}
         </div>
-        <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+        <label className="flex items-center gap-2 text-sm text-ink-secondary cursor-pointer">
           <input type="checkbox" checked={shipping.fragile} onChange={(e) => setShipping({ ...shipping, fragile: e.target.checked })}
-            className="accent-violet-600" />
+            className="accent-ink-primary" />
           Fragile — requires special handling
         </label>
       </section>
 
       {/* SEO */}
-      <section className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+      <section className="rounded-md border border-edge bg-white shadow-card p-4 space-y-3">
         <div className="flex items-center gap-2">
-          <Globe className="h-4 w-4 text-violet-600" />
-          <p className="text-sm font-bold text-slate-800">Search Engine Optimisation</p>
+          <Globe className="h-4 w-4 text-ink-accent" />
+          <p className="text-sm font-semibold text-ink-primary">Search Engine Optimisation</p>
         </div>
         <div className="space-y-3">
           <div>
             <label className={LABEL_CLS}>SEO Title</label>
             <input value={seo.title} onChange={(e) => setSeo({ ...seo, title: e.target.value })}
               placeholder="Page title shown in search results" className={INPUT_CLS} maxLength={70} />
-            <p className="mt-0.5 text-right text-[10px] text-slate-400">{(seo.title || '').length}/70</p>
+            <p className="mt-0.5 text-right text-[10px] text-ink-subtle">{(seo.title || '').length}/70</p>
           </div>
           <div>
             <label className={LABEL_CLS}>Meta Description</label>
             <textarea value={seo.description} onChange={(e) => setSeo({ ...seo, description: e.target.value })}
               placeholder="Brief description shown in search results" rows={3}
               className={INPUT_CLS + ' resize-none'} maxLength={160} />
-            <p className="mt-0.5 text-right text-[10px] text-slate-400">{(seo.description || '').length}/160</p>
+            <p className="mt-0.5 text-right text-[10px] text-ink-subtle">{(seo.description || '').length}/160</p>
           </div>
           <div>
             <label className={LABEL_CLS}>URL Handle</label>
             <div className="flex items-center gap-0">
-              <span className="rounded-l-lg border border-r-0 border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-400">/products/</span>
+              <span className="rounded-l-lg border border-r-0 border-edge bg-surface-muted px-3 py-2.5 text-sm text-ink-subtle">/products/</span>
               <input value={seo.handle} onChange={(e) => setSeo({ ...seo, handle: slugify(e.target.value) })}
-                placeholder="product-handle" className="flex-1 rounded-r-lg border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400" />
+                placeholder="product-handle" className="flex-1 rounded-r-lg border border-edge px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-edge-focus/30 focus:border-ink-primary" />
             </div>
             <button onClick={() => setSeo({ ...seo, handle: slugify(toText(editing.name) || '') })} type="button"
-              className="mt-1 text-xs text-violet-600 hover:text-violet-800 transition">↺ Generate from title</button>
+              className="mt-1 text-xs text-ink-accent hover:text-ink-accent transition">↺ Generate from title</button>
           </div>
         </div>
       </section>
 
       {/* Custom Metadata */}
-      <section className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+      <section className="rounded-md border border-edge bg-white shadow-card p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-bold text-slate-800">Custom Metadata</p>
-            <p className="text-xs text-slate-500">Certifications, origin, compliance fields, etc.</p>
+            <p className="text-sm font-semibold text-ink-primary">Custom Metadata</p>
+            <p className="text-xs text-ink-muted">Certifications, origin, compliance fields, etc.</p>
           </div>
           <button onClick={addMeta} type="button"
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-violet-400 transition">
+            className="inline-flex items-center gap-1 rounded-sm border border-edge px-3 py-1.5 text-xs font-semibold text-ink-secondary hover:border-edge-strong transition">
             <Plus className="h-3.5 w-3.5" /> Add field
           </button>
         </div>
@@ -668,15 +668,15 @@ function AttributesEditor({ editing, onChange }) {
           {meta.map((m, i) => (
             <div key={i} className="flex items-center gap-2">
               <input value={m.key} onChange={(e) => updateMeta(i, { key: e.target.value })}
-                placeholder="Field name" className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400" />
+                placeholder="Field name" className="flex-1 rounded-sm border border-edge px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-edge-focus/30 focus:border-ink-primary" />
               <input value={m.value} onChange={(e) => updateMeta(i, { value: e.target.value })}
-                placeholder="Value" className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400" />
-              <button onClick={() => removeMeta(i)} type="button" className="text-slate-400 hover:text-red-500 transition">
+                placeholder="Value" className="flex-1 rounded-sm border border-edge px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-edge-focus/30 focus:border-ink-primary" />
+              <button onClick={() => removeMeta(i)} type="button" className="text-ink-subtle hover:text-ink-danger transition">
                 <Trash2 className="h-4 w-4" />
               </button>
             </div>
           ))}
-          {meta.length === 0 && <p className="text-xs text-slate-400">No custom fields yet.</p>}
+          {meta.length === 0 && <p className="text-xs text-ink-subtle">No custom fields yet.</p>}
         </div>
       </section>
     </div>
@@ -708,26 +708,26 @@ export default function ProductEditorPanel({ editing, onChange, onClose, onSave,
   };
 
   return (
-    <div className="bg-slate-50 overflow-hidden flex flex-col h-[calc(100vh-140px)] rounded-2xl border border-slate-200 shadow-sm">
+    <div className="bg-surface-muted overflow-hidden flex flex-col h-[calc(100vh-140px)] rounded-lg border border-edge shadow-card">
       {/* Top bar */}
-      <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 sm:px-6 flex-shrink-0">
+      <div className="flex items-center justify-between border-b border-edge bg-white px-4 py-3 sm:px-6 flex-shrink-0">
         <div className="flex items-center gap-3">
           <button onClick={onClose} type="button"
-            className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50 transition">
+            className="rounded-sm border border-edge p-2 text-ink-muted hover:bg-surface-muted transition">
             <ChevronLeft className="h-4 w-4" />
           </button>
           <div>
-            <p className="text-xs font-semibold uppercase text-slate-400 tracking-wide">Products</p>
-            <h2 className="text-base font-black text-slate-800">{isNew ? 'New Product' : toText(editing.name) || 'Edit Product'}</h2>
+            <p className="text-xs font-semibold uppercase text-ink-subtle tracking-wide">Products</p>
+            <h2 className="text-base font-semibold text-ink-primary">{isNew ? 'New Product' : toText(editing.name) || 'Edit Product'}</h2>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide
-            ${editing.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+          <span className={`rounded-xs px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide
+            ${editing.is_active ? 'bg-brand-success/10 text-ink-success' : 'bg-surface-muted text-ink-muted'}`}>
             {editing.is_active ? 'Active' : 'Draft'}
           </span>
           <button onClick={onSave} disabled={saving} type="button"
-            className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-60 transition shadow-sm">
+            className="inline-flex items-center gap-2 rounded-md bg-ink-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-ink-primary/90 disabled:opacity-60 transition shadow-card">
             <Save className="h-4 w-4" />
             {saving ? 'Saving…' : 'Save'}
           </button>
@@ -735,13 +735,13 @@ export default function ProductEditorPanel({ editing, onChange, onClose, onSave,
       </div>
 
       {/* Tab nav */}
-      <div className="flex gap-0 border-b border-slate-200 bg-white px-4 overflow-x-auto flex-shrink-0">
+      <div className="flex gap-0 border-b border-edge bg-white px-4 overflow-x-auto flex-shrink-0">
         {tabs.map(t => {
           const Icon = t.icon;
           return (
             <button key={t.id} onClick={() => setActiveTab(t.id)} type="button"
               className={`flex items-center gap-1.5 whitespace-nowrap border-b-2 px-4 py-3 text-sm font-semibold transition
-                ${activeTab === t.id ? 'border-violet-600 text-violet-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+                ${activeTab === t.id ? 'border-ink-primary text-ink-accent' : 'border-transparent text-ink-muted hover:text-ink-secondary'}`}>
               <Icon className="h-3.5 w-3.5" />
               {t.label}
             </button>
@@ -752,8 +752,8 @@ export default function ProductEditorPanel({ editing, onChange, onClose, onSave,
       {/* Error banner */}
       {err && (
         <div className="flex items-center gap-2 border-b border-red-200 bg-red-50 px-6 py-2.5 flex-shrink-0">
-          <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
-          <p className="text-xs text-red-700 font-medium">{err}</p>
+          <AlertCircle className="h-4 w-4 text-ink-danger flex-shrink-0" />
+          <p className="text-xs text-ink-danger font-medium">{err}</p>
         </div>
       )}
 
@@ -764,15 +764,15 @@ export default function ProductEditorPanel({ editing, onChange, onClose, onSave,
           {/* ── TAB: General ── */}
           {activeTab === 'general' && (
             <div className="space-y-5">
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 space-y-4 shadow-sm">
-                <p className="text-sm font-bold text-slate-800 border-b border-slate-100 pb-3">Basic Information</p>
+              <div className="rounded-lg border border-edge bg-white p-6 space-y-4 shadow-card">
+                <p className="text-sm font-semibold text-ink-primary border-b border-edge-subtle pb-3">Basic Information</p>
                 <div className="grid grid-cols-3 gap-4">
                   <div>
                     <label className={LABEL_CLS}>SKU</label>
                     <input value={editing.sku} disabled={!!editing.id}
                       onChange={(e) => setEditing({ ...editing, sku: e.target.value })}
                       placeholder="PROD-001"
-                      className={INPUT_CLS + (editing.id ? ' bg-slate-50 cursor-not-allowed opacity-70' : '')} />
+                      className={INPUT_CLS + (editing.id ? ' bg-surface-muted cursor-not-allowed opacity-70' : '')} />
                   </div>
                   <div className="col-span-2">
                     <label className={LABEL_CLS}>Product Name</label>
@@ -790,10 +790,10 @@ export default function ProductEditorPanel({ editing, onChange, onClose, onSave,
                     ].map(opt => (
                       <button key={opt.val} type="button"
                         onClick={() => setEditing({ ...editing, product_type: opt.val })}
-                        className={`rounded-xl border-2 p-3 text-left transition
-                          ${productType === opt.val ? 'border-violet-500 bg-violet-50' : 'border-slate-200 bg-white hover:border-violet-200'}`}>
-                        <p className={`text-sm font-bold ${productType === opt.val ? 'text-violet-700' : 'text-slate-700'}`}>{opt.label}</p>
-                        <p className="text-xs text-slate-400 mt-0.5">{opt.desc}</p>
+                        className={`rounded-md border-2 p-3 text-left transition
+                          ${productType === opt.val ? 'border-ink-primary bg-surface-muted' : 'border-edge bg-white hover:border-edge-strong'}`}>
+                        <p className={`text-sm font-semibold ${productType === opt.val ? 'text-ink-accent' : 'text-ink-secondary'}`}>{opt.label}</p>
+                        <p className="text-xs text-ink-subtle mt-0.5">{opt.desc}</p>
                       </button>
                     ))}
                   </div>
@@ -819,21 +819,21 @@ export default function ProductEditorPanel({ editing, onChange, onClose, onSave,
               </div>
 
               {/* Collections */}
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                <p className="text-sm font-bold text-slate-800 mb-3">Collections</p>
+              <div className="rounded-lg border border-edge bg-white p-6 shadow-card">
+                <p className="text-sm font-semibold text-ink-primary mb-3">Collections</p>
                 <div className="flex flex-wrap gap-2">
                   {categories.map(c => {
                     const on = editing._categories.includes(c.id);
                     return (
                       <button key={c.id} type="button"
                         onClick={() => setEditing({ ...editing, _categories: on ? editing._categories.filter(x => x !== c.id) : [...editing._categories, c.id] })}
-                        className={`rounded-full border px-3 py-1 text-xs font-semibold transition
-                          ${on ? 'border-violet-500 bg-violet-100 text-violet-700' : 'border-slate-200 bg-white text-slate-600 hover:border-violet-300'}`}>
+                        className={`rounded-sm border px-3 py-1 text-xs font-medium transition
+                          ${on ? 'border-ink-primary bg-surface-muted text-ink-primary' : 'border-edge bg-white text-ink-secondary hover:border-edge-strong'}`}>
                         {c.name}
                       </button>
                     );
                   })}
-                  {categories.length === 0 && <p className="text-xs text-slate-400">No collections defined yet.</p>}
+                  {categories.length === 0 && <p className="text-xs text-ink-subtle">No collections defined yet.</p>}
                 </div>
               </div>
             </div>
@@ -841,10 +841,10 @@ export default function ProductEditorPanel({ editing, onChange, onClose, onSave,
 
           {/* ── TAB: Media ── */}
           {activeTab === 'media' && (
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="rounded-lg border border-edge bg-white p-6 shadow-card">
               <div className="mb-4">
-                <p className="text-sm font-bold text-slate-800">Product Media</p>
-                <p className="text-xs text-slate-400 mt-0.5">Upload images/videos or add URLs. Drag to reorder. First item is the cover.</p>
+                <p className="text-sm font-semibold text-ink-primary">Product Media</p>
+                <p className="text-xs text-ink-subtle mt-0.5">Upload images/videos or add URLs. Drag to reorder. First item is the cover.</p>
               </div>
               <MediaEditor media={editing._media || []} onChange={setMedia} authFetch={authFetch} />
             </div>
@@ -853,10 +853,10 @@ export default function ProductEditorPanel({ editing, onChange, onClose, onSave,
           {/* ── TAB: Variants ── */}
           {activeTab === 'variants' && isVariable && (
             <div className="space-y-4">
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="rounded-lg border border-edge bg-white p-6 shadow-card">
                 <div className="mb-4">
-                  <p className="text-sm font-bold text-slate-800">Product Options &amp; Variants</p>
-                  <p className="text-xs text-slate-400 mt-0.5">Define up to 3 option types. Combinations are generated automatically.</p>
+                  <p className="text-sm font-semibold text-ink-primary">Product Options &amp; Variants</p>
+                  <p className="text-xs text-ink-subtle mt-0.5">Define up to 3 option types. Combinations are generated automatically.</p>
                 </div>
                 <VariantsEditor editing={editing} onChange={setEditing} media={editing._media || []} />
               </div>
@@ -867,23 +867,23 @@ export default function ProductEditorPanel({ editing, onChange, onClose, onSave,
           {activeTab === 'pricing' && (
             <div className="space-y-4">
               {isVariable ? (
-                <div className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-5">
+                <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 p-5">
                   <Info className="h-5 w-5 text-amber-500 flex-shrink-0" />
                   <div>
-                    <p className="text-sm font-semibold text-amber-800">Variable product pricing</p>
-                    <p className="text-xs text-amber-700 mt-0.5">Prices are set per variant in the Variants tab. Regional configs below apply as base defaults.</p>
+                    <p className="text-sm font-semibold text-ink-accent">Variable product pricing</p>
+                    <p className="text-xs text-ink-accent mt-0.5">Prices are set per variant in the Variants tab. Regional configs below apply as base defaults.</p>
                   </div>
                 </div>
               ) : null}
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-3">
-                <p className="text-sm font-bold text-slate-800 border-b border-slate-100 pb-3">Regional Pricing &amp; Stock</p>
+              <div className="rounded-lg border border-edge bg-white p-6 shadow-card space-y-3">
+                <p className="text-sm font-semibold text-ink-primary border-b border-edge-subtle pb-3">Regional Pricing &amp; Stock</p>
                 {editing._regional.map((row, i) => (
-                  <div key={row.region} className="rounded-xl border border-slate-200 p-3 space-y-2">
+                  <div key={row.region} className="rounded-md border border-edge p-3 space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">{row.code}</span>
-                      <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer">
+                      <span className="text-xs font-semibold text-ink-secondary uppercase tracking-wide">{row.code}</span>
+                      <label className="flex items-center gap-1.5 text-xs text-ink-muted cursor-pointer">
                         <input type="checkbox" checked={row.is_visible}
-                          onChange={(e) => setRegional(i, { is_visible: e.target.checked })} className="accent-violet-600" />
+                          onChange={(e) => setRegional(i, { is_visible: e.target.checked })} className="accent-ink-primary" />
                         Visible
                       </label>
                     </div>
@@ -891,18 +891,18 @@ export default function ProductEditorPanel({ editing, onChange, onClose, onSave,
                       <div>
                         <label className={LABEL_CLS}>Price</label>
                         <input value={row.price} onChange={(e) => setRegional(i, { price: e.target.value })}
-                          placeholder="0.00" className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400" />
+                          placeholder="0.00" className="w-full rounded-sm border border-edge px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-edge-focus/30 focus:border-ink-primary" />
                       </div>
                       <div>
                         <label className={LABEL_CLS}>Promo Price</label>
                         <input value={row.promotional_price} onChange={(e) => setRegional(i, { promotional_price: e.target.value })}
-                          placeholder="0.00" className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400" />
+                          placeholder="0.00" className="w-full rounded-sm border border-edge px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-edge-focus/30 focus:border-ink-primary" />
                       </div>
                       <div>
                         <label className={LABEL_CLS}>Stock (units)</label>
                         <input value={row.available} onChange={(e) => setRegional(i, { available: e.target.value })}
                           type="number" placeholder="0"
-                          className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400" />
+                          className="w-full rounded-sm border border-edge px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-edge-focus/30 focus:border-ink-primary" />
                       </div>
                     </div>
                   </div>
@@ -919,55 +919,55 @@ export default function ProductEditorPanel({ editing, onChange, onClose, onSave,
           {/* ── TAB: Settings ── */}
           {activeTab === 'settings' && (
             <div className="space-y-4">
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
-                <p className="text-sm font-bold text-slate-800 border-b border-slate-100 pb-3">Product Status</p>
+              <div className="rounded-lg border border-edge bg-white p-6 shadow-card space-y-4">
+                <p className="text-sm font-semibold text-ink-primary border-b border-edge-subtle pb-3">Product Status</p>
                 <label className="flex items-center gap-3 cursor-pointer">
                   <div onClick={() => setEditing({ ...editing, is_active: !editing.is_active })}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${editing.is_active ? 'bg-violet-600' : 'bg-slate-200'}`}>
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${editing.is_active ? 'bg-ink-primary' : 'bg-edge'}`}>
                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${editing.is_active ? 'translate-x-6' : 'translate-x-1'}`} />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-slate-700">{editing.is_active ? 'Active' : 'Draft'}</p>
-                    <p className="text-xs text-slate-400">{editing.is_active ? 'Visible in storefront' : 'Hidden from storefront'}</p>
+                    <p className="text-sm font-semibold text-ink-secondary">{editing.is_active ? 'Active' : 'Draft'}</p>
+                    <p className="text-xs text-ink-subtle">{editing.is_active ? 'Visible in storefront' : 'Hidden from storefront'}</p>
                   </div>
                 </label>
                 <label className="flex items-center gap-3 cursor-pointer">
                   <div onClick={() => setEditing({ ...editing, is_archived: !editing.is_archived })}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${editing.is_archived ? 'bg-amber-500' : 'bg-slate-200'}`}>
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${editing.is_archived ? 'bg-brand-accent' : 'bg-edge'}`}>
                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${editing.is_archived ? 'translate-x-6' : 'translate-x-1'}`} />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-slate-700">{editing.is_archived ? 'Archived' : 'Not Archived'}</p>
-                    <p className="text-xs text-slate-400">Archived products are hidden from all views</p>
+                    <p className="text-sm font-semibold text-ink-secondary">{editing.is_archived ? 'Archived' : 'Not Archived'}</p>
+                    <p className="text-xs text-ink-subtle">Archived products are hidden from all views</p>
                   </div>
                 </label>
               </div>
 
               {/* FAQ Editor */}
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <p className="text-sm font-bold text-slate-800">FAQ</p>
+              <div className="rounded-lg border border-edge bg-white p-6 shadow-card space-y-3">
+                <div className="flex items-center justify-between border-b border-edge-subtle pb-3">
+                  <p className="text-sm font-semibold text-ink-primary">FAQ</p>
                   <button onClick={() => setEditing({ ...editing, faq: [...(editing.faq || []), { q: '', a: '' }] })} type="button"
-                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-violet-400 transition">
+                    className="inline-flex items-center gap-1 rounded-sm border border-edge px-3 py-1.5 text-xs font-semibold text-ink-secondary hover:border-edge-strong transition">
                     <Plus className="h-3.5 w-3.5" /> Add FAQ
                   </button>
                 </div>
                 {(editing.faq || []).map((faq, i) => (
-                  <div key={i} className="rounded-xl border border-slate-200 p-3 space-y-2">
+                  <div key={i} className="rounded-md border border-edge p-3 space-y-2">
                     <div className="flex items-center gap-2">
                       <input value={faq.q} onChange={(e) => { const f = [...editing.faq]; f[i] = { ...f[i], q: e.target.value }; setEditing({ ...editing, faq: f }); }}
-                        placeholder="Question" className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/30" />
+                        placeholder="Question" className="flex-1 rounded-sm border border-edge px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-edge-focus/30" />
                       <button onClick={() => setEditing({ ...editing, faq: editing.faq.filter((_, x) => x !== i) })} type="button"
-                        className="text-slate-400 hover:text-red-500 transition">
+                        className="text-ink-subtle hover:text-ink-danger transition">
                         <X className="h-4 w-4" />
                       </button>
                     </div>
                     <textarea value={faq.a} onChange={(e) => { const f = [...editing.faq]; f[i] = { ...f[i], a: e.target.value }; setEditing({ ...editing, faq: f }); }}
                       placeholder="Answer" rows={2}
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-violet-500/30" />
+                      className="w-full rounded-sm border border-edge px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-edge-focus/30" />
                   </div>
                 ))}
-                {!(editing.faq || []).length && <p className="text-xs text-slate-400">No FAQs added yet.</p>}
+                {!(editing.faq || []).length && <p className="text-xs text-ink-subtle">No FAQs added yet.</p>}
               </div>
             </div>
           )}

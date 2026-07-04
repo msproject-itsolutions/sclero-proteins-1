@@ -19,6 +19,31 @@ export default function StoreShell({ children, showFooter = true, cartOpenSignal
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
 
+  // Scroll-reveal: elements with .reveal fade/rise in as they enter the
+  // viewport. A MutationObserver keeps watching so client-rendered sections
+  // (product grids etc.) get picked up after data loads.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('IntersectionObserver' in window)) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('reveal-visible');
+            io.unobserve(entry.target);
+          }
+        });
+      },
+      { rootMargin: '0px 0px -8% 0px', threshold: 0.05 }
+    );
+    const watch = () => {
+      document.querySelectorAll('.reveal:not(.reveal-visible)').forEach((el) => io.observe(el));
+    };
+    watch();
+    const mo = new MutationObserver(watch);
+    mo.observe(document.body, { childList: true, subtree: true });
+    return () => { io.disconnect(); mo.disconnect(); };
+  }, []);
+
   useEffect(() => {
     if (cartOpenSignal) {
       setCartOpen(true);

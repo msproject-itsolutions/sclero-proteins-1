@@ -60,29 +60,29 @@ export default function CookieConsent() {
       role="dialog"
       aria-modal="true"
       aria-labelledby="cookie-title"
-      className="fixed bottom-6 left-6 right-6 z-[9999] max-w-xl md:left-auto md:right-8 bg-brand-indigo/95 backdrop-blur-xl border border-white/20 rounded-2xl p-6 shadow-luxe-lg text-white transition-all duration-300 transform translate-y-0 flex flex-col gap-4 font-sans"
+      className="fixed bottom-6 left-6 right-6 z-[9999] max-w-xl md:left-auto md:right-8 bg-surface border border-edge rounded-lg p-6 shadow-overlay text-ink-primary transition-all duration-300 transform translate-y-0 flex flex-col gap-4 font-sans animate-slide-up"
     >
       <div>
-        <div id="cookie-title" className="text-lg font-bold tracking-wide flex items-center gap-2">
+        <div id="cookie-title" className="font-display font-medium text-[22px] flex items-center gap-2">
           <span className="text-xl">🍪</span> Cookie Preferences
         </div>
-        <p className="text-xs text-gray-200 mt-2 leading-relaxed">
+        <p className="text-xs text-ink-muted mt-2 leading-relaxed">
           We use cookies to enhance security, analyze site usage, and support regional configurations. Manage your settings below or accept all to continue.
         </p>
       </div>
 
-      <div className="flex flex-col gap-3 py-3 border-y border-white/10">
+      <div className="flex flex-col gap-3 py-3 border-y border-edge-subtle">
         {/* Necessary */}
         <label className="flex items-start gap-3 cursor-pointer">
           <input
             type="checkbox"
             checked={preferences.necessary}
             disabled
-            className="mt-1 h-4 w-4 rounded border-white/20 bg-white/10 text-brand-purple focus:ring-brand-purple cursor-not-allowed accent-brand-purple"
+            className="mt-1 h-4 w-4 rounded-xs border-edge bg-surface text-ink-primary focus:ring-ink-primary cursor-not-allowed accent-ink-primary"
           />
           <div className="text-xs">
-            <span className="font-medium text-white">Strictly Necessary (Always Active)</span>
-            <p className="text-gray-300">Required for fundamental actions like authentication, regional detection, and cart management.</p>
+            <span className="font-medium text-ink-primary">Strictly Necessary (Always Active)</span>
+            <p className="text-ink-muted">Required for fundamental actions like authentication, regional detection, and cart management.</p>
           </div>
         </label>
 
@@ -92,11 +92,11 @@ export default function CookieConsent() {
             type="checkbox"
             checked={preferences.analytics}
             onChange={(e) => setPreferences({ ...preferences, analytics: e.target.checked })}
-            className="mt-1 h-4 w-4 rounded border-white/20 bg-white/10 text-brand-purple focus:ring-brand-purple accent-brand-purple cursor-pointer"
+            className="mt-1 h-4 w-4 rounded-xs border-edge bg-surface text-ink-primary focus:ring-ink-primary accent-ink-primary cursor-pointer"
           />
           <div className="text-xs">
-            <span className="font-medium text-white">Analytics & Performance</span>
-            <p className="text-gray-300">Allows us to analyze site visits and customer journeys to optimize platform performance.</p>
+            <span className="font-medium text-ink-primary">Analytics & Performance</span>
+            <p className="text-ink-muted">Allows us to analyze site visits and customer journeys to optimize platform performance.</p>
           </div>
         </label>
 
@@ -106,11 +106,11 @@ export default function CookieConsent() {
             type="checkbox"
             checked={preferences.marketing}
             onChange={(e) => setPreferences({ ...preferences, marketing: e.target.checked })}
-            className="mt-1 h-4 w-4 rounded border-white/20 bg-white/10 text-brand-purple focus:ring-brand-purple accent-brand-purple cursor-pointer"
+            className="mt-1 h-4 w-4 rounded-xs border-edge bg-surface text-ink-primary focus:ring-ink-primary accent-ink-primary cursor-pointer"
           />
           <div className="text-xs">
-            <span className="font-medium text-white">Marketing & Personalization</span>
-            <p className="text-gray-300">Used to serve relevant promotional offers and tailored advertisements based on preferences.</p>
+            <span className="font-medium text-ink-primary">Marketing & Personalization</span>
+            <p className="text-ink-muted">Used to serve relevant promotional offers and tailored advertisements based on preferences.</p>
           </div>
         </label>
       </div>
@@ -123,21 +123,21 @@ export default function CookieConsent() {
             setPreferences(rejected);
             saveConsent(rejected);
           }}
-          className="px-4 py-2 text-xs font-semibold text-red-200 border border-red-500/30 rounded-lg hover:bg-red-500/10 transition-all duration-200"
+          className="btn-ghost px-4 py-2 text-xs"
         >
           Reject Optional
         </button>
         <button
           type="button"
           onClick={handleSavePreferences}
-          className="px-4 py-2 text-xs font-semibold text-gray-200 border border-white/20 rounded-lg hover:bg-white/10 transition-all duration-200"
+          className="btn-ghost px-4 py-2 text-xs"
         >
           Save Settings
         </button>
         <button
           type="button"
           onClick={handleAcceptAll}
-          className="px-5 py-2 text-xs font-semibold text-white bg-brand-orange hover:bg-brand-orange/90 rounded-lg transition-all duration-200 shadow-md shadow-brand-orange/20"
+          className="btn-primary px-5 py-2 text-xs"
         >
           Accept All
         </button>

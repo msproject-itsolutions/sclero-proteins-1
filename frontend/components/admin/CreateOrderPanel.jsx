@@ -7,8 +7,8 @@ import {
   AlertCircle, Check, Loader2, ChevronLeft, Save, Eye
 } from 'lucide-react';
 
-const LABEL_CLS = 'block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-1';
-const INPUT_CLS = 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400 transition';
+const LABEL_CLS = 'kicker block mb-1';
+const INPUT_CLS = 'w-full rounded-sm border border-edge bg-white px-3 py-2.5 text-sm text-ink-primary placeholder:text-ink-subtle focus:outline-none focus:ring-2 focus:ring-edge-focus/30 focus:border-ink-primary transition';
 
 const STEPS = [
   { id: 'customer', label: 'Customer', icon: User },
@@ -188,29 +188,29 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
   const activeCustomer = selectedCustomer || (customerMode === 'new' ? newCustomer : null);
 
   return (
-    <div className="fixed inset-y-0 right-0 left-0 md:left-[280px] lg:left-[288px] top-0 md:top-[65px] z-30 bg-slate-50 overflow-hidden flex flex-col">
+    <div className="fixed inset-y-0 right-0 left-0 md:left-[280px] lg:left-[288px] top-0 md:top-[65px] z-30 bg-surface-muted overflow-hidden flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 sm:px-6 flex-shrink-0">
+      <div className="flex items-center justify-between border-b border-edge bg-white px-4 py-3 sm:px-6 flex-shrink-0">
         <div className="flex items-center gap-3">
           <button onClick={onClose} type="button"
-            className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50 transition">
+            className="rounded-sm border border-edge p-2 text-ink-muted hover:bg-surface-muted transition">
             <ChevronLeft className="h-4 w-4" />
           </button>
           <div>
-            <p className="text-xs font-semibold uppercase text-slate-400 tracking-wide">Orders</p>
-            <h2 className="text-base font-black text-slate-800">Create Order</h2>
+            <p className="text-xs font-semibold uppercase text-ink-subtle tracking-wide">Orders</p>
+            <h2 className="text-base font-semibold text-ink-primary">Create Order</h2>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
-            <input type="checkbox" checked={isDraft} onChange={(e) => setIsDraft(e.target.checked)} className="accent-violet-600" />
+          <label className="flex items-center gap-2 text-sm text-ink-secondary cursor-pointer select-none">
+            <input type="checkbox" checked={isDraft} onChange={(e) => setIsDraft(e.target.checked)} className="accent-ink-primary" />
             Save as Draft
           </label>
         </div>
       </div>
 
       {/* Step indicators */}
-      <div className="flex items-center border-b border-slate-200 bg-white px-4 sm:px-6 flex-shrink-0 overflow-x-auto">
+      <div className="flex items-center border-b border-edge bg-white px-4 sm:px-6 flex-shrink-0 overflow-x-auto">
         {STEPS.map((s, i) => {
           const Icon = s.icon;
           const active = s.id === step;
@@ -218,10 +218,10 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
           return (
             <button key={s.id} onClick={() => setStep(s.id)} type="button"
               className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-3 text-sm font-semibold transition
-                ${active ? 'border-violet-600 text-violet-700' : done ? 'border-transparent text-emerald-600' : 'border-transparent text-slate-400'}`}>
+                ${active ? 'border-ink-primary text-ink-accent' : done ? 'border-transparent text-ink-success' : 'border-transparent text-ink-subtle'}`}>
               {done ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
               {s.label}
-              {i < STEPS.length - 1 && <ChevronRight className="h-3.5 w-3.5 text-slate-300 ml-1" />}
+              {i < STEPS.length - 1 && <ChevronRight className="h-3.5 w-3.5 text-ink-subtle ml-1" />}
             </button>
           );
         })}
@@ -229,8 +229,8 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
 
       {err && (
         <div className="flex items-center gap-2 border-b border-red-200 bg-red-50 px-6 py-2.5 flex-shrink-0">
-          <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
-          <p className="text-xs text-red-700 font-medium">{err}</p>
+          <AlertCircle className="h-4 w-4 text-ink-danger flex-shrink-0" />
+          <p className="text-xs text-ink-danger font-medium">{err}</p>
         </div>
       )}
 
@@ -241,69 +241,69 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
           {/* ── STEP: Customer ── */}
           {step === 'customer' && (
             <div className="space-y-4">
-              <div className="flex rounded-xl border border-slate-200 bg-white p-1 gap-1">
+              <div className="flex rounded-md border border-edge bg-white p-1 gap-1">
                 {[{ id: 'search', label: 'Existing Customer', icon: Search },
                   { id: 'new',    label: 'New Customer',      icon: UserPlus }].map(m => (
                   <button key={m.id} onClick={() => { setCustomerMode(m.id); setSelectedCustomer(null); }} type="button"
-                    className={`flex-1 flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition
-                      ${customerMode === m.id ? 'bg-violet-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
+                    className={`flex-1 flex items-center justify-center gap-2 rounded-sm py-2.5 text-sm font-semibold transition
+                      ${customerMode === m.id ? 'bg-ink-primary text-white shadow-card' : 'text-ink-muted hover:bg-surface-muted'}`}>
                     <m.icon className="h-4 w-4" /> {m.label}
                   </button>
                 ))}
               </div>
 
               {customerMode === 'search' && (
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
+                <div className="rounded-lg border border-edge bg-white p-5 shadow-card space-y-3">
                   <div className="relative">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-subtle" />
                     <input value={customerSearch} onChange={(e) => setCustomerSearch(e.target.value)}
                       placeholder="Search by name or email…"
-                      className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400" />
-                    {customerLoading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-violet-500 animate-spin" />}
+                      className="w-full rounded-md border border-edge bg-white py-2.5 pl-9 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-edge-focus/30 focus:border-ink-primary" />
+                    {customerLoading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-accent animate-spin" />}
                   </div>
 
                   {selectedCustomer && (
-                    <div className="flex items-center justify-between rounded-xl bg-violet-50 border border-violet-200 p-3">
+                    <div className="flex items-center justify-between rounded-md bg-surface-muted border border-edge p-3">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-violet-200 text-violet-700 font-bold text-sm">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-muted text-ink-accent font-semibold text-sm">
                           {(selectedCustomer.first_name?.[0] || selectedCustomer.email?.[0] || '?').toUpperCase()}
                         </div>
                         <div>
-                          <p className="text-sm font-semibold text-slate-800">{selectedCustomer.first_name} {selectedCustomer.last_name}</p>
-                          <p className="text-xs text-slate-500">{selectedCustomer.email}</p>
+                          <p className="text-sm font-semibold text-ink-primary">{selectedCustomer.first_name} {selectedCustomer.last_name}</p>
+                          <p className="text-xs text-ink-muted">{selectedCustomer.email}</p>
                         </div>
                       </div>
-                      <button onClick={() => setSelectedCustomer(null)} type="button" className="text-slate-400 hover:text-red-500 transition">
+                      <button onClick={() => setSelectedCustomer(null)} type="button" className="text-ink-subtle hover:text-ink-danger transition">
                         <X className="h-4 w-4" />
                       </button>
                     </div>
                   )}
 
                   {!selectedCustomer && customerResults.length > 0 && (
-                    <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 overflow-hidden">
+                    <div className="divide-y divide-edge-subtle rounded-md border border-edge overflow-hidden">
                       {customerResults.slice(0, 6).map(c => (
                         <button key={c.id} onClick={() => { setSelectedCustomer(c); setCustomerResults([]); }} type="button"
-                          className="flex w-full items-center gap-3 px-4 py-3 hover:bg-slate-50 transition text-left">
-                          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 font-bold text-sm">
+                          className="flex w-full items-center gap-3 px-4 py-3 hover:bg-surface-muted transition text-left">
+                          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-surface-muted text-ink-secondary font-semibold text-sm">
                             {(c.first_name?.[0] || c.email?.[0] || '?').toUpperCase()}
                           </div>
                           <div>
-                            <p className="text-sm font-semibold text-slate-800">{c.first_name} {c.last_name}</p>
-                            <p className="text-xs text-slate-400">{c.email}</p>
+                            <p className="text-sm font-semibold text-ink-primary">{c.first_name} {c.last_name}</p>
+                            <p className="text-xs text-ink-subtle">{c.email}</p>
                           </div>
                         </button>
                       ))}
                     </div>
                   )}
                   {!selectedCustomer && customerSearch && customerResults.length === 0 && !customerLoading && (
-                    <p className="text-center text-sm text-slate-400 py-4">No customers found. Try a different search or create a new customer.</p>
+                    <p className="text-center text-sm text-ink-subtle py-4">No customers found. Try a different search or create a new customer.</p>
                   )}
                 </div>
               )}
 
               {customerMode === 'new' && (
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
-                  <p className="text-sm font-bold text-slate-800">New Customer Details</p>
+                <div className="rounded-lg border border-edge bg-white p-5 shadow-card space-y-3">
+                  <p className="text-sm font-semibold text-ink-primary">New Customer Details</p>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className={LABEL_CLS}>First Name</label>
@@ -330,32 +330,32 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
           {/* ── STEP: Products ── */}
           {step === 'items' && (
             <div className="space-y-4">
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
+              <div className="rounded-lg border border-edge bg-white p-5 shadow-card space-y-3">
                 <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-subtle" />
                   <input value={productSearch} onChange={(e) => setProductSearch(e.target.value)}
                     placeholder="Search products by name or SKU…"
-                    className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400" />
-                  {productLoading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-violet-500 animate-spin" />}
+                    className="w-full rounded-md border border-edge bg-white py-2.5 pl-9 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-edge-focus/30 focus:border-ink-primary" />
+                  {productLoading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-accent animate-spin" />}
                 </div>
                 {productResults.length > 0 && (
-                  <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 overflow-hidden">
+                  <div className="divide-y divide-edge-subtle rounded-md border border-edge overflow-hidden">
                     {productResults.slice(0, 6).map(p => (
                       <button key={p.id} onClick={() => addProduct(p)} type="button"
-                        className="flex w-full items-center gap-3 px-4 py-3 hover:bg-violet-50 transition text-left">
-                        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-slate-100 overflow-hidden">
+                        className="flex w-full items-center gap-3 px-4 py-3 hover:bg-surface-muted transition text-left">
+                        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-surface-muted overflow-hidden">
                           {p.media?.[0]?.file_url
                             ? <img src={p.media[0].file_url} alt="" className="h-full w-full object-cover" />
-                            : <Package className="h-5 w-5 text-slate-400" />}
+                            : <Package className="h-5 w-5 text-ink-subtle" />}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-slate-800 truncate">{p.name}</p>
-                          <p className="text-xs text-slate-400 font-mono">{p.sku}</p>
+                          <p className="text-sm font-semibold text-ink-primary truncate">{p.name}</p>
+                          <p className="text-xs text-ink-subtle font-mono">{p.sku}</p>
                         </div>
-                        <span className="text-xs font-bold text-violet-700">
+                        <span className="text-xs font-semibold text-ink-accent">
                           {p.regional_configs?.[0]?.promotional_price || p.regional_configs?.[0]?.price || '—'}
                         </span>
-                        <Plus className="h-4 w-4 text-violet-500 flex-shrink-0" />
+                        <Plus className="h-4 w-4 text-ink-accent flex-shrink-0" />
                       </button>
                     ))}
                   </div>
@@ -364,42 +364,42 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
 
               {/* Line items */}
               {lineItems.length > 0 ? (
-                <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-                  <div className="border-b border-slate-100 px-5 py-3 bg-slate-50">
-                    <p className="text-xs font-bold uppercase text-slate-500 tracking-wide">{lineItems.length} item(s)</p>
+                <div className="rounded-lg border border-edge bg-white shadow-card overflow-hidden">
+                  <div className="border-b border-edge-subtle px-5 py-3 bg-surface-muted">
+                    <p className="text-xs font-semibold uppercase text-ink-muted tracking-wide">{lineItems.length} item(s)</p>
                   </div>
-                  <div className="divide-y divide-slate-100">
+                  <div className="divide-y divide-edge-subtle">
                     {lineItems.map((item, i) => (
                       <div key={i} className="flex items-center gap-3 px-5 py-4">
-                        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-slate-100 overflow-hidden">
+                        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-surface-muted overflow-hidden">
                           {item.product?.media?.[0]?.file_url
                             ? <img src={item.product.media[0].file_url} alt="" className="h-full w-full object-cover" />
-                            : <Package className="h-5 w-5 text-slate-400" />}
+                            : <Package className="h-5 w-5 text-ink-subtle" />}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-slate-800 truncate">{item.name}</p>
-                          <p className="text-xs font-mono text-slate-400">{item.sku}</p>
+                          <p className="text-sm font-semibold text-ink-primary truncate">{item.name}</p>
+                          <p className="text-xs font-mono text-ink-subtle">{item.sku}</p>
                         </div>
                         {/* Price override */}
                         <div className="flex items-center gap-1">
-                          <span className="text-xs text-slate-400">£</span>
+                          <span className="text-xs text-ink-subtle">£</span>
                           <input value={item.price} onChange={e => updatePrice(i, e.target.value)}
-                            className="w-20 rounded-lg border border-slate-200 px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400" />
+                            className="w-20 rounded-sm border border-edge px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-edge-focus/30 focus:border-ink-primary" />
                         </div>
                         {/* Qty */}
-                        <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50">
-                          <button onClick={() => updateQty(i, -1)} type="button" className="px-2.5 py-1.5 text-slate-500 hover:text-slate-700 transition">
+                        <div className="flex items-center gap-1 rounded-sm border border-edge bg-surface-muted">
+                          <button onClick={() => updateQty(i, -1)} type="button" className="px-2.5 py-1.5 text-ink-muted hover:text-ink-secondary transition">
                             <Minus className="h-3.5 w-3.5" />
                           </button>
-                          <span className="min-w-[24px] text-center text-sm font-bold text-slate-800">{item.quantity}</span>
-                          <button onClick={() => updateQty(i, 1)} type="button" className="px-2.5 py-1.5 text-slate-500 hover:text-slate-700 transition">
+                          <span className="min-w-[24px] text-center text-sm font-semibold text-ink-primary">{item.quantity}</span>
+                          <button onClick={() => updateQty(i, 1)} type="button" className="px-2.5 py-1.5 text-ink-muted hover:text-ink-secondary transition">
                             <Plus className="h-3.5 w-3.5" />
                           </button>
                         </div>
-                        <p className="w-16 text-right text-sm font-bold text-slate-800">
+                        <p className="w-16 text-right text-sm font-semibold text-ink-primary">
                           £{(Number(item.price || 0) * item.quantity).toFixed(2)}
                         </p>
-                        <button onClick={() => removeItem(i)} type="button" className="text-slate-400 hover:text-red-500 transition">
+                        <button onClick={() => removeItem(i)} type="button" className="text-ink-subtle hover:text-ink-danger transition">
                           <X className="h-4 w-4" />
                         </button>
                       </div>
@@ -407,9 +407,9 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
                   </div>
                 </div>
               ) : (
-                <div className="flex flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-slate-200 py-12">
-                  <ShoppingCart className="h-8 w-8 text-slate-300" />
-                  <p className="text-sm text-slate-400">Search for products above to add items</p>
+                <div className="flex flex-col items-center gap-2 rounded-lg border-2 border-dashed border-edge py-12">
+                  <ShoppingCart className="h-8 w-8 text-ink-subtle" />
+                  <p className="text-sm text-ink-subtle">Search for products above to add items</p>
                 </div>
               )}
             </div>
@@ -419,8 +419,8 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
           {step === 'shipping' && (
             <div className="space-y-4">
               {/* Shipping address */}
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
-                <p className="text-sm font-bold text-slate-800">Shipping Address</p>
+              <div className="rounded-lg border border-edge bg-white p-5 shadow-card space-y-3">
+                <p className="text-sm font-semibold text-ink-primary">Shipping Address</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className={LABEL_CLS}>Full Name</label>
@@ -465,8 +465,8 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
               </div>
 
               {/* Charges */}
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
-                <p className="text-sm font-bold text-slate-800">Charges &amp; Discounts</p>
+              <div className="rounded-lg border border-edge bg-white p-5 shadow-card space-y-3">
+                <p className="text-sm font-semibold text-ink-primary">Charges &amp; Discounts</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className={LABEL_CLS}>Shipping Cost (£)</label>
@@ -497,8 +497,8 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
               </div>
 
               {/* Payment & notes */}
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
-                <p className="text-sm font-bold text-slate-800">Payment &amp; Notes</p>
+              <div className="rounded-lg border border-edge bg-white p-5 shadow-card space-y-3">
+                <p className="text-sm font-semibold text-ink-primary">Payment &amp; Notes</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className={LABEL_CLS}>Payment Method</label>
@@ -528,70 +528,70 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
           {step === 'review' && (
             <div className="space-y-4">
               {/* Customer summary */}
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <p className="text-xs font-bold uppercase text-slate-400 tracking-wide mb-3">Customer</p>
+              <div className="rounded-lg border border-edge bg-white p-5 shadow-card">
+                <p className="text-xs font-semibold uppercase text-ink-subtle tracking-wide mb-3">Customer</p>
                 {selectedCustomer ? (
                   <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-100 text-violet-700 font-bold">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-surface-muted text-ink-accent font-semibold">
                       {(selectedCustomer.first_name?.[0] || selectedCustomer.email?.[0] || '?').toUpperCase()}
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-slate-800">{selectedCustomer.first_name} {selectedCustomer.last_name}</p>
-                      <p className="text-xs text-slate-500">{selectedCustomer.email}</p>
+                      <p className="text-sm font-semibold text-ink-primary">{selectedCustomer.first_name} {selectedCustomer.last_name}</p>
+                      <p className="text-xs text-ink-muted">{selectedCustomer.email}</p>
                     </div>
                   </div>
                 ) : (
                   <div>
-                    <p className="text-sm font-semibold text-slate-800">{newCustomer.first_name} {newCustomer.last_name}</p>
-                    <p className="text-xs text-slate-500">{newCustomer.email} · New customer will be created</p>
+                    <p className="text-sm font-semibold text-ink-primary">{newCustomer.first_name} {newCustomer.last_name}</p>
+                    <p className="text-xs text-ink-muted">{newCustomer.email} · New customer will be created</p>
                   </div>
                 )}
               </div>
 
               {/* Items summary */}
-              <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm">
-                <div className="border-b border-slate-100 px-5 py-3 bg-slate-50">
-                  <p className="text-xs font-bold uppercase text-slate-400 tracking-wide">Order Items</p>
+              <div className="rounded-lg border border-edge bg-white overflow-hidden shadow-card">
+                <div className="border-b border-edge-subtle px-5 py-3 bg-surface-muted">
+                  <p className="text-xs font-semibold uppercase text-ink-subtle tracking-wide">Order Items</p>
                 </div>
-                <div className="divide-y divide-slate-100">
+                <div className="divide-y divide-edge-subtle">
                   {lineItems.map((item, i) => (
                     <div key={i} className="flex items-center justify-between px-5 py-3">
                       <div>
-                        <p className="text-sm font-semibold text-slate-800">{item.name}</p>
-                        <p className="text-xs text-slate-400">{item.quantity} × £{Number(item.price).toFixed(2)}</p>
+                        <p className="text-sm font-semibold text-ink-primary">{item.name}</p>
+                        <p className="text-xs text-ink-subtle">{item.quantity} × £{Number(item.price).toFixed(2)}</p>
                       </div>
-                      <p className="text-sm font-bold text-slate-800">£{(Number(item.price) * item.quantity).toFixed(2)}</p>
+                      <p className="text-sm font-semibold text-ink-primary">£{(Number(item.price) * item.quantity).toFixed(2)}</p>
                     </div>
                   ))}
                 </div>
 
                 {/* Totals */}
-                <div className="border-t border-slate-200 bg-slate-50 px-5 py-4 space-y-1.5">
-                  <div className="flex justify-between text-sm text-slate-600">
+                <div className="border-t border-edge bg-surface-muted px-5 py-4 space-y-1.5">
+                  <div className="flex justify-between text-sm text-ink-secondary">
                     <span>Subtotal</span><span>£{subtotal.toFixed(2)}</span>
                   </div>
                   {discountValue > 0 && (
-                    <div className="flex justify-between text-sm text-emerald-600">
+                    <div className="flex justify-between text-sm text-ink-success">
                       <span>Discount {discountCode ? `(${discountCode})` : ''}</span>
                       <span>−£{discountValue.toFixed(2)}</span>
                     </div>
                   )}
-                  <div className="flex justify-between text-sm text-slate-600">
+                  <div className="flex justify-between text-sm text-ink-secondary">
                     <span>Tax ({taxRate}%)</span><span>£{taxValue.toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between text-sm text-slate-600">
+                  <div className="flex justify-between text-sm text-ink-secondary">
                     <span>Shipping</span><span>£{Number(shippingCost).toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between border-t border-slate-200 pt-2 text-base font-black text-slate-900">
+                  <div className="flex justify-between border-t border-edge pt-2 text-base font-semibold text-ink-primary">
                     <span>Total</span><span>£{total.toFixed(2)}</span>
                   </div>
                 </div>
               </div>
 
               {/* Shipping address */}
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <p className="text-xs font-bold uppercase text-slate-400 tracking-wide mb-2">Shipping Address</p>
-                <p className="text-sm text-slate-700">
+              <div className="rounded-lg border border-edge bg-white p-5 shadow-card">
+                <p className="text-xs font-semibold uppercase text-ink-subtle tracking-wide mb-2">Shipping Address</p>
+                <p className="text-sm text-ink-secondary">
                   {shipping.name}<br />
                   {shipping.address_line1}{shipping.address_line2 ? `, ${shipping.address_line2}` : ''}<br />
                   {shipping.city}{shipping.state ? `, ${shipping.state}` : ''} {shipping.postal_code}<br />
@@ -600,16 +600,16 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
               </div>
 
               {/* Payment */}
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <p className="text-xs font-bold uppercase text-slate-400 tracking-wide mb-2">Payment</p>
-                <p className="text-sm font-semibold text-slate-700">{paymentMethod} · Region: {region}</p>
-                {notes && <p className="mt-2 text-xs text-slate-500 italic">Note: {notes}</p>}
+              <div className="rounded-lg border border-edge bg-white p-5 shadow-card">
+                <p className="text-xs font-semibold uppercase text-ink-subtle tracking-wide mb-2">Payment</p>
+                <p className="text-sm font-semibold text-ink-secondary">{paymentMethod} · Region: {region}</p>
+                {notes && <p className="mt-2 text-xs text-ink-muted italic">Note: {notes}</p>}
               </div>
 
               {isDraft && (
-                <div className="flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-200 p-4">
+                <div className="flex items-center gap-2 rounded-md bg-amber-50 border border-amber-200 p-4">
                   <FileText className="h-4 w-4 text-amber-500 flex-shrink-0" />
-                  <p className="text-sm text-amber-700">This will be saved as a <strong>draft</strong> order (status: PENDING). You can confirm it later.</p>
+                  <p className="text-sm text-ink-accent">This will be saved as a <strong>draft</strong> order (status: PENDING). You can confirm it later.</p>
                 </div>
               )}
             </div>
@@ -618,28 +618,28 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
       </div>
 
       {/* Footer nav */}
-      <div className="flex items-center justify-between border-t border-slate-200 bg-white px-4 py-3 sm:px-6 flex-shrink-0">
+      <div className="flex items-center justify-between border-t border-edge bg-white px-4 py-3 sm:px-6 flex-shrink-0">
         <button onClick={prev} disabled={stepIdx === 0} type="button"
-          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition">
+          className="inline-flex items-center gap-2 rounded-md border border-edge px-4 py-2.5 text-sm font-semibold text-ink-secondary hover:bg-surface-muted disabled:opacity-40 disabled:cursor-not-allowed transition">
           <ChevronLeft className="h-4 w-4" /> Back
         </button>
 
         {/* Live total pill */}
         {lineItems.length > 0 && (
-          <div className="hidden sm:flex items-center gap-2 rounded-full bg-slate-100 px-4 py-1.5">
-            <ShoppingCart className="h-3.5 w-3.5 text-slate-500" />
-            <span className="text-sm font-bold text-slate-700">{lineItems.reduce((s, l) => s + l.quantity, 0)} items · £{total.toFixed(2)}</span>
+          <div className="hidden sm:flex items-center gap-2 rounded-sm bg-surface-muted px-4 py-1.5">
+            <ShoppingCart className="h-3.5 w-3.5 text-ink-muted" />
+            <span className="text-sm font-semibold text-ink-secondary">{lineItems.reduce((s, l) => s + l.quantity, 0)} items · £{total.toFixed(2)}</span>
           </div>
         )}
 
         {step !== 'review' ? (
           <button onClick={next} disabled={!canNext[step]} type="button"
-            className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition">
+            className="inline-flex items-center gap-2 rounded-md bg-ink-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-ink-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition">
             Continue <ChevronRight className="h-4 w-4" />
           </button>
         ) : (
           <button onClick={handleCreate} disabled={saving} type="button"
-            className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-6 py-2.5 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-60 transition shadow-sm">
+            className="inline-flex items-center gap-2 rounded-md bg-ink-primary px-6 py-2.5 text-sm font-semibold text-white hover:bg-ink-primary/90 disabled:opacity-60 transition shadow-card">
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
             {saving ? 'Creating…' : isDraft ? 'Save Draft' : 'Create Order'}
           </button>
