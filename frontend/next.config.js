@@ -53,7 +53,7 @@ const nextConfig = {
               "font-src 'self' data:",
               "style-src 'self' 'unsafe-inline'",
               "script-src 'self' 'unsafe-inline' https://accounts.google.com https://www.googletagmanager.com https://connect.facebook.net https://analytics.tiktok.com https://widget.trustpilot.com",
-              "frame-src 'self' https://accounts.google.com https://js.stripe.com https://hooks.stripe.com https://widget.trustpilot.com",
+              "frame-src 'self' https://accounts.google.com https://js.stripe.com https://hooks.stripe.com https://widget.trustpilot.com https://www.instagram.com https://www.facebook.com",
               "connect-src 'self' https://accounts.google.com https://www.google-analytics.com https://graph.facebook.com https://analytics.tiktok.com https://widget.trustpilot.com",
               "form-action 'self'",
             ].join('; '),

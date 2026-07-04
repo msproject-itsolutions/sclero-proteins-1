@@ -7,6 +7,7 @@ import {
 import { CompactTrustBadges } from './TrustBadges';
 import { getApiUrl } from '../lib/api';
 import { authenticatedFetch } from '../lib/authFetch';
+import { fetchWishlistOnce, invalidateWishlistCache } from '../lib/wishlistCache';
 
 // Slug -> label + icon
 const DIETARY_TAG_MAP = {
@@ -89,10 +90,8 @@ export default function ProductCard({
 
   React.useEffect(() => {
     if (!accessToken || unavailable) return;
-    authenticatedFetch(`/api/wishlist/?region=${currentRegion}`, {}, accessToken)
-      .then((res) => res.ok ? res.json() : [])
-      .then((data) => {
-        const items = Array.isArray(data) ? data : (data.results || []);
+    fetchWishlistOnce(currentRegion, accessToken)
+      .then((items) => {
         const found = items.find((item) => item.product_sku === product.sku);
         if (found) {
           setIsWishlisted(true);
@@ -118,6 +117,7 @@ export default function ProductCard({
         if (res.ok) {
           setIsWishlisted(false);
           setWishlistItemId(null);
+          invalidateWishlistCache();
         }
       } else {
         const res = await authenticatedFetch('/api/wishlist/', {
@@ -131,6 +131,7 @@ export default function ProductCard({
           const data = await res.json();
           setIsWishlisted(true);
           setWishlistItemId(data.id);
+          invalidateWishlistCache();
         }
       }
     } catch (e) {
