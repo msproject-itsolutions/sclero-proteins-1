@@ -205,7 +205,10 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
             seen = {p.pk for p in related}
             for p in base.exclude(pk__in=seen)[:4 - len(related)]:
                 related.append(p)
-        ser = ProductDetailSerializer(related, many=True, context={'region': region})
+        # List serializer: card-shaped payload including `thumbnail`, which the
+        # storefront ProductCard renders. The detail serializer has no
+        # thumbnail field, which left the "Recommended Products" grid imageless.
+        ser = ProductListSerializer(related, many=True, context={'region': region})
         return Response(ser.data)
 
     @action(detail=True, methods=['post'], permission_classes=[AllowAny], throttle_scope='review')

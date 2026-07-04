@@ -73,6 +73,14 @@ export default function ProductCard({
   const [wishlistLoading, setWishlistLoading] = React.useState(false);
 
   const taxLabel = currentRegion === 'IN' ? 'GST' : 'VAT';
+
+  // Some endpoints (product detail / related) ship a `media` array instead of
+  // the list serializer's `thumbnail` — fall back so cards never render blank.
+  const thumbnail =
+    product.thumbnail ||
+    product.media?.find((m) => m.media_type === 'IMAGE')?.file_url ||
+    product.media?.[0]?.file_url ||
+    null;
   const taxNote = taxMode === 'exclusive' ? `+ ${taxLabel} at checkout` : `inc. ${taxLabel}`;
 
   // No regional price config for this region -> not sellable here.
@@ -147,9 +155,9 @@ export default function ProductCard({
       <div className="reveal group relative flex flex-col justify-between overflow-hidden rounded-md border border-edge bg-surface p-4 shadow-card transition-all duration-300 hover:-translate-y-1 hover:border-edge-strong hover:shadow-elevated">
         {/* Image */}
         <div className="relative mb-3 flex h-40 w-full items-center justify-center overflow-hidden rounded-sm border border-edge-subtle bg-surface-muted">
-          {product.thumbnail ? (
+          {thumbnail ? (
             <img
-              src={product.thumbnail}
+              src={thumbnail}
               alt={product.name}
               className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
             />
@@ -268,9 +276,9 @@ export default function ProductCard({
 
       {/* Image */}
       <div className="relative aspect-[4/5] w-full overflow-hidden bg-surface-muted">
-        {product.thumbnail ? (
+        {thumbnail ? (
           <img
-            src={product.thumbnail}
+            src={thumbnail}
             alt={product.name}
             className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
           />
