@@ -305,7 +305,7 @@ CORS_ALLOWED_ORIGINS = [
         'CORS_ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:3100'
     ).split(',') if o.strip()
 ]
-CORS_ALLOW_CREDENTIALS = env_bool('CORS_ALLOW_CREDENTIALS', False)
+CORS_ALLOW_CREDENTIALS = env_bool('CORS_ALLOW_CREDENTIALS', True)
 
 # CSRF: the trusted origins that may submit forms / unsafe methods. In the ccTLD
 # deployment the frontend calls the API same-origin (per domain), so list every
