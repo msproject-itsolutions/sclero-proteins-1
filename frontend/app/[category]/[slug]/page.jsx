@@ -352,8 +352,35 @@ export default function SubpageOrProduct() {
       { name: 'LawnCal™ Turf Conditioner (25 kg)', slug: 'lawncal', sku: 'LAWNCAL-25KG', cat: 'ovomatrix' },
     ].filter(rp => rp.sku !== product.sku).slice(0, 3);
 
+    const jsonLd = {
+      "@context": "https://schema.org",
+      "@type": "Product",
+      "name": product.name,
+      "image": product.media?.[0]?.file_url || "/images/placeholder.jpg",
+      "description": product.description,
+      "sku": product.sku || productSku,
+      "brand": {
+        "@type": "Brand",
+        "name": "Sclero Proteins"
+      },
+      "offers": {
+        "@type": "Offer",
+        "url": typeof window !== 'undefined' ? window.location.href : '',
+        "priceCurrency": currentRegion === 'IN' ? 'INR' : 'GBP',
+        "price": product.price || "0.00",
+        "availability": "https://schema.org/InStock",
+        "itemCondition": "https://schema.org/NewCondition"
+      }
+    };
+
     return (
       <StoreShell>
+        <title>{product.name} | Sclero Proteins</title>
+        <meta name="description" content={product.description} />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
         <div className="space-y-16 py-8 md:py-16">
           
           {/* 1. PRODUCT HERO SECTION */}
@@ -597,6 +624,8 @@ export default function SubpageOrProduct() {
   if (displayTitle) {
     return (
       <StoreShell>
+        <title>{displayTitle} | Sclero Proteins</title>
+        <meta name="description" content={displayDesc || 'Scientific research and information page.'} />
         <article className="mx-auto max-w-3xl px-4 py-16 sm:px-6 md:py-24 lg:px-8">
           <span className="kicker uppercase font-bold tracking-wider text-brand-muted">{category} / {slug}</span>
           <h1 className="text-display mt-2 leading-tight">{displayTitle}</h1>
@@ -650,6 +679,8 @@ export default function SubpageOrProduct() {
   // -------------------------------------------------------------
   return (
     <StoreShell>
+      <title>Page Not Found | Sclero Proteins</title>
+      <meta name="description" content="The requested subpage does not exist on scleroproteins.com." />
       <div className="container-page py-20 text-center">
         <h1 className="text-display">Page not found</h1>
         <p className="mt-4 text-sm text-ink-secondary">The requested subpage does not exist.</p>

@@ -624,8 +624,9 @@ export default function KnowledgeHub() {
     }
   }, [activeKey]);
 
-  return (
     <StoreShell>
+      <title>Sclero Knowledge Hub | Collagen &amp; Calcium Science</title>
+      <meta name="description" content="Explore peer-reviewed structural cell biology, absorption kinetics, and bioavailability research backing eggshell membrane bioactives." />
       {/* Banner / Hero Section */}
       <div className="bg-brand-bg border-b border-edge py-12 md:py-16">
         <div className="container-page max-w-5xl text-center px-4">

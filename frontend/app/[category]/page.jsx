@@ -19,6 +19,46 @@ export default function CategoryPage() {
   const currentRegion = useSelector((state) => state.region.currentRegion);
   const currencySymbol = useSelector((state) => state.region.currencySymbol);
 
+  const seoData = useMemo(() => {
+    switch (category) {
+      case 'nutrition':
+        return {
+          title: 'Sclero Nutrition | Advanced Collagen & Calcium Supplements',
+          desc: 'Premium whole-food eggshell collagen and bioavailable calcium capsules for joint care, bone density, and structural cellular recovery.'
+        };
+      case 'ovomatrix':
+        return {
+          title: 'OvoMatrix Solutions | Soil & Turf Conditioning Technology',
+          desc: 'Natural eggshell-derived mineral and organic platforms powering high-grade soil improvers, turf conditioning, and wholesale bulk supplies.'
+        };
+      case 'science':
+        return {
+          title: 'Scientific Research & Clinical Evidence | Sclero Proteins',
+          desc: 'Explore peer-reviewed analysis on collagen types I, V, X, calcite crystal lattices, and bio-mineralization science.'
+        };
+      case 'applications':
+        return {
+          title: 'Multi-Industry Applications | Sclero Proteins',
+          desc: 'Innovative biological eggshell membranes and calcium minerals serving human nutrition, sports recovery, cosmetics, and agriculture.'
+        };
+      case 'resources':
+        return {
+          title: 'Technical Specification Sheets, COAs & Whitepapers | Sclero Proteins',
+          desc: 'Download verified certificates of analysis, chemical specifications, research whitepapers, and FAQs for Sclero products.'
+        };
+      case 'about':
+        return {
+          title: 'About Us & Global Operations | Sclero Proteins',
+          desc: 'Learn about our UK-India operations, state-of-the-art manufacturing facilities, organic purity standards, and certifications.'
+        };
+      default:
+        return {
+          title: 'Sclero Proteins | Avian Bioactives',
+          desc: 'Leading biological producer of eggshell membrane collagen and porous bioavailable calcium.'
+        };
+    }
+  }, [category]);
+
   const [inquiryName, setInquiryName] = useState('');
   const [inquiryEmail, setInquiryEmail] = useState('');
   const [inquiryMessage, setInquiryMessage] = useState('');
@@ -497,6 +537,8 @@ export default function CategoryPage() {
 
   return (
     <StoreShell>
+      <title>{seoData.title}</title>
+      <meta name="description" content={seoData.desc} />
       {renderContent()}
     </StoreShell>
   );
