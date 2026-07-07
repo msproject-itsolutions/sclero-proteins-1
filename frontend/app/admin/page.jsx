@@ -4010,7 +4010,14 @@ function ThemeTab({ authFetch }) {
     primaryColor: '#6d28d9',
     accentColor: '#f59e0b',
     fontName: 'Outfit',
-    logoUrl: '/static/logo.png',
+    logoUrl: '/logo-mark.png',
+    logoWordmarkUrl: '/logo-wordmark.png',
+    whatsappNumberIN: '918047100000',
+    whatsappNumberUK: '442045740000',
+    emailIN: 'support@scleroproteins.in',
+    emailUK: 'support@scleroproteins.co.uk',
+    phoneIN: '+91 80 4710 0000',
+    phoneUK: '+44 (0)20 4574 0000',
     borderRadius: '12px',
     glassmorphism: 'Medium',
     customCss: ''
@@ -4018,13 +4025,14 @@ function ThemeTab({ authFetch }) {
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadingWordmark, setUploadingWordmark] = useState(false);
 
   useEffect(() => {
     authFetch('/api/admin/settings/THEME_BRANDING/')
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         if (d && d.value) {
-          setTheme(d.value);
+          setTheme(prev => ({ ...prev, ...d.value }));
         }
       });
   }, [authFetch]);
@@ -4059,6 +4067,15 @@ function ThemeTab({ authFetch }) {
       .then((fileUrl) => setTheme((prev) => ({ ...prev, logoUrl: fileUrl })))
       .catch((err) => alert(err.message || 'Logo upload failed.'))
       .finally(() => setUploadingLogo(false));
+  };
+
+  const uploadWordmark = (file) => {
+    if (!file) return;
+    setUploadingWordmark(true);
+    uploadAdminMedia(authFetch, file)
+      .then((fileUrl) => setTheme((prev) => ({ ...prev, logoWordmarkUrl: fileUrl })))
+      .catch((err) => alert(err.message || 'Wordmark upload failed.'))
+      .finally(() => setUploadingWordmark(false));
   };
 
   return (
@@ -4121,9 +4138,9 @@ function ThemeTab({ authFetch }) {
           </div>
 
           <div>
-            <label className="block font-semibold text-ink-primary mb-1">Logo image URL</label>
+            <label className="block font-semibold text-ink-primary mb-1">Logo Mark Image (Icon)</label>
             <div className="flex gap-2">
-              <input type="text" value={theme.logoUrl} onChange={(e) => setTheme({ ...theme, logoUrl: e.target.value })} className="flex-1 rounded-sm border border-edge p-2" />
+              <input type="text" value={theme.logoUrl || ''} onChange={(e) => setTheme({ ...theme, logoUrl: e.target.value })} className="flex-1 rounded-sm border border-edge p-2" />
               <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-edge px-3 font-semibold text-ink-primary hover:border-ink-primary">
                 <Upload className="h-3.5 w-3.5" />
                 {uploadingLogo ? 'Uploading' : 'Upload'}
@@ -4133,6 +4150,54 @@ function ThemeTab({ authFetch }) {
           </div>
 
           <div>
+            <label className="block font-semibold text-ink-primary mb-1">Logo Wordmark Image</label>
+            <div className="flex gap-2">
+              <input type="text" value={theme.logoWordmarkUrl || ''} onChange={(e) => setTheme({ ...theme, logoWordmarkUrl: e.target.value })} className="flex-1 rounded-sm border border-edge p-2" />
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-edge px-3 font-semibold text-ink-primary hover:border-ink-primary">
+                <Upload className="h-3.5 w-3.5" />
+                {uploadingWordmark ? 'Uploading' : 'Upload'}
+                <input type="file" accept="image/*" onChange={(e) => uploadWordmark(e.target.files?.[0])} className="hidden" disabled={uploadingWordmark} />
+              </label>
+            </div>
+          </div>
+
+          <div className="border-t border-edge-subtle pt-3 mt-3">
+            <h4 className="font-semibold text-ink-primary uppercase tracking-wider mb-2 text-[10px]">India Store Info & Widgets</h4>
+            <div className="space-y-2">
+              <div>
+                <label className="block text-[11px] font-medium text-brand-muted mb-0.5">Support Email (IN)</label>
+                <input type="email" value={theme.emailIN || ''} onChange={(e) => setTheme({ ...theme, emailIN: e.target.value })} className="w-full rounded-sm border border-edge p-2" />
+              </div>
+              <div>
+                <label className="block text-[11px] font-medium text-brand-muted mb-0.5">Support Phone (IN)</label>
+                <input type="text" value={theme.phoneIN || ''} onChange={(e) => setTheme({ ...theme, phoneIN: e.target.value })} className="w-full rounded-sm border border-edge p-2" />
+              </div>
+              <div>
+                <label className="block text-[11px] font-medium text-brand-muted mb-0.5">WhatsApp Widget Number (IN)</label>
+                <input type="text" value={theme.whatsappNumberIN || ''} onChange={(e) => setTheme({ ...theme, whatsappNumberIN: e.target.value })} className="w-full rounded-sm border border-edge p-2" placeholder="e.g. 918047100000" />
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-edge-subtle pt-3 mt-3">
+            <h4 className="font-semibold text-ink-primary uppercase tracking-wider mb-2 text-[10px]">UK Store Info & Widgets</h4>
+            <div className="space-y-2">
+              <div>
+                <label className="block text-[11px] font-medium text-brand-muted mb-0.5">Support Email (UK)</label>
+                <input type="email" value={theme.emailUK || ''} onChange={(e) => setTheme({ ...theme, emailUK: e.target.value })} className="w-full rounded-sm border border-edge p-2" />
+              </div>
+              <div>
+                <label className="block text-[11px] font-medium text-brand-muted mb-0.5">Support Phone (UK)</label>
+                <input type="text" value={theme.phoneUK || ''} onChange={(e) => setTheme({ ...theme, phoneUK: e.target.value })} className="w-full rounded-sm border border-edge p-2" />
+              </div>
+              <div>
+                <label className="block text-[11px] font-medium text-brand-muted mb-0.5">WhatsApp Widget Number (UK)</label>
+                <input type="text" value={theme.whatsappNumberUK || ''} onChange={(e) => setTheme({ ...theme, whatsappNumberUK: e.target.value })} className="w-full rounded-sm border border-edge p-2" placeholder="e.g. 442045740000" />
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-edge-subtle pt-3">
             <label className="block font-semibold text-ink-primary mb-1">Custom CSS Overrides</label>
             <textarea rows={3} value={theme.customCss || ''} onChange={(e) => setTheme({ ...theme, customCss: e.target.value })} placeholder="e.g. .btn { text-transform: uppercase; }" className="w-full rounded-sm border border-edge p-2 font-mono text-[10px]" />
           </div>

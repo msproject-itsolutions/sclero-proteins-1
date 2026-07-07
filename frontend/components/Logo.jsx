@@ -1,4 +1,5 @@
 import React from 'react';
+import { useSelector } from 'react-redux';
 
 /**
  * Brand mark — the official Sclero Proteins swan-"S" symbol.
@@ -7,9 +8,12 @@ import React from 'react';
  * existing caller keeps working unchanged.
  */
 export default function Logo({ className = 'h-8 w-8', alt = 'Sclero Proteins' }) {
+  const branding = useSelector((state) => state.region.branding);
+  const logoSrc = branding?.logoUrl || '/logo-mark.png';
+
   return (
     <img
-      src="/logo-mark.png"
+      src={logoSrc}
       alt={alt}
       className={`${className} select-none object-contain`}
       draggable={false}
@@ -32,17 +36,21 @@ export function LogoLockup({
   inverse = false,
   alt = 'Sclero Proteins',
 }) {
+  const branding = useSelector((state) => state.region.branding);
+  const logoSrc = branding?.logoUrl || '/logo-mark.png';
+  const wordmarkSrc = branding?.logoWordmarkUrl || '/logo-wordmark.png';
+
   return (
     <span className="flex items-center gap-2.5">
       <img
-        src="/logo-mark.png"
+        src={logoSrc}
         alt=""
         aria-hidden="true"
         className={`${markClass} select-none object-contain`}
         draggable={false}
       />
       <img
-        src="/logo-wordmark.png"
+        src={wordmarkSrc}
         alt={alt}
         className={`${wordClass} w-auto select-none object-contain ${inverse ? 'brightness-0 invert' : ''}`}
         draggable={false}
@@ -50,3 +58,4 @@ export function LogoLockup({
     </span>
   );
 }
+
