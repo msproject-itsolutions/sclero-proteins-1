@@ -13,6 +13,7 @@ import StoreShell from '../components/StoreShell';
 import { addToCart } from '../store/cartSlice';
 import { getApiUrl } from '../lib/api';
 import { trackEvent } from '../utils/analytics';
+import QuizComponent from '../components/QuizComponent';
 
 export default function HomePageClient({ initialBlogs = [] }) {
   const dispatch = useDispatch();
@@ -297,6 +298,33 @@ export default function HomePageClient({ initialBlogs = [] }) {
               Explore OvoMatrix Solutions
             </Link>
           </div>
+        </div>
+      </section>
+
+      {/* Quiz Section */}
+      <section className="section border-y border-edge bg-surface-muted">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
+          <div className="mb-10 text-center">
+            <span className="kicker">Personalized Wellness</span>
+            <h2 className="text-heading-1 mt-3">Not sure where to start?</h2>
+            <p className="mt-3 text-sm text-ink-secondary">
+              Take our 4-question quiz to find the perfect collagen or supplement for your goals
+            </p>
+          </div>
+
+          <QuizComponent
+            onComplete={(result) => {
+              const catMap = {
+                'COMBO-COLLAGEN-60': 'nutrition/combo-collagen',
+                'BJC-BONE-JOINT': 'nutrition/bjc',
+                'CALPURE-60': 'nutrition/calpure',
+                'SOILPRO-1KG': 'ovomatrix/soilpro',
+                'LAWNCAL-25KG': 'ovomatrix/lawncal'
+              };
+              const route = catMap[result.recommendation.sku] || `products/${result.recommendation.sku}`;
+              window.location.href = `/${route}`;
+            }}
+          />
         </div>
       </section>
 
