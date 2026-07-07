@@ -39,10 +39,29 @@ class StoreConfigView(APIView):
         setting = SystemSetting.objects.filter(key='THEME_BRANDING').first()
         if setting and isinstance(setting.value, dict):
             branding = setting.value
+
+        company_info = {}
+        setting_company = SystemSetting.objects.filter(key='COMPANY_INFO').first()
+        if setting_company and isinstance(setting_company.value, dict):
+            company_info = setting_company.value
+
+        social_links = {}
+        setting_social = SystemSetting.objects.filter(key='SOCIAL_LINKS').first()
+        if setting_social and isinstance(setting_social.value, dict):
+            social_links = setting_social.value
+
+        seo_settings = {}
+        setting_seo = SystemSetting.objects.filter(key='SEO_SETTINGS').first()
+        if setting_seo and isinstance(setting_seo.value, dict):
+            seo_settings = setting_seo.value
+
         return Response({
             'tax_mode': get_store_tax_mode(),
             'guest_checkout_enabled': get_guest_checkout_enabled(),
             'branding': branding,
+            'company_info': company_info,
+            'social_links': social_links,
+            'seo_settings': seo_settings,
         })
 
 
@@ -482,7 +501,7 @@ class PublishedBlogPostDetailView(APIView):
 class PublicSiteSettingView(APIView):
     """Public, whitelisted settings used to reflect CMS menu/footer changes."""
     permission_classes = [AllowAny]
-    ALLOWED_KEYS = {'NAVIGATION_MENUS', 'FOOTER_SETTINGS', 'THEME_BRANDING'}
+    ALLOWED_KEYS = {'NAVIGATION_MENUS', 'FOOTER_SETTINGS', 'THEME_BRANDING', 'COMPANY_INFO', 'SOCIAL_LINKS', 'SEO_SETTINGS'}
 
 
     def get(self, request, key):

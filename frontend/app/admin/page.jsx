@@ -3695,6 +3695,45 @@ function SettingsTab({ authFetch }) {
   const [taxSaving, setTaxSaving] = useState(false);
   const [taxSaved, setTaxSaved] = useState(false);
 
+  // New settings states
+  const [companyInfo, setCompanyInfo] = useState({
+    name: 'Sclero Proteins Ltd',
+    phone: '',
+    email: '',
+    address: '',
+    gst: '',
+    cin: '',
+    support: ''
+  });
+  const [companySaving, setCompanySaving] = useState(false);
+  const [companySaved, setCompanySaved] = useState(false);
+
+  const [socialLinks, setSocialLinks] = useState({
+    facebook: '',
+    instagram: '',
+    linkedin: '',
+    x: '',
+    youtube: '',
+    pinterest: '',
+    whatsapp: '',
+    telegram: ''
+  });
+  const [socialSaving, setSocialSaving] = useState(false);
+  const [socialSaved, setSocialSaved] = useState(false);
+
+  const [seoSettings, setSeoSettings] = useState({
+    metaTitle: '',
+    metaDescription: '',
+    metaKeywords: '',
+    googleAnalytics: '',
+    gtm: '',
+    fbPixel: '',
+    robotsTxt: '',
+    schemaMarkup: ''
+  });
+  const [seoSaving, setSeoSaving] = useState(false);
+  const [seoSaved, setSeoSaved] = useState(false);
+
   useEffect(() => {
     authFetch('/api/admin/tax-settings/')
       .then((r) => (r.ok ? r.json() : null))
@@ -3716,6 +3755,27 @@ function SettingsTab({ authFetch }) {
               ? Boolean(legacyEnabled)
               : true,
         });
+      })
+      .catch(() => {});
+
+    authFetch('/api/admin/settings/COMPANY_INFO/')
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => {
+        if (d && d.value) setCompanyInfo(prev => ({ ...prev, ...d.value }));
+      })
+      .catch(() => {});
+
+    authFetch('/api/admin/settings/SOCIAL_LINKS/')
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => {
+        if (d && d.value) setSocialLinks(prev => ({ ...prev, ...d.value }));
+      })
+      .catch(() => {});
+
+    authFetch('/api/admin/settings/SEO_SETTINGS/')
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => {
+        if (d && d.value) setSeoSettings(prev => ({ ...prev, ...d.value }));
       })
       .catch(() => {});
   }, [authFetch]);
@@ -3768,19 +3828,86 @@ function SettingsTab({ authFetch }) {
     }
   };
 
+  const saveCompanyInfo = async () => {
+    setCompanySaving(true);
+    setCompanySaved(false);
+    try {
+      let response = await authFetch('/api/admin/settings/COMPANY_INFO/', {
+        method: 'PUT',
+        body: JSON.stringify({ key: 'COMPANY_INFO', value: companyInfo, description: 'Storefront company contact details and tax registrations' })
+      });
+      if (response.status === 404) {
+        response = await authFetch('/api/admin/settings/', {
+          method: 'POST',
+          body: JSON.stringify({ key: 'COMPANY_INFO', value: companyInfo, description: 'Storefront company contact details and tax registrations' })
+        });
+      }
+      if (response.ok) {
+        setCompanySaved(true);
+        setTimeout(() => setCompanySaved(false), 2000);
+      }
+    } catch {}
+    setCompanySaving(false);
+  };
+
+  const saveSocialLinks = async () => {
+    setSocialSaving(true);
+    setSocialSaved(false);
+    try {
+      let response = await authFetch('/api/admin/settings/SOCIAL_LINKS/', {
+        method: 'PUT',
+        body: JSON.stringify({ key: 'SOCIAL_LINKS', value: socialLinks, description: 'Storefront social media links' })
+      });
+      if (response.status === 404) {
+        response = await authFetch('/api/admin/settings/', {
+          method: 'POST',
+          body: JSON.stringify({ key: 'SOCIAL_LINKS', value: socialLinks, description: 'Storefront social media links' })
+        });
+      }
+      if (response.ok) {
+        setSocialSaved(true);
+        setTimeout(() => setSocialSaved(false), 2000);
+      }
+    } catch {}
+    setSocialSaving(false);
+  };
+
+  const saveSeoSettings = async () => {
+    setSeoSaving(true);
+    setSeoSaved(false);
+    try {
+      let response = await authFetch('/api/admin/settings/SEO_SETTINGS/', {
+        method: 'PUT',
+        body: JSON.stringify({ key: 'SEO_SETTINGS', value: seoSettings, description: 'SEO settings and tracking tags' })
+      });
+      if (response.status === 404) {
+        response = await authFetch('/api/admin/settings/', {
+          method: 'POST',
+          body: JSON.stringify({ key: 'SEO_SETTINGS', value: seoSettings, description: 'SEO settings and tracking tags' })
+        });
+      }
+      if (response.ok) {
+        setSeoSaved(true);
+        setTimeout(() => setSeoSaved(false), 2000);
+      }
+    } catch {}
+    setSeoSaving(false);
+  };
+
   const TAX_OPTIONS = [
     { v: 'inclusive', title: 'Tax inclusive', desc: 'Displayed prices already include VAT/GST. Checkout shows tax as "included" and does not add it on top.' },
     { v: 'exclusive', title: 'Tax exclusive', desc: 'Displayed prices are net. VAT/GST is added as a separate line at checkout.' },
   ];
 
   return (
-    <div className="space-y-6 text-xs bg-white rounded-lg border border-edge p-5">
+    <div className="space-y-8 text-xs">
+      
       {/* Tax & pricing — wired to the live store config */}
-      <div>
+      <div className="bg-white rounded-lg border border-edge p-5 space-y-3">
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-sm font-semibold text-ink-primary mb-1 uppercase">Tax &amp; pricing</h3>
-            <p className="text-brand-muted mb-3">Choose how product prices display and how tax is charged at checkout.</p>
+            <p className="text-brand-muted">Choose how product prices display and how tax is charged at checkout.</p>
           </div>
           {taxSaved && <span className="text-[11px] font-semibold text-brand-success">✓ Saved</span>}
         </div>
@@ -3807,7 +3934,8 @@ function SettingsTab({ authFetch }) {
         </div>
       </div>
 
-      <div className="border-t border-edge-subtle pt-4">
+      {/* Checkout access */}
+      <div className="bg-white rounded-lg border border-edge p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h3 className="text-sm font-semibold text-ink-primary mb-1 uppercase">Checkout access</h3>
@@ -3845,11 +3973,120 @@ function SettingsTab({ authFetch }) {
         </button>
       </div>
 
-      <p className="border-t border-edge-subtle pt-4 text-[11px] text-brand-muted">
-        Payment keys, email/SMTP, shipping rates, theme and cookie settings live in their own
-        sections in the sidebar. API keys for marketing integrations are managed under
-        <span className="font-semibold text-ink-primary"> Marketing → Integrations</span>.
-      </p>
+      {/* Company Information */}
+      <div className="bg-white rounded-lg border border-edge p-5 space-y-4">
+        <div className="flex items-center justify-between border-b border-edge-subtle pb-3">
+          <div>
+            <h3 className="text-sm font-semibold text-ink-primary uppercase">Company Information</h3>
+            <p className="text-brand-muted mt-0.5">Manage registration numbers, tax compliance, and addresses.</p>
+          </div>
+          <button onClick={saveCompanyInfo} disabled={companySaving} className="btn-primary px-4 py-2 uppercase font-semibold">
+            {companySaving ? 'Saving' : companySaved ? 'Saved ✓' : 'Save Info'}
+          </button>
+        </div>
+        
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="block font-semibold text-ink-primary mb-1">Company Name</label>
+            <input type="text" value={companyInfo.name || ''} onChange={(e) => setCompanyInfo({ ...companyInfo, name: e.target.value })} className="w-full rounded border border-edge p-2 bg-surface" />
+          </div>
+          <div>
+            <label className="block font-semibold text-ink-primary mb-1">Support Contacts</label>
+            <input type="text" value={companyInfo.support || ''} onChange={(e) => setCompanyInfo({ ...companyInfo, support: e.target.value })} className="w-full rounded border border-edge p-2 bg-surface" placeholder="e.g. operations@scleroproteins.com" />
+          </div>
+          <div>
+            <label className="block font-semibold text-ink-primary mb-1">Email Addresses</label>
+            <input type="text" value={companyInfo.email || ''} onChange={(e) => setCompanyInfo({ ...companyInfo, email: e.target.value })} className="w-full rounded border border-edge p-2 bg-surface" />
+          </div>
+          <div>
+            <label className="block font-semibold text-ink-primary mb-1">Mobile Numbers</label>
+            <input type="text" value={companyInfo.phone || ''} onChange={(e) => setCompanyInfo({ ...companyInfo, phone: e.target.value })} className="w-full rounded border border-edge p-2 bg-surface" />
+          </div>
+          <div>
+            <label className="block font-semibold text-ink-primary mb-1">GST/VAT Registration</label>
+            <input type="text" value={companyInfo.gst || ''} onChange={(e) => setCompanyInfo({ ...companyInfo, gst: e.target.value })} className="w-full rounded border border-edge p-2 bg-surface" placeholder="e.g. GSTIN 24AAACS7022H1Z1" />
+          </div>
+          <div>
+            <label className="block font-semibold text-ink-primary mb-1">CIN/PAN Registration</label>
+            <input type="text" value={companyInfo.cin || ''} onChange={(e) => setCompanyInfo({ ...companyInfo, cin: e.target.value })} className="w-full rounded border border-edge p-2 bg-surface" placeholder="e.g. U74999GJ2026PTC123456" />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="block font-semibold text-ink-primary mb-1">Office Address</label>
+            <textarea rows={2} value={companyInfo.address || ''} onChange={(e) => setCompanyInfo({ ...companyInfo, address: e.target.value })} className="w-full rounded border border-edge p-2 bg-surface" />
+          </div>
+        </div>
+      </div>
+
+      {/* Social Media Links */}
+      <div className="bg-white rounded-lg border border-edge p-5 space-y-4">
+        <div className="flex items-center justify-between border-b border-edge-subtle pb-3">
+          <div>
+            <h3 className="text-sm font-semibold text-ink-primary uppercase">Social Media Management</h3>
+            <p className="text-brand-muted mt-0.5">Control active external community link locations.</p>
+          </div>
+          <button onClick={saveSocialLinks} disabled={socialSaving} className="btn-primary px-4 py-2 uppercase font-semibold">
+            {socialSaving ? 'Saving' : socialSaved ? 'Saved ✓' : 'Save Links'}
+          </button>
+        </div>
+        
+        <div className="grid gap-4 sm:grid-cols-2">
+          {['facebook', 'instagram', 'linkedin', 'x', 'youtube', 'pinterest', 'whatsapp', 'telegram'].map((platform) => (
+            <div key={platform}>
+              <label className="block font-semibold text-ink-primary mb-1 capitalize">{platform}</label>
+              <input type="text" value={socialLinks[platform] || ''} onChange={(e) => setSocialLinks({ ...socialLinks, [platform]: e.target.value })} className="w-full rounded border border-edge p-2 bg-surface" placeholder={`https://${platform}.com/...`} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* SEO & Tracking pixels */}
+      <div className="bg-white rounded-lg border border-edge p-5 space-y-4">
+        <div className="flex items-center justify-between border-b border-edge-subtle pb-3">
+          <div>
+            <h3 className="text-sm font-semibold text-ink-primary uppercase">SEO &amp; Integrations Settings</h3>
+            <p className="text-brand-muted mt-0.5">Configure default index keywords, descriptions, sitemaps, and tracking script triggers.</p>
+          </div>
+          <button onClick={saveSeoSettings} disabled={seoSaving} className="btn-primary px-4 py-2 uppercase font-semibold">
+            {seoSaving ? 'Saving' : seoSaved ? 'Saved ✓' : 'Save Settings'}
+          </button>
+        </div>
+        
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="block font-semibold text-ink-primary mb-1">Default Meta Title</label>
+            <input type="text" value={seoSettings.metaTitle || ''} onChange={(e) => setSeoSettings({ ...seoSettings, metaTitle: e.target.value })} className="w-full rounded border border-edge p-2 bg-surface" />
+          </div>
+          <div>
+            <label className="block font-semibold text-ink-primary mb-1">Default Meta Keywords</label>
+            <input type="text" value={seoSettings.metaKeywords || ''} onChange={(e) => setSeoSettings({ ...seoSettings, metaKeywords: e.target.value })} className="w-full rounded border border-edge p-2 bg-surface" />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="block font-semibold text-ink-primary mb-1">Default Meta Description</label>
+            <textarea rows={2} value={seoSettings.metaDescription || ''} onChange={(e) => setSeoSettings({ ...seoSettings, metaDescription: e.target.value })} className="w-full rounded border border-edge p-2 bg-surface" />
+          </div>
+          <div>
+            <label className="block font-semibold text-ink-primary mb-1">Google Analytics ID (G-XXXXX)</label>
+            <input type="text" value={seoSettings.googleAnalytics || ''} onChange={(e) => setSeoSettings({ ...seoSettings, googleAnalytics: e.target.value })} className="w-full rounded border border-edge p-2 bg-surface" />
+          </div>
+          <div>
+            <label className="block font-semibold text-ink-primary mb-1">Google Tag Manager (GTM-XXXXX)</label>
+            <input type="text" value={seoSettings.gtm || ''} onChange={(e) => setSeoSettings({ ...seoSettings, gtm: e.target.value })} className="w-full rounded border border-edge p-2 bg-surface" />
+          </div>
+          <div>
+            <label className="block font-semibold text-ink-primary mb-1">Facebook Pixel ID</label>
+            <input type="text" value={seoSettings.fbPixel || ''} onChange={(e) => setSeoSettings({ ...seoSettings, fbPixel: e.target.value })} className="w-full rounded border border-edge p-2 bg-surface" />
+          </div>
+          <div>
+            <label className="block font-semibold text-ink-primary mb-1">Robots.txt content</label>
+            <input type="text" value={seoSettings.robotsTxt || ''} onChange={(e) => setSeoSettings({ ...seoSettings, robotsTxt: e.target.value })} className="w-full rounded border border-edge p-2 bg-surface" placeholder="e.g. User-agent: * Allow: /" />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="block font-semibold text-ink-primary mb-1">Structured Schema Markup (JSON-LD)</label>
+            <textarea rows={3} value={seoSettings.schemaMarkup || ''} onChange={(e) => setSeoSettings({ ...seoSettings, schemaMarkup: e.target.value })} className="w-full rounded border border-edge p-2 bg-surface font-mono" placeholder='{"@context": "https://schema.org", "@type": "Organization"}' />
+          </div>
+        </div>
+      </div>
+
     </div>
   );
 }
