@@ -448,6 +448,68 @@ export default function HomePageClient({ initialBlogs = [] }) {
         </div>
       </section>
 
+      {/* Instagram Reels Section */}
+      <section className="section border-b border-edge bg-surface-muted">
+        <div className="container-page">
+          <div className="reveal mb-14 text-center">
+            <span className="kicker">Social Feed</span>
+            <h2 className="text-heading-1 mt-3">Latest from Instagram</h2>
+            <p className="mt-3 text-sm text-ink-secondary">Follow our community @scleroproteins for daily fitness and joint care insights</p>
+          </div>
+
+          <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-12">
+            {/* Live Instagram Feed Iframe */}
+            <div className="reveal rounded-md border border-edge bg-surface p-4 shadow-card lg:col-span-5">
+              <div className="relative flex aspect-[4/5] w-full flex-col items-center justify-center overflow-hidden rounded-sm border border-edge-subtle bg-surface-muted p-6 text-center">
+                <iframe
+                  src="https://www.instagram.com/scleroproteins/embed"
+                  className="absolute inset-0 h-full w-full rounded-sm border-0"
+                  allowFullScreen
+                  scrolling="no"
+                  frameBorder="0"
+                  title="Instagram Feed Embed"
+                ></iframe>
+              </div>
+            </div>
+
+            {/* Curated Reels Grid */}
+            <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {[
+                { title: 'Cold-processed whey vs heat-denatured proteins. Here is the science 🧪', url: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=500', plays: '12.4k' },
+                { title: 'Daily joint recovery routine using BJC active peptides 🏋️‍♂️', url: 'https://images.unsplash.com/photo-1579758629938-03607ccdbaba?w=500', plays: '9.8k' },
+                { title: 'The truth about proprietary supplement blends. Read labels carefully!', url: 'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=500', plays: '18.1k' },
+                { title: 'How eggshell membrane peptides support cartilage density naturally 🔬', url: 'https://images.unsplash.com/photo-1550572017-edd951b55104?w=500', plays: '15.6k' },
+              ].map((reel, idx) => (
+                <a
+                  key={idx}
+                  href="https://www.instagram.com/scleroproteins"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="reveal group relative block aspect-[4/5] overflow-hidden rounded-md border border-edge bg-[#1A1A1A]"
+                >
+                  <img
+                    src={reel.url}
+                    alt=""
+                    className="h-full w-full object-cover opacity-80 transition-all duration-500 ease-out group-hover:scale-[1.04] group-hover:opacity-60"
+                  />
+                  <div className="absolute inset-0 flex flex-col justify-between bg-gradient-to-t from-black/85 via-black/20 to-transparent p-5 text-white">
+                    <div className="self-end rounded-xs bg-white/15 px-2.5 py-1 text-[9px] font-medium uppercase tracking-luxe backdrop-blur-md">
+                      {reel.plays} views
+                    </div>
+                    <div className="space-y-1.5">
+                      <p className="text-xs font-medium leading-normal">{reel.title}</p>
+                      <span className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-luxe text-[#C89838]">
+                        <Instagram className="h-3.5 w-3.5" /> Watch reel
+                      </span>
+                    </div>
+                  </div>
+                </a>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* SECTION 9: ABOUT & CONTACT */}
       <section className="section border-b border-edge bg-brand-bg">
         <div className="container-page">
