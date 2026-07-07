@@ -624,6 +624,7 @@ export default function KnowledgeHub() {
     }
   }, [activeKey]);
 
+  return (
     <StoreShell>
       <title>Sclero Knowledge Hub | Collagen &amp; Calcium Science</title>
       <meta name="description" content="Explore peer-reviewed structural cell biology, absorption kinetics, and bioavailability research backing eggshell membrane bioactives." />
