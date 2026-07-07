@@ -7,7 +7,7 @@ import Link from 'next/link';
 import {
   Heart, Sprout, Brain, Shield, Activity, Dumbbell,
   Sparkles, Award, FileText, ChevronRight, Download,
-  CheckCircle2, Info, Landmark, HelpCircle, FileDown, ShieldCheck, Mail, Send
+  Check, Info, Landmark, HelpCircle, FileDown, ShieldCheck, Mail, Send
 } from 'lucide-react';
 import StoreShell from '../../components/StoreShell';
 import ProductCatalog from '../../components/ProductCatalog';
@@ -116,7 +116,7 @@ export default function CategoryPage() {
                   'Bulk B2B ingredients (ESC, collagen, custom blends)'
                 ].map((item, idx) => (
                   <li key={idx} className="flex items-start gap-2.5 text-xs text-ink-secondary">
-                    <CheckCircle2 className="h-4.5 w-4.5 text-ink-success shrink-0" />
+                    <Check className="h-4.5 w-4.5 text-ink-success shrink-0" />
                     <span>{item}</span>
                   </li>
                 ))}
@@ -263,7 +263,7 @@ export default function CategoryPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-10 text-left">
               {['Physical Testing', 'Microbial Verification', 'Heavy Metal Screening', 'Batch Traceability'].map((q, idx) => (
                 <div key={idx} className="p-4 border border-edge bg-brand-bg rounded">
-                  <CheckCircle2 className="h-5 w-5 text-ink-success mb-2" />
+                  <Check className="h-5 w-5 text-ink-success mb-2" />
                   <h4 className="text-xs font-bold text-ink-primary mb-1">{q}</h4>
                   <p className="text-[10px] text-ink-muted">Independent laboratory verified on every production batch.</p>
                 </div>
