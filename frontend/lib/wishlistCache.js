@@ -6,7 +6,10 @@ import { authenticatedFetch } from './authFetch';
 let cache = { key: null, promise: null };
 
 export function fetchWishlistOnce(region, accessToken) {
-  const key = `${region}:${accessToken || ''}`;
+  if (!accessToken) {
+    return Promise.resolve([]);
+  }
+  const key = `${region}:${accessToken}`;
   if (cache.key !== key || !cache.promise) {
     cache = {
       key,
