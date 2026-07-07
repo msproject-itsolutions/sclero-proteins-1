@@ -6,7 +6,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import Link from 'next/link';
 import {
   Check, ArrowRight, ShieldCheck, Heart, Leaf, Sprout, Award,
-  Activity, Dumbbell, Shield, HelpCircle, FileDown, BookOpen, ChevronRight, ShoppingCart
+  Activity, Dumbbell, Shield, HelpCircle, FileDown, BookOpen, ChevronRight, ShoppingCart, CheckCircle2
 } from 'lucide-react';
 import StoreShell from '../../../components/StoreShell';
 import { addToCart } from '../../../store/cartSlice';
