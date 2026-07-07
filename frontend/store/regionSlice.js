@@ -14,6 +14,16 @@ const initialState = {
   // 'exclusive' (tax added at checkout). Loaded from /api/store-config/.
   taxMode: 'inclusive',
   guestCheckoutEnabled: true,
+  branding: {
+    logoUrl: '',
+    logoWordmarkUrl: '',
+    whatsappNumberIN: '918047100000',
+    whatsappNumberUK: '442045740000',
+    emailIN: 'support@scleroproteins.in',
+    emailUK: 'support@scleroproteins.co.uk',
+    phoneIN: '+91 80 4710 0000',
+    phoneUK: '+44 (0)20 4574 0000',
+  }
 };
 
 const regionSlice = createSlice({
@@ -37,9 +47,13 @@ const regionSlice = createSlice({
     },
     setGuestCheckoutEnabled: (state, action) => {
       state.guestCheckoutEnabled = Boolean(action.payload);
+    },
+    setBranding: (state, action) => {
+      state.branding = { ...state.branding, ...action.payload };
     }
   }
 });
 
-export const { setRegion, setSessionId, setTaxMode, setGuestCheckoutEnabled } = regionSlice.actions;
+export const { setRegion, setSessionId, setTaxMode, setGuestCheckoutEnabled, setBranding } = regionSlice.actions;
 export default regionSlice.reducer;
+

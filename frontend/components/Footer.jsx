@@ -38,7 +38,18 @@ const REGION_COPY = {
 
 export default function Footer() {
   const { currentRegion } = useSelector((s) => s.region);
+  const branding = useSelector((s) => s.region.branding);
   const copy = REGION_COPY[currentRegion === 'IN' ? 'IN' : 'UK'];
+
+  const contactEmail = currentRegion === 'IN'
+    ? (branding?.emailIN || 'support@scleroproteins.in')
+    : (branding?.emailUK || 'support@scleroproteins.co.uk');
+
+  const contactPhone = currentRegion === 'IN'
+    ? (branding?.phoneIN || '+91 80 4710 0000')
+    : (branding?.phoneUK || '+44 (0)20 4574 0000');
+
+  const contactPhoneHref = `tel:${contactPhone.replace(/[^+\d]/g, '')}`;
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState('idle'); // idle | pending | success | error
   const [errorMsg, setErrorMsg] = useState('');
@@ -182,13 +193,13 @@ export default function Footer() {
             </p>
             <ul className="space-y-2.5 text-[13px] text-[#EDEBE4]/80">
               <li>
-                <a href={`mailto:${copy.email}`} className="flex items-center gap-2.5 transition-colors hover:text-white">
-                  <Mail className="h-4 w-4 shrink-0 text-[#C89838]" /> {copy.email}
+                <a href={`mailto:${contactEmail}`} className="flex items-center gap-2.5 transition-colors hover:text-white">
+                  <Mail className="h-4 w-4 shrink-0 text-[#C89838]" /> {contactEmail}
                 </a>
               </li>
               <li>
-                <a href={copy.phoneHref} className="flex items-center gap-2.5 transition-colors hover:text-white">
-                  <Phone className="h-4 w-4 shrink-0 text-[#C89838]" /> {copy.phone}
+                <a href={contactPhoneHref} className="flex items-center gap-2.5 transition-colors hover:text-white">
+                  <Phone className="h-4 w-4 shrink-0 text-[#C89838]" /> {contactPhone}
                 </a>
               </li>
               {copy.address && (

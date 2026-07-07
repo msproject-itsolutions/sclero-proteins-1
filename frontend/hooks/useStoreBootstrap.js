@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { setRegion, setSessionId, setTaxMode, setGuestCheckoutEnabled } from '../store/regionSlice';
+import { setRegion, setSessionId, setTaxMode, setGuestCheckoutEnabled, setBranding } from '../store/regionSlice';
 import { fetchCart } from '../store/cartSlice';
 import { getApiUrl } from '../lib/api';
 import { regionFromHost, normalizeHost, hostForRegion, COM_HOST } from '../lib/region';
@@ -58,7 +58,7 @@ export default function useStoreBootstrap() {
     const consent = readCookieConsent();
     if (consent) initTrackingScripts(trackingSettings, consent);
 
-    // Load store-wide config (tax mode + guest checkout) once on boot.
+    // Load store-wide config (tax mode + guest checkout + branding) once on boot.
     fetch(getApiUrl('/api/store-config/'))
       .then((r) => (r.ok ? r.json() : null))
       .then((cfg) => {
@@ -66,8 +66,12 @@ export default function useStoreBootstrap() {
         if (cfg && typeof cfg.guest_checkout_enabled !== 'undefined') {
           dispatch(setGuestCheckoutEnabled(cfg.guest_checkout_enabled));
         }
+        if (cfg && cfg.branding) {
+          dispatch(setBranding(cfg.branding));
+        }
       })
       .catch(() => {});
+
 
     const onConsentUpdated = (event) => {
       initTrackingScripts(trackingSettings, event.detail || {});

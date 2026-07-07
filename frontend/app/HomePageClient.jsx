@@ -40,6 +40,10 @@ const TESTIMONIALS = [
 
 export default function HomePageClient({ initialBlogs = [] }) {
   const currentRegion = useSelector((state) => state.region.currentRegion);
+  const branding = useSelector((state) => state.region.branding);
+  const whatsappNumber = currentRegion === 'IN'
+    ? (branding?.whatsappNumberIN || '918047100000')
+    : (branding?.whatsappNumberUK || '442045740000');
   const [inquiryName, setInquiryName] = useState('');
   const [inquiryEmail, setInquiryEmail] = useState('');
   const [inquiryMessage, setInquiryMessage] = useState('');
@@ -462,7 +466,7 @@ export default function HomePageClient({ initialBlogs = [] }) {
 
       {/* Floating WhatsApp Button */}
       <a
-        href={currentRegion === 'IN' ? 'https://wa.me/918047100000' : 'https://wa.me/442045740000'}
+        href={`https://wa.me/${whatsappNumber.replace(/[^+\d]/g, '')}`}
         target="_blank"
         rel="noreferrer"
         aria-label="Chat on WhatsApp"

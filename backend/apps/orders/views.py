@@ -45,9 +45,9 @@ class MyOrdersView(generics.ListAPIView):
 
 class CartViewSet(viewsets.ViewSet):
     permission_classes = [AllowAny]
-    throttle_scope = 'checkout'
 
     def get_cart(self, session_id, region_code):
+
         region = get_object_or_404(Region, code=region_code, is_active=True)
         cart, created = Cart.objects.get_or_create(
             session_id=session_id,
