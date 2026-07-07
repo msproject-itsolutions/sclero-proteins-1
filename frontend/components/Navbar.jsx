@@ -26,6 +26,11 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
   const [searchTerm, setSearchTerm] = useState('');
   const pathname = usePathname();
   const firstMobileLinkRef = useRef(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Close mobile drawer on route change
   useEffect(() => {
@@ -157,9 +162,11 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
     { label: 'Wholesale', url: '/bulk' },
     { label: 'Insights', url: '/blog' },
   ];
-  const navLinks = (cmsNavLinks && cmsNavLinks.length ? cmsNavLinks : fallbackNavLinks)
-    .filter((link) => !link.region_limit || String(link.region_limit).toUpperCase() === currentRegion)
-    .filter((link) => link.label && link.url);
+  const navLinks = !mounted
+    ? fallbackNavLinks
+    : (cmsNavLinks && cmsNavLinks.length ? cmsNavLinks : fallbackNavLinks)
+        .filter((link) => !link.region_limit || String(link.region_limit).toUpperCase() === currentRegion)
+        .filter((link) => link.label && link.url);
 
   const formatRegionDisplay = (code) => {
     if (code === 'IN') return '🇮🇳 India';
@@ -244,7 +251,7 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
               className="flex items-center gap-1.5 rounded-sm border border-edge bg-surface px-2 py-1.5 text-xs font-medium text-ink-primary transition-all hover:border-edge-strong sm:px-3"
             >
               <Globe className="hidden h-3.5 w-3.5 text-ink-muted sm:block" />
-              <span>{formatRegionDisplay(currentRegion)}</span>
+              <span>{mounted ? formatRegionDisplay(currentRegion) : '🇬🇧 UK'}</span>
             </button>
 
             {showDropdown && (
