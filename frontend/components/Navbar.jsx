@@ -153,6 +153,7 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
     'text-ink-secondary transition-colors hover:text-ink-primary';
   const fallbackNavLinks = [
     { label: 'Products', url: '/products', mega_menu: true },
+    { label: 'Knowledge Hub', url: '/knowledge-hub' },
     { label: 'Wholesale', url: '/bulk' },
     { label: 'Insights', url: '/blog' },
   ];
