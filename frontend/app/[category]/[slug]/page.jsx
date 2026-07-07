@@ -6,7 +6,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import Link from 'next/link';
 import {
   Check, ArrowRight, ShieldCheck, Heart, Leaf, Sprout, Award,
-  Activity, Dumbbell, Shield, HelpCircle, FileDown, BookOpen, ChevronRight, ShoppingCart, CheckCircle2
+  Activity, Dumbbell, Shield, HelpCircle, FileDown, BookOpen, ChevronRight, ShoppingCart
 } from 'lucide-react';
 import StoreShell from '../../../components/StoreShell';
 import { addToCart } from '../../../store/cartSlice';
@@ -424,7 +424,7 @@ export default function SubpageOrProduct() {
                 if (!benefit.trim()) return null;
                 return (
                   <div key={idx} className="p-4 border border-edge bg-surface rounded flex items-start gap-3">
-                    <CheckCircle2 className="h-5 w-5 text-ink-success shrink-0" />
+                    <Check className="h-5 w-5 text-ink-success shrink-0" />
                     <p className="text-xs text-ink-secondary font-medium">{benefit}</p>
                   </div>
                 );
