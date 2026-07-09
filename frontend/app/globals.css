@@ -317,3 +317,49 @@
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
+
+/* --------------------------------------------------------- Glossary Highlight & Tooltip Styles */
+.glossary-highlight {
+  border-bottom: 1.5px dotted #a8791e;
+  cursor: help;
+  position: relative;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+  padding: 0 1px;
+  color: inherit;
+  font-weight: 500;
+}
+
+.glossary-highlight:hover {
+  border-bottom-style: dashed;
+  border-bottom-color: #a8791e;
+  background-color: rgba(168, 121, 30, 0.08);
+}
+
+.glossary-tooltip {
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, -95%) scale(0.95);
+  animation: tooltipFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  pointer-events: auto;
+}
+
+@keyframes tooltipFadeIn {
+  to {
+    opacity: 1;
+    visibility: visible;
+    transform: translate(-50%, -100%) scale(1);
+  }
+}
+
+.tooltip-arrow {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translate(-50%, 100%);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid rgba(15, 23, 42, 0.95);
+}

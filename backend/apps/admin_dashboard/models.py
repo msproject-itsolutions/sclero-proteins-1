@@ -186,6 +186,7 @@ class MarketingIntegration(models.Model):
         ('GOOGLE_MERCHANT', 'Google Merchant Center'),
         ('GOOGLE_ADS', 'Google Ads'),
         ('GOOGLE_ANALYTICS', 'Google Analytics'),
+        ('GOOGLE_TAG_MANAGER', 'Google Tag Manager'),
         ('FACEBOOK_BUSINESS', 'Facebook Business Manager'),
         ('FACEBOOK_ADS', 'Facebook & Instagram Ads'),
         ('META_PIXEL', 'Meta Pixels and Conversion APIs'),

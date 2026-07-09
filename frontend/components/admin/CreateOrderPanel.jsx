@@ -628,7 +628,7 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
         {lineItems.length > 0 && (
           <div className="hidden sm:flex items-center gap-2 rounded-sm bg-surface-muted px-4 py-1.5">
             <ShoppingCart className="h-3.5 w-3.5 text-ink-muted" />
-            <span className="text-sm font-semibold text-ink-secondary">{lineItems.reduce((s, l) => s + l.quantity, 0)} items · £{total.toFixed(2)}</span>
+            <span className="text-sm font-semibold text-ink-secondary">{lineItems.reduce((s, l) => s + l.quantity, 0)} items | £{total.toFixed(2)}</span>
           </div>
         )}
 

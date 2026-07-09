@@ -101,7 +101,7 @@ export default function Footer() {
 
   const careLinks = [
     { name: 'Contact us', href: '/contact' },
-    { name: 'FAQs', href: '/policies/faq' },
+    { name: 'FAQs', href: '/faq' },
     { name: 'Shipping & delivery', href: '/policies/shipping' },
     { name: 'Returns & refunds', href: '/policies/refund' },
     { name: 'Track your order', href: '/account' },
@@ -110,10 +110,9 @@ export default function Footer() {
 
   const companyLinks = [
     { name: 'About us', href: '/about' },
-    { name: 'Our science', href: '/about#science' },
-    { name: 'Sustainability', href: '/about#sustainability' },
     { name: 'Blog & insights', href: '/blog' },
     { name: 'Wholesale partners', href: '/bulk' },
+    { name: 'Glossary', href: '/glossary' },
   ];
 
   const legalLinks = [
@@ -128,16 +127,28 @@ export default function Footer() {
     if (!Array.isArray(items) || items.length === 0) return fallback;
     return items
       .filter((item) => item?.label && item?.url)
+      .filter((item) => {
+        const lowerUrl = (item.url || '').toLowerCase();
+        const lowerLabel = (item.label || '').toLowerCase();
+        return !(
+          lowerUrl.includes('science') ||
+          lowerUrl.includes('sustainability') ||
+          lowerLabel.includes('science') ||
+          lowerLabel.includes('sustainability')
+        );
+      })
       .map((item) => ({ name: item.label, href: item.url }));
   };
+  const cmsCompanyLinks = fromCmsLinks(footerSettings?.company, companyLinks);
+  const effectiveCompanyLinks = cmsCompanyLinks.some(link => link.href === '/glossary')
+    ? cmsCompanyLinks
+    : [...cmsCompanyLinks, { name: 'Glossary', href: '/glossary' }];
   const effectiveShopLinks = fromCmsLinks(footerSettings?.shop, shopLinks);
-  const effectiveCompanyLinks = fromCmsLinks(footerSettings?.company, companyLinks);
   const effectiveCareLinks = fromCmsLinks(footerSettings?.support, careLinks);
   const effectiveLegalLinks = fromCmsLinks(footerSettings?.legal, legalLinks);
 
   const trustBadges = [
     { icon: Truck, label: copy.freeShip },
-    { icon: Award, label: 'GMP-certified manufacture' },
     { icon: RefreshCw, label: '30-day money-back guarantee' },
     { icon: ShieldCheck, label: 'Secure SSL & PCI-DSS checkout' },
   ];
@@ -185,11 +196,11 @@ export default function Footer() {
           {/* Brand + contact */}
           <div className="space-y-5 sm:col-span-2 lg:col-span-4">
             <Link href="/" aria-label="Sclero Proteins home">
-              <LogoLockup markClass="h-10 w-10" wordClass="h-[16px]" inverse />
+              <LogoLockup markClass="h-10 w-10" wordClass="h-[26px]" inverse />
             </Link>
             <p className="max-w-sm text-[13.5px] leading-[1.7] text-[#BFB9AE]">
               Clinically-formulated collagen, bone &amp; joint, and active-nutrition supplements —
-              manufactured to GMP standards and third-party tested for purity and potency.
+              third-party tested for purity and potency.
             </p>
             <ul className="space-y-2.5 text-[13px] text-[#EDEBE4]/80">
               <li>

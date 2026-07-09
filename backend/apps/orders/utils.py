@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 
@@ -11,6 +11,10 @@ def generate_invoice_pdf(order):
     Generates a professional GST Tax Invoice or VAT Receipt PDF using ReportLab.
     """
     from django.conf import settings
+
+    # Resolve Order instance from Invoice if needed
+    if hasattr(order, 'order'):
+        order = order.order
     
     region_code = order.region.code
     company_details = {
@@ -50,6 +54,13 @@ def generate_invoice_pdf(order):
     
     styles = getSampleStyleSheet()
     
+    # Custom Brand Colors
+    BRAND_INK = colors.HexColor('#1A1A1A')
+    BRAND_BRONZE = colors.HexColor('#6E4F13')
+    BRAND_BG = colors.HexColor('#FAFAF7')
+    TEXT_MUTED = colors.HexColor('#6E6A61')
+    BORDER_COLOR = colors.HexColor('#E8E6E1')
+
     # Custom styles
     title_style = ParagraphStyle(
         'InvoiceTitle',
@@ -57,23 +68,23 @@ def generate_invoice_pdf(order):
         fontName='Helvetica-Bold',
         fontSize=20,
         leading=24,
-        textColor=colors.HexColor('#0A0F1D')
+        textColor=BRAND_INK
     )
     company_style = ParagraphStyle(
         'CompanyDetails',
         parent=styles['Normal'],
         fontName='Helvetica',
         fontSize=9,
-        leading=12,
-        textColor=colors.HexColor('#64748B')
+        leading=13,
+        textColor=TEXT_MUTED
     )
     meta_style = ParagraphStyle(
         'MetaDetails',
         parent=styles['Normal'],
         fontName='Helvetica',
         fontSize=9,
-        leading=12,
-        textColor=colors.HexColor('#1E293B')
+        leading=13,
+        textColor=BRAND_INK
     )
     headers_style = ParagraphStyle(
         'TableHeader',
@@ -88,7 +99,7 @@ def generate_invoice_pdf(order):
         parent=styles['Normal'],
         fontName='Helvetica',
         fontSize=9,
-        leading=11
+        leading=12
     )
     
     story = []
@@ -96,24 +107,56 @@ def generate_invoice_pdf(order):
     # Header block (Logo/Title on left, company details on right)
     invoice_title = "TAX INVOICE" if region_code == 'IN' else "VAT RECEIPT"
     
-    header_data = [
-        [
-            Paragraph(f"<b>{company['name']}</b><br/>{invoice_title}", title_style),
-            Paragraph(
-                f"{company['address']}<br/>"
-                f"Phone: {company['phone']}<br/>"
-                f"Email: {company['email']}<br/>"
-                f"<b>{company['tax_id']}</b>",
-                company_style
-            )
-        ]
-    ]
+    # Find logo path
+    logo_path = Path(settings.BASE_DIR) / '..' / 'frontend' / 'public' / 'logo-full.png'
+    logo_path = logo_path.resolve()
     
-    header_table = Table(header_data, colWidths=[3.5*inch, 4.0*inch])
-    header_table.setStyle(TableStyle([
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ('ALIGN', (1,0), (1,0), 'RIGHT'),
-    ]))
+    logo_img = None
+    if logo_path.exists():
+        try:
+            # Proportions: width = 1.5 inch, height = 1.5 * (856/938) = 1.37 inch
+            logo_img = RLImage(str(logo_path), width=1.5*inch, height=1.37*inch)
+        except Exception:
+            logo_img = None
+ 
+    if logo_img:
+        header_data = [
+            [
+                logo_img,
+                Paragraph(f"<b>{company['name']}</b><br/>{invoice_title}", title_style),
+                Paragraph(
+                    f"{company['address']}<br/>"
+                    f"Phone: {company['phone']}<br/>"
+                    f"Email: {company['email']}<br/>"
+                    f"<b>{company['tax_id']}</b>",
+                    company_style
+                )
+            ]
+        ]
+        header_table = Table(header_data, colWidths=[1.6*inch, 2.4*inch, 3.5*inch])
+        header_table.setStyle(TableStyle([
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('ALIGN', (2,0), (2,0), 'RIGHT'),
+        ]))
+    else:
+        header_data = [
+            [
+                Paragraph(f"<b>{company['name']}</b><br/>{invoice_title}", title_style),
+                Paragraph(
+                    f"{company['address']}<br/>"
+                    f"Phone: {company['phone']}<br/>"
+                    f"Email: {company['email']}<br/>"
+                    f"<b>{company['tax_id']}</b>",
+                    company_style
+                )
+            ]
+        ]
+        header_table = Table(header_data, colWidths=[3.5*inch, 4.0*inch])
+        header_table.setStyle(TableStyle([
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('ALIGN', (1,0), (1,0), 'RIGHT'),
+        ]))
+        
     story.append(header_table)
     story.append(Spacer(1, 15))
     
@@ -145,7 +188,7 @@ def generate_invoice_pdf(order):
     meta_table = Table(meta_data, colWidths=[3.75*inch, 3.75*inch])
     meta_table.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor('#E2E8F0')),
+        ('BOX', (0,0), (-1,-1), 0.5, BORDER_COLOR),
         ('TOPPADDING', (0,0), (-1,-1), 8),
         ('BOTTOMPADDING', (0,0), (-1,-1), 8),
         ('LEFTPADDING', (0,0), (-1,-1), 8),
@@ -177,7 +220,7 @@ def generate_invoice_pdf(order):
     table_data = [table_headers]
     
     currency = order.currency_code
-    symbol = "₹" if currency == 'INR' else "£"
+    symbol = "Rs. " if currency == 'INR' else "£"
     
     for item in order.items.all():
         prod_desc = f"<b>{item.product.name}</b><br/>SKU: {item.product.sku}"
@@ -210,11 +253,11 @@ def generate_invoice_pdf(order):
         
     item_table = Table(table_data, colWidths=col_widths)
     item_table.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#0A0F1D')),
+        ('BACKGROUND', (0,0), (-1,0), BRAND_INK),
         ('ALIGN', (0,0), (-1,-1), 'LEFT'),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor('#CBD5E1')),
-        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E2E8F0')),
+        ('BOX', (0,0), (-1,-1), 0.5, BORDER_COLOR),
+        ('INNERGRID', (0,0), (-1,-1), 0.5, BORDER_COLOR),
         ('TOPPADDING', (0,0), (-1,-1), 6),
         ('BOTTOMPADDING', (0,0), (-1,-1), 6),
     ]))
@@ -232,7 +275,7 @@ def generate_invoice_pdf(order):
         tax_detail_str = f"CGST ({half_rate:.1f}%): {symbol}{half_amount:.2f}<br/>SGST ({half_rate:.1f}%): {symbol}{half_amount:.2f}"
     else:
         tax_detail_str = f"VAT ({order.tax_rate:.1f}%): {symbol}{order.tax_amount:.2f}"
-
+ 
     totals_data = [
         [Paragraph("Subtotal", meta_style), Paragraph(f"{symbol}{order.subtotal:.2f}", meta_style)],
         [Paragraph(f"<b>Tax Breakdown</b>", meta_style), Paragraph(tax_detail_str, meta_style)],
@@ -244,7 +287,7 @@ def generate_invoice_pdf(order):
     totals_table.setStyle(TableStyle([
         ('ALIGN', (0,0), (-1,-1), 'LEFT'),
         ('ALIGN', (1,0), (1,-1), 'RIGHT'),
-        ('LINEBELOW', (0,-1), (1,-1), 1.5, colors.HexColor('#0A0F1D')),
+        ('LINEBELOW', (0,-1), (1,-1), 1.5, BRAND_BRONZE),
         ('TOPPADDING', (0,0), (-1,-1), 4),
         ('BOTTOMPADDING', (0,0), (-1,-1), 4),
     ]))
@@ -257,7 +300,6 @@ def generate_invoice_pdf(order):
         ('ALIGN', (1,0), (1,0), 'RIGHT'),
     ]))
     story.append(layout_table)
-    
     story.append(Spacer(1, 40))
     # Footer notes
     footer_style = ParagraphStyle(

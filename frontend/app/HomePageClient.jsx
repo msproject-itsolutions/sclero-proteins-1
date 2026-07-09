@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import Link from 'next/link';
 import {
@@ -39,6 +39,19 @@ const TESTIMONIALS = [
 ];
 
 export default function HomePageClient({ initialBlogs = [] }) {
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (window.instgrm) {
+        window.instgrm.Embeds.process();
+      } else {
+        const script = document.createElement('script');
+        script.async = true;
+        script.src = 'https://www.instagram.com/embed.js';
+        document.body.appendChild(script);
+      }
+    }
+  }, []);
+
   const currentRegion = useSelector((state) => state.region.currentRegion);
   const branding = useSelector((state) => state.region.branding);
   const whatsappNumber = currentRegion === 'IN'
@@ -286,18 +299,19 @@ export default function HomePageClient({ initialBlogs = [] }) {
           </div>
 
           <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-12">
-            {/* Live Instagram Feed Iframe */}
-            <div className="reveal rounded-md border border-edge bg-surface p-4 shadow-card lg:col-span-5">
-              <div className="relative flex aspect-[4/5] w-full flex-col items-center justify-center overflow-hidden rounded-sm border border-edge-subtle bg-surface-muted p-6 text-center">
-                <iframe
-                  src="https://www.instagram.com/scleroproteins/embed"
-                  className="absolute inset-0 h-full w-full rounded-sm border-0"
-                  allowFullScreen
-                  scrolling="no"
-                  frameBorder="0"
-                  title="Instagram Feed Embed"
-                ></iframe>
+            {/* Live Instagram Feed Embed */}
+            <div className="reveal rounded-md border border-edge bg-white p-4 shadow-card lg:col-span-5">
+              <div style={{ minHeight: '15px' }}></div>
+              <div className="instagram-container" style={{ padding: '20px' }}>
+                <blockquote
+                  className="instagram-media"
+                  data-instgrm-permalink="https://www.instagram.com/scleroproteins"
+                  data-instgrm-version="13"
+                  style={{ width: '100%' }}
+                >
+                </blockquote>
               </div>
+              <div style={{ minHeight: '15px' }}></div>
             </div>
 
             {/* Curated Reels Grid */}

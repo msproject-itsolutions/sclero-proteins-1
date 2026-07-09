@@ -1059,6 +1059,18 @@ class SupportTicketViewSet(viewsets.ModelViewSet):
             qs = qs.filter(email__iexact=email)
         return qs
 
+    @action(detail=False, methods=['POST'], url_path='sync')
+    def sync_emails(self, request):
+        from .email_sync import sync_support_emails
+        res = sync_support_emails()
+        if res.get('status') == 'success':
+            return Response({
+                "message": f"Sync successful. Created {res.get('tickets_created', 0)} new tickets.",
+                "tickets_created": res.get('tickets_created', 0)
+            })
+        else:
+            return Response({"error": res.get('message')}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 class TerminateDevicesView(APIView):
     permission_classes = [IsAuthenticated]

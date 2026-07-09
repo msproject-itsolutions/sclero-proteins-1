@@ -5,11 +5,11 @@ import { useSelector, useDispatch } from 'react-redux';
 import Link from 'next/link';
 import {
   LayoutDashboard, Package, Layers, ShoppingCart, Truck, Plus, Pencil, Archive, X, Save,
-  ShieldAlert, ShieldCheck, CreditCard, Mail, ShoppingBag, Image as ImageIcon, Film, Download,
+  ShieldAlert, ShieldCheck, CreditCard, Mail, ShoppingBag, Image as ImageIcon, Film, Download, Printer,
   Home, ChevronRight, TrendingUp, Users as UsersIcon, Search,
   Banknote, ReceiptText, MessageSquare, Activity, CheckCircle2, UserRound,
-  Globe, FileText, BarChart3, HelpCircle, RefreshCw, Sliders, UserPlus, Eye, Settings,
-  Star, Palette, Cookie, Megaphone, Menu as MenuIcon, Upload, Undo, Link as LinkIcon, Loader2, AlertCircle, ToggleLeft, ToggleRight
+  Globe, FileText, BarChart3, HelpCircle, RefreshCw, Sliders, UserPlus, Eye, Settings, Trash2, Tag,
+  Star, Palette, Cookie, Megaphone, Menu as MenuIcon, Upload, Undo, Link as LinkIcon, Loader2, AlertCircle, ToggleLeft, ToggleRight, BookOpen
 } from 'lucide-react';
 import StoreShell from '../../components/StoreShell';
 import { fetchProfile } from '../../store/authSlice';
@@ -21,17 +21,20 @@ import ShippingZonePanel from '../../components/admin/ShippingZonePanel';
 
 const ORDER_STATUSES = ['PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'REFUNDED'];
 const STATUS_COLOR = {
-  PENDING: 'bg-amber-50 text-ink-accent', PROCESSING: 'bg-blue-50 text-blue-700',
-  SHIPPED: 'bg-surface-muted text-ink-accent', DELIVERED: 'bg-brand-success/10 text-ink-success',
-  CANCELLED: 'bg-surface-muted text-ink-secondary', REFUNDED: 'bg-red-50 text-ink-danger',
+  PENDING: 'bg-amber-50 text-amber-800 border border-amber-200',
+  PROCESSING: 'bg-blue-50 text-blue-700 border border-blue-200',
+  SHIPPED: 'bg-indigo-50 text-indigo-700 border border-indigo-200',
+  DELIVERED: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+  CANCELLED: 'bg-slate-50 text-slate-600 border border-slate-200',
+  REFUNDED: 'bg-rose-50 text-rose-700 border border-rose-200',
 };
 const PAYMENT_STATUS_COLOR = {
-  PENDING: 'bg-amber-50 text-ink-accent',
-  AUTHORIZED: 'bg-surface-muted text-ink-accent',
-  PARTIALLY_CAPTURED: 'bg-blue-50 text-blue-700',
-  PAID: 'bg-brand-success/10 text-ink-success',
-  FAILED: 'bg-red-50 text-ink-danger',
-  REFUNDED: 'bg-surface-muted text-ink-secondary',
+  PENDING: 'bg-amber-50 text-amber-800 border border-amber-200',
+  AUTHORIZED: 'bg-indigo-50 text-indigo-700 border border-indigo-200',
+  PARTIALLY_CAPTURED: 'bg-blue-50 text-blue-700 border border-blue-200',
+  PAID: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+  FAILED: 'bg-rose-50 text-rose-700 border border-rose-200',
+  REFUNDED: 'bg-slate-50 text-slate-600 border border-slate-200',
 };
 const RECOVERY_STATUS_COLOR = {
   NOT_CONTACTED: 'bg-surface-muted text-ink-secondary',
@@ -524,14 +527,6 @@ function ReportsTab({ authFetch, initialTab }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        {TABS.map((t) => (
-          <button key={t.k} onClick={() => setTab(t.k)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${tab === t.k ? 'bg-ink-primary text-white' : 'border border-edge bg-white text-ink-primary hover:border-edge-strong'}`}>
-            {t.label}
-          </button>
-        ))}
-      </div>
       <div className="flex flex-wrap items-center gap-2">
         <label className="text-[11px] font-semibold text-brand-muted">Region</label>
         <select value={region} onChange={(e) => setRegion(e.target.value)} className="rounded-sm border border-edge px-2 py-1 text-xs">
@@ -1189,8 +1184,109 @@ function OrderDetail({ authFetch, order, onClose, onChanged }) {
   const [refundReason, setRefundReason] = useState('Customer Return');
 
   useEffect(() => {
+    if (typeof document !== 'undefined') {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => { document.body.style.overflow = prev; };
+    }
+  }, []);
+
+  useEffect(() => {
     authFetch(`/api/admin/orders/${order.id}/timeline/`).then((r) => r.json()).then((d) => setTimeline(Array.isArray(d) ? d : [])).catch(() => setTimeline([]));
   }, [authFetch, order.id]);
+
+  const printPackingSlip = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert("Please allow popups to print the packing slip.");
+      return;
+    }
+
+    const itemsHtml = order.items.map(it => `
+      <tr>
+        <td style="padding: 10px; border-bottom: 1px solid #ddd;">
+          <strong>${it.product.name}</strong><br/>
+          <span style="font-size: 11px; color: #666;">SKU: ${it.product.sku}</span>
+        </td>
+        <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: center;">${it.product.hsn_code || 'N/A'}</td>
+        <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: center;"><strong>${it.quantity}</strong></td>
+      </tr>
+    `).join('');
+
+    const printContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Packing Slip - Order #${order.id}</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #333; margin: 40px; }
+          .header { display: flex; justify-content: space-between; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; }
+          .logo { font-size: 24px; font-weight: 800; }
+          .logo span { color: #6d28d9; }
+          .title { font-size: 20px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+          .details { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-bottom: 40px; font-size: 13px; }
+          .details h3 { margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 5px; text-transform: uppercase; font-size: 11px; color: #666; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 40px; font-size: 13px; }
+          th { background: #f5f5f5; padding: 10px; text-align: left; font-weight: 600; border-bottom: 1px solid #ddd; }
+          .footer { text-align: center; font-size: 11px; color: #999; border-top: 1px solid #eee; padding-top: 20px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="logo">Sclero<span>Proteins</span></div>
+          <div class="title">Packing Slip</div>
+        </div>
+        
+        <div class="details">
+          <div>
+            <h3>Order Details</h3>
+            <strong>Order Number:</strong> #${order.id}<br/>
+            <strong>Date:</strong> ${new Date(order.created_at).toLocaleDateString()}<br/>
+            <strong>Payment Status:</strong> ${order.payment_status}<br/>
+            <strong>Fulfillment Status:</strong> ${order.status}
+          </div>
+          <div>
+            <h3>Ship To</h3>
+            <strong>${order.shipping_name || 'Customer'}</strong><br/>
+            ${order.shipping_address_line1}${order.shipping_address_line2 ? ', ' + order.shipping_address_line2 : ''}<br/>
+            ${order.shipping_city}, ${order.shipping_state} ${order.shipping_postal_code}<br/>
+            ${order.shipping_country}<br/>
+            <strong>Phone:</strong> ${order.shipping_phone || 'N/A'}<br/>
+            <strong>Email:</strong> ${order.email}
+          </div>
+        </div>
+        
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 50%;">Item Description</th>
+              <th style="width: 25%; text-align: center;">HSN Code</th>
+              <th style="width: 25%; text-align: center;">Quantity to Pack</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsHtml}
+          </tbody>
+        </table>
+        
+        <div class="footer">
+          Sclero Proteins Ltd · support@scleroproteins.co.uk · Thank you for your business!
+        </div>
+        
+        <script>
+          window.onload = function() {
+            window.print();
+            setTimeout(function() { window.close(); }, 500);
+          };
+        </script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.open();
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+  };
 
   const setStatus = (status) => {
     setSaving(true);
@@ -1344,132 +1440,176 @@ function OrderDetail({ authFetch, order, onClose, onChanged }) {
   };
 
   return (
-    <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-      <div className="w-full max-w-5xl bg-white rounded-lg border border-edge p-6 shadow-card mx-auto">
-        <div className="sticky top-0 z-10 border-b border-edge bg-white/95 px-4 py-4 backdrop-blur sm:px-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="fixed top-[65px] bottom-0 right-0 left-0 md:left-[280px] lg:left-[288px] z-30 bg-surface-subtle overflow-y-auto p-4 sm:p-6 lg:p-8">
+      <div className="w-full max-w-5xl bg-white rounded-lg border border-edge shadow-card mx-auto overflow-hidden">
+        
+        {/* Top Sticky Header */}
+        <div className="sticky top-0 z-10 border-b border-edge bg-white/95 px-6 py-4 backdrop-blur flex items-center justify-between">
+          <div className="flex items-center gap-3">
             <div>
-              <p className="kicker">Checkout detail</p>
-              <h3 className="text-xl font-semibold text-ink-primary">Order #{order.id}</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-bold text-ink-primary">Order #{order.id}</h3>
+                <span className={`rounded-sm px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${STATUS_COLOR[order.status]}`}>{order.status}</span>
+                <span className={`rounded-sm px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${PAYMENT_STATUS_COLOR[order.payment_status] || 'bg-surface-muted text-ink-secondary'}`}>{order.payment_status || 'PAID'}</span>
+              </div>
+              <p className="text-xs text-ink-subtle mt-0.5">Placed on {formatDateTime(order.created_at)}</p>
             </div>
-            <div className="flex items-center gap-2">
-              <span className={`rounded-xs px-2.5 py-1 text-[10px] font-semibold ${STATUS_COLOR[order.status]}`}>{order.status}</span>
-              <span className={`rounded-xs px-2.5 py-1 text-[10px] font-semibold ${PAYMENT_STATUS_COLOR[order.payment_status] || 'bg-surface-muted text-ink-secondary'}`}>{order.payment_status || 'PAID'}</span>
-              <button onClick={onClose} className="rounded-sm border border-edge p-2 text-brand-muted hover:bg-surface-muted" aria-label="Close order detail"><X className="h-4 w-4" /></button>
-            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <button onClick={onClose} className="rounded-sm border border-edge p-2 text-ink-secondary hover:bg-surface-muted transition" aria-label="Close order detail"><X className="h-4.5 w-4.5" /></button>
           </div>
         </div>
 
-        <div className="grid gap-6 p-4 sm:p-6 lg:grid-cols-[1fr_320px]">
-          <div className="space-y-5">
-            <section className="rounded-md border border-edge bg-white shadow-card p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <p className="kicker">Items</p>
-                <select value={order.status} onChange={(e) => setStatus(e.target.value)} className="rounded-sm border border-edge px-2 py-1.5 text-xs">
-                  {ORDER_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-                </select>
+        {/* 2-Column Shopify Grid */}
+        <div className="grid gap-6 p-6 lg:grid-cols-3">
+          
+          {/* Left Column (2/3 width) */}
+          <div className="lg:col-span-2 space-y-6">
+            
+            {/* Products Card */}
+            <div className="rounded-lg border border-edge bg-white p-6 shadow-card space-y-4">
+              <div className="flex items-center justify-between border-b border-edge-subtle pb-3">
+                <p className="text-sm font-bold text-ink-primary uppercase tracking-wider">Line Items</p>
+                <div className="flex items-center gap-2">
+                  <label className="text-[11px] font-semibold text-ink-secondary">Status:</label>
+                  <select value={order.status} onChange={(e) => setStatus(e.target.value)} className="rounded border border-edge px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-edge-focus">
+                    {ORDER_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
               </div>
               <div className="divide-y divide-edge-subtle">
                 {(order.items || []).map((it) => (
-                  <div key={it.id} className="flex items-center justify-between gap-3 py-3 text-sm">
-                    <div>
-                      <p className="font-semibold text-ink-primary">{toDisplayText(it.product_name) || 'Unknown item'}</p>
-                      <p className="font-mono text-[10px] text-brand-muted">{it.product_sku} · Qty {it.quantity}</p>
+                  <div key={it.id} className="flex items-center justify-between gap-4 py-3.5 text-sm">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-ink-primary truncate">{toDisplayText(it.product_name) || 'Unknown item'}</p>
+                      <p className="font-mono text-[10px] text-ink-muted mt-0.5">SKU: {it.product_sku} · Qty: {it.quantity} · {formatMoney(order.currency_code, it.price)} each</p>
                     </div>
-                    <p className="font-semibold text-ink-primary">{formatMoney(order.currency_code, Number(it.price) * Number(it.quantity))}</p>
+                    <p className="font-semibold text-ink-primary text-right">{formatMoney(order.currency_code, Number(it.price) * Number(it.quantity))}</p>
                   </div>
                 ))}
               </div>
-              <div className="mt-3 space-y-1 border-t border-edge-subtle pt-3 text-sm">
-                <div className="flex justify-between text-brand-muted"><span>Subtotal</span><span>{formatMoney(order.currency_code, order.subtotal)}</span></div>
-                <div className="flex justify-between text-brand-muted"><span>Tax ({order.tax_rate}%)</span><span>{formatMoney(order.currency_code, order.tax_amount)}</span></div>
-                <div className="flex justify-between text-brand-muted"><span>Shipping</span><span>{formatMoney(order.currency_code, order.shipping_cost)}</span></div>
-                <div className="flex justify-between pt-2 text-base font-semibold text-ink-primary"><span>Total</span><span>{formatMoney(order.currency_code, order.total)}</span></div>
+              
+              {/* Financial Breakdowns */}
+              <div className="mt-4 space-y-2 border-t border-edge-subtle pt-4 text-xs">
+                <div className="flex justify-between text-ink-secondary"><span>Subtotal</span><span className="font-medium">{formatMoney(order.currency_code, order.subtotal)}</span></div>
+                <div className="flex justify-between text-ink-secondary"><span>Tax ({order.tax_rate}%)</span><span className="font-medium">{formatMoney(order.currency_code, order.tax_amount)}</span></div>
+                <div className="flex justify-between text-ink-secondary"><span>Shipping</span><span className="font-medium">{formatMoney(order.currency_code, order.shipping_cost)}</span></div>
+                <div className="flex justify-between pt-2.5 text-sm font-bold text-ink-primary border-t border-edge-subtle"><span>Total</span><span>{formatMoney(order.currency_code, order.total)}</span></div>
               </div>
-            </section>
+            </div>
 
-            <section className="rounded-md border border-edge bg-white shadow-card p-4">
-              <div className="mb-3 flex items-center gap-2">
-                <Banknote className="h-4 w-4 text-ink-accent" />
-                <p className="kicker">Payment</p>
+            {/* Payment Transactions & Capture Card */}
+            <div className="rounded-lg border border-edge bg-white p-6 shadow-card space-y-4">
+              <div className="flex items-center gap-2 border-b border-edge-subtle pb-3">
+                <Banknote className="h-4.5 w-4.5 text-brand-accent" />
+                <p className="text-sm font-bold text-ink-primary uppercase tracking-wider">Payment &amp; Transactions</p>
               </div>
-              <div className="grid gap-3 text-sm sm:grid-cols-3">
-                <div><p className="text-[11px] text-brand-muted">Method</p><p className="font-semibold text-ink-primary">{order.payment_method}</p></div>
-                <div><p className="text-[11px] text-brand-muted">Authorized</p><p className="font-semibold text-ink-primary">{formatMoney(order.currency_code, authorized)}</p></div>
-                <div><p className="text-[11px] text-brand-muted">Captured</p><p className="font-semibold text-ink-primary">{formatMoney(order.currency_code, captured)}</p></div>
-              </div>
-              <div className="mt-4 rounded-lg bg-surface-muted p-3">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <p className="text-xs font-semibold text-ink-primary">Capture payment manually</p>
-                  <span className="text-[11px] text-brand-muted">{order.payment_capture_mode || 'AUTO'} capture</span>
+              <div className="grid gap-4 text-xs sm:grid-cols-3">
+                <div className="bg-surface-subtle p-3 rounded border border-edge-subtle">
+                  <p className="text-[10px] text-ink-muted font-bold uppercase tracking-wider mb-1">Gateway Method</p>
+                  <p className="text-xs font-bold text-ink-primary">{order.payment_method || 'N/A'}</p>
                 </div>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <button onClick={authorizePayment} disabled={saving} className="rounded-sm border border-edge bg-white px-3 py-2 text-xs font-semibold text-ink-primary hover:border-ink-primary disabled:opacity-50">Authorize</button>
-                  <input value={captureAmount} onChange={(e) => setCaptureAmount(e.target.value)} placeholder={`Remaining ${captureRemaining.toFixed(2)}`} className="min-w-0 flex-1 rounded-sm border border-edge px-3 py-2 text-sm" />
-                  <button onClick={capturePayment} disabled={saving || captureRemaining <= 0} className="btn-primary px-4 py-2 text-xs uppercase disabled:opacity-50">Capture</button>
+                <div className="bg-surface-subtle p-3 rounded border border-edge-subtle">
+                  <p className="text-[10px] text-ink-muted font-bold uppercase tracking-wider mb-1">Authorized</p>
+                  <p className="text-xs font-bold text-ink-primary">{formatMoney(order.currency_code, authorized)}</p>
                 </div>
-                {err && <p className="mt-2 rounded bg-brand-danger/10 p-2 text-xs text-brand-danger">{err}</p>}
+                <div className="bg-surface-subtle p-3 rounded border border-edge-subtle">
+                  <p className="text-[10px] text-ink-muted font-bold uppercase tracking-wider mb-1">Captured</p>
+                  <p className="text-xs font-bold text-ink-primary">{formatMoney(order.currency_code, captured)}</p>
+                </div>
               </div>
-              <div className="mt-4 divide-y divide-edge-subtle">
-                {paymentLogs.map((log, i) => (
-                  <div key={`${log.transaction_id}-${i}`} className="flex items-center justify-between gap-3 py-2 text-xs">
-                    <span className="font-semibold text-ink-primary">{log.status} · {log.gateway}</span>
-                    <span className="text-brand-muted">{formatMoney(order.currency_code, log.amount)} · {formatDateTime(log.created_at)}</span>
+
+              {/* Manual capture options if applicable */}
+              {captureRemaining > 0 && (
+                <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50/50 p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-bold text-ink-accent">Uncaptured Authorization</p>
+                    <span className="rounded bg-amber-100 text-amber-800 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide">{order.payment_capture_mode || 'MANUAL'} mode</span>
                   </div>
-                ))}
-                {!paymentLogs.length && <p className="text-xs text-brand-muted">No payment events yet.</p>}
-              </div>
-            </section>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <button onClick={authorizePayment} disabled={saving} className="rounded border border-edge bg-white px-3 py-2 text-xs font-semibold text-ink-primary hover:bg-surface-muted transition disabled:opacity-50">Re-Authorize</button>
+                    <input value={captureAmount} onChange={(e) => setCaptureAmount(e.target.value)} placeholder={`Remaining ${captureRemaining.toFixed(2)}`} className="min-w-0 flex-1 rounded border border-edge px-3 py-2 text-sm focus:outline-none" />
+                    <button onClick={capturePayment} disabled={saving || captureRemaining <= 0} className="btn-primary px-4 py-2 text-xs uppercase disabled:opacity-50 font-semibold shadow-sm">Capture Funds</button>
+                  </div>
+                  {err && <p className="mt-2 rounded bg-brand-danger/10 p-2 text-xs text-brand-danger font-medium">{err}</p>}
+                </div>
+              )}
 
-            <section className="rounded-md border border-edge bg-white shadow-card p-4">
-              <div className="mb-3 flex items-center gap-2">
-                <Activity className="h-4 w-4 text-ink-accent" />
-                <p className="kicker">Order activity timeline</p>
+              {/* Transaction Logs */}
+              <div className="mt-4 pt-3 border-t border-edge-subtle space-y-2">
+                <p className="text-xs font-bold text-ink-secondary">Transaction Logs</p>
+                <div className="divide-y divide-edge-subtle">
+                  {paymentLogs.map((log, i) => (
+                    <div key={`${log.transaction_id}-${i}`} className="flex items-center justify-between gap-3 py-2 text-[11px]">
+                      <span className="font-semibold text-ink-primary uppercase">{log.status} | {log.gateway}</span>
+                      <span className="text-ink-muted font-mono">{formatMoney(order.currency_code, log.amount)} · {formatDateTime(log.created_at)}</span>
+                    </div>
+                  ))}
+                  {!paymentLogs.length && <p className="text-xs text-ink-muted">No transaction logs available.</p>}
+                </div>
               </div>
-              <ol className="space-y-4 border-l border-edge pl-4">
+            </div>
+
+            {/* Timeline Audit Logs */}
+            <div className="rounded-lg border border-edge bg-white p-6 shadow-card space-y-4">
+              <div className="flex items-center gap-2 border-b border-edge-subtle pb-3">
+                <Activity className="h-4.5 w-4.5 text-brand-accent" />
+                <p className="text-sm font-bold text-ink-primary uppercase tracking-wider">Order Timeline &amp; History</p>
+              </div>
+              <ol className="space-y-4 border-l-2 border-edge pl-4 ml-2">
                 {timeline.map((e, i) => (
                   <li key={i} className="relative">
-                    <span className="absolute -left-[21px] top-1 flex h-3 w-3 items-center justify-center rounded-full bg-white ring-2 ring-edge-focus" />
-                    <p className="text-sm font-semibold text-ink-primary">{e.label}</p>
-                    <p className="text-xs text-brand-muted">{e.detail}</p>
-                    <p className="text-[10px] text-ink-subtle">{formatDateTime(e.ts)}</p>
+                    <span className="absolute -left-[23px] top-1 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-brand-accent ring-4 ring-white" />
+                    <p className="text-xs font-bold text-ink-primary">{e.label}</p>
+                    {e.detail && <p className="text-xs text-ink-secondary mt-0.5">{e.detail}</p>}
+                    <p className="text-[10px] text-ink-subtle mt-0.5">{formatDateTime(e.ts)}</p>
                   </li>
                 ))}
-                {timeline.length === 0 && <li className="text-xs text-brand-muted">No events.</li>}
+                {timeline.length === 0 && <li className="text-xs text-ink-muted">No timeline events logged yet.</li>}
               </ol>
-              <div className="mt-4 grid gap-2 sm:grid-cols-[160px_1fr_auto]">
-                <select value={noteKind} onChange={(e) => setNoteKind(e.target.value)} className="rounded-sm border border-edge px-3 py-2 text-xs">
-                  <option value="NOTE">Note</option>
-                  <option value="CUSTOMER_COMMUNICATION">Customer communication</option>
+              
+              {/* Add Note form */}
+              <div className="mt-6 pt-4 border-t border-edge-subtle grid gap-2 sm:grid-cols-[160px_1fr_auto]">
+                <select value={noteKind} onChange={(e) => setNoteKind(e.target.value)} className="rounded border border-edge px-3 py-2 text-xs focus:outline-none">
+                  <option value="NOTE">Staff Note</option>
+                  <option value="CUSTOMER_COMMUNICATION">Customer Update</option>
                 </select>
-                <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add note or communication record" className="rounded-sm border border-edge px-3 py-2 text-sm" />
-                <button onClick={addTimelineEvent} disabled={saving || !note.trim()} className="rounded-sm border border-edge px-3 py-2 text-xs font-semibold text-ink-primary hover:border-ink-primary disabled:opacity-50">Add</button>
+                <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Type order note description..." className="rounded border border-edge px-3 py-2 text-xs focus:outline-none" />
+                <button onClick={addTimelineEvent} disabled={saving || !note.trim()} className="rounded border border-edge px-4 py-2 text-xs font-semibold text-ink-primary hover:bg-surface-muted disabled:opacity-50 transition">Add Note</button>
               </div>
-            </section>
+            </div>
           </div>
 
-          <aside className="space-y-4">
-            {/* Fulfillment & Refund Operations Panel */}
-            <section className="rounded-md border border-edge bg-white shadow-card p-4 space-y-3">
-              <p className="kicker">Order Operations</p>
+          {/* Right Sidebar Column (1/3 width) */}
+          <div className="space-y-6">
+            
+            {/* Fulfillment & Refund Operations */}
+            <div className="rounded-lg border border-edge bg-white p-6 shadow-card space-y-4">
+              <p className="text-sm font-bold text-ink-primary border-b border-edge-subtle pb-3 uppercase tracking-wider">Fulfillment &amp; Actions</p>
               
               {order.status !== 'SHIPPED' && order.status !== 'DELIVERED' && order.status !== 'CANCELLED' && order.status !== 'REFUNDED' && (
-                <div className="border-b border-edge-subtle pb-3">
-                  <button onClick={() => setShowFulfillForm(!showFulfillForm)} className="w-full btn-primary text-xs font-semibold uppercase py-2 hover:">
+                <div className="space-y-2">
+                  <button onClick={() => setShowFulfillForm(!showFulfillForm)} className="w-full btn-primary text-xs font-semibold uppercase py-2.5 shadow-sm inline-flex items-center justify-center">
                     Fulfill Items
                   </button>
                   {showFulfillForm && (
-                    <div className="mt-3 space-y-2 bg-surface-muted p-2.5 rounded-lg border border-edge">
-                      <select value={carrier} onChange={(e) => setCarrier(e.target.value)} className="w-full text-xs rounded border border-edge-strong p-1 bg-white">
-                        <option value="Delhivery">Delhivery</option>
-                        <option value="Blue Dart">Blue Dart</option>
-                        <option value="DTDC">DTDC</option>
-                        <option value="Royal Mail">Royal Mail</option>
-                        <option value="DPD">DPD</option>
-                        <option value="Evri">Evri</option>
-                      </select>
-                      <input placeholder="Tracking Number" value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)} className="w-full text-xs rounded border border-edge-strong p-1 bg-white" />
-                      <button onClick={handleFulfill} disabled={!trackingNumber || saving} className="w-full bg-ink-primary text-white text-[10px] uppercase font-semibold py-1.5 rounded disabled:opacity-50">
+                    <div className="mt-3 space-y-3 bg-surface-subtle p-4 rounded border border-edge">
+                      <div>
+                        <label className="text-[10px] text-ink-muted font-bold uppercase tracking-wider mb-1 block">Carrier Service</label>
+                        <select value={carrier} onChange={(e) => setCarrier(e.target.value)} className="w-full text-xs rounded border border-edge p-2 bg-white focus:outline-none">
+                          <option value="Delhivery">Delhivery</option>
+                          <option value="Blue Dart">Blue Dart</option>
+                          <option value="DTDC">DTDC</option>
+                          <option value="Royal Mail">Royal Mail</option>
+                          <option value="DPD">DPD</option>
+                          <option value="Evri">Evri</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-ink-muted font-bold uppercase tracking-wider mb-1 block">Tracking Reference</label>
+                        <input placeholder="Tracking Number" value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)} className="w-full text-xs rounded border border-edge p-2 bg-white focus:outline-none" />
+                      </div>
+                      <button onClick={handleFulfill} disabled={!trackingNumber || saving} className="w-full bg-ink-primary text-white text-xs uppercase font-bold py-2 rounded disabled:opacity-50 hover:bg-ink-primary/95 transition">
                         Confirm Shipment
                       </button>
                     </div>
@@ -1478,21 +1618,21 @@ function OrderDetail({ authFetch, order, onClose, onChanged }) {
               )}
 
               {order.status !== 'CANCELLED' && order.status !== 'REFUNDED' && (
-                <div className="border-b border-edge-subtle pb-3">
-                  <button onClick={() => setShowRefundForm(!showRefundForm)} className="w-full border border-edge text-xs font-semibold uppercase py-2 text-ink-primary rounded-sm hover:bg-surface-muted">
-                    Refund Order
+                <div className="space-y-2">
+                  <button onClick={() => setShowRefundForm(!showRefundForm)} className="w-full border border-edge text-xs font-bold uppercase py-2.5 text-ink-secondary rounded hover:bg-surface-muted transition">
+                    Refund Transactions
                   </button>
                   {showRefundForm && (
-                    <div className="mt-3 space-y-2 bg-surface-muted p-2.5 rounded-lg border border-edge">
+                    <div className="mt-3 space-y-3 bg-surface-subtle p-4 rounded border border-edge">
                       <div>
-                        <label className="text-[10px] text-brand-muted block font-semibold">Refund Amount ({order.currency_code})</label>
-                        <input type="number" step="0.01" value={refundAmount} onChange={(e) => setRefundAmount(e.target.value)} className="w-full text-xs rounded border border-edge-strong p-1 bg-white" />
+                        <label className="text-[10px] text-ink-muted font-bold block uppercase tracking-wider mb-1">Refund Amount ({order.currency_code})</label>
+                        <input type="number" step="0.01" value={refundAmount} onChange={(e) => setRefundAmount(e.target.value)} className="w-full text-xs rounded border border-edge p-2 bg-white focus:outline-none" />
                       </div>
                       <div>
-                        <label className="text-[10px] text-brand-muted block font-semibold">Reason</label>
-                        <input placeholder="Reason for return" value={refundReason} onChange={(e) => setRefundReason(e.target.value)} className="w-full text-xs rounded border border-edge-strong p-1 bg-white" />
+                        <label className="text-[10px] text-ink-muted font-bold block uppercase tracking-wider mb-1">Refund Justification</label>
+                        <input placeholder="Reason for return" value={refundReason} onChange={(e) => setRefundReason(e.target.value)} className="w-full text-xs rounded border border-edge p-2 bg-white focus:outline-none" />
                       </div>
-                      <button onClick={handleRefund} disabled={!refundAmount || Number(refundAmount) <= 0 || saving} className="w-full bg-brand-danger hover:bg-brand-danger/90 text-white text-[10px] uppercase font-semibold py-1.5 rounded disabled:opacity-50">
+                      <button onClick={handleRefund} disabled={!refundAmount || Number(refundAmount) <= 0 || saving} className="w-full bg-brand-danger hover:bg-brand-danger/90 text-white text-xs uppercase font-bold py-2 rounded disabled:opacity-50 transition">
                         Process Refund
                       </button>
                     </div>
@@ -1502,45 +1642,67 @@ function OrderDetail({ authFetch, order, onClose, onChanged }) {
 
               {order.status !== 'CANCELLED' && order.status !== 'SHIPPED' && order.status !== 'DELIVERED' && order.status !== 'REFUNDED' && (
                 <div>
-                  <button onClick={handleCancel} disabled={saving} className="w-full border border-brand-danger/30 text-brand-danger text-xs font-semibold uppercase py-2 rounded-sm hover:bg-brand-danger/5 transition-colors">
+                  <button onClick={handleCancel} disabled={saving} className="w-full border border-brand-danger/30 text-brand-danger text-xs font-bold uppercase py-2.5 rounded hover:bg-brand-danger/5 transition">
                     Cancel Order
                   </button>
                 </div>
               )}
-            </section>
+            </div>
 
-            <section className="rounded-md border border-edge bg-white shadow-card p-4">
-              <div className="mb-3 flex items-center gap-2"><UserRound className="h-4 w-4 text-ink-accent" /><p className="kicker">Customer</p></div>
-              <p className="font-semibold text-ink-primary">{order.shipping_name}</p>
-              <p className="text-xs text-brand-muted">{order.email}</p>
-              <p className="mt-1 text-xs text-brand-muted">{order.shipping_phone || 'No phone'}</p>
-              <div className="mt-3 rounded-lg bg-surface-muted p-3 text-xs text-brand-muted">
+            {/* Customer Information Card */}
+            <div className="rounded-lg border border-edge bg-white p-6 shadow-card space-y-3">
+              <div className="flex items-center gap-2 border-b border-edge-subtle pb-3">
+                <UserRound className="h-4.5 w-4.5 text-brand-accent" />
+                <p className="text-sm font-bold text-ink-primary uppercase tracking-wider">Customer Details</p>
+              </div>
+              <p className="font-bold text-ink-primary text-sm">{order.shipping_name}</p>
+              <div className="text-xs space-y-1.5 text-ink-secondary">
+                <p className="truncate"><span className="font-semibold text-ink-primary">Email:</span> {order.email}</p>
+                <p><span className="font-semibold text-ink-primary">Phone:</span> {order.shipping_phone || 'N/A'}</p>
+              </div>
+              <div className="mt-3 rounded-lg border border-edge bg-surface-subtle p-3.5 text-xs text-ink-secondary leading-relaxed">
+                <p className="font-bold text-ink-primary mb-1 uppercase tracking-wider text-[9px] text-ink-muted">Shipping Address</p>
                 {order.shipping_address_line1}{order.shipping_address_line2 ? `, ${order.shipping_address_line2}` : ''}<br />
                 {order.shipping_city}, {order.shipping_state} {order.shipping_postal_code}<br />
                 {order.shipping_country}
               </div>
-            </section>
-            <section className="rounded-md border border-edge bg-white shadow-card p-4">
-              <p className="mb-3 text-xs font-semibold uppercase text-brand-muted">Checkout summary</p>
+            </div>
+
+            {/* Metadata Summary Card */}
+            <div className="rounded-lg border border-edge bg-white p-6 shadow-card space-y-3">
+              <p className="text-sm font-bold text-ink-primary border-b border-edge-subtle pb-3 uppercase tracking-wider">Checkout Summary</p>
               <div className="space-y-2 text-xs">
-                <div className="flex justify-between"><span className="text-brand-muted">Region</span><span className="font-semibold text-ink-primary">{order.region_code || order.region}</span></div>
-                <div className="flex justify-between"><span className="text-brand-muted">Created</span><span className="font-semibold text-ink-primary">{formatDateTime(order.created_at)}</span></div>
-                <div className="flex justify-between"><span className="text-brand-muted">Updated</span><span className="font-semibold text-ink-primary">{formatDateTime(order.updated_at)}</span></div>
-                <div className="flex justify-between"><span className="text-brand-muted">Payment ID</span><span className="max-w-[160px] truncate font-mono text-ink-primary">{order.payment_id || '—'}</span></div>
+                <div className="flex justify-between"><span className="text-ink-secondary font-medium">Sales Region</span><span className="font-bold text-ink-primary uppercase">{order.region_code || order.region}</span></div>
+                <div className="flex justify-between"><span className="text-ink-secondary font-medium">Order Date</span><span className="font-semibold text-ink-primary">{formatDateTime(order.created_at)}</span></div>
+                <div className="flex justify-between"><span className="text-ink-secondary font-medium">Updated Date</span><span className="font-semibold text-ink-primary">{formatDateTime(order.updated_at)}</span></div>
+                <div className="flex justify-between"><span className="text-ink-secondary font-medium">Gateway Payment ID</span><span className="max-w-[140px] truncate font-mono text-ink-primary" title={order.payment_id}>{order.payment_id || 'N/A'}</span></div>
               </div>
-            </section>
-            {order.invoice?.pdf_url && (
-              <a href={getApiUrl(order.invoice.pdf_url)} target="_blank" rel="noreferrer" className="flex w-full items-center justify-center gap-2 rounded-lg border border-edge bg-white px-4 py-3 text-xs font-semibold text-ink-primary hover:border-ink-primary">
-                <Download className="h-4 w-4" /> Download invoice
-              </a>
-            )}
-          </aside>
+            </div>
+
+            {/* Invoice & Packing Slip actions */}
+            <div className="flex flex-col gap-2.5 w-full">
+              {order.invoice?.pdf_url ? (
+                <a href={getApiUrl(order.invoice.pdf_url)} target="_blank" rel="noreferrer" className="flex w-full items-center justify-center gap-2 rounded-lg border border-edge bg-white px-4 py-3.5 text-xs font-bold text-ink-primary hover:bg-surface-muted transition shadow-sm">
+                  <Download className="h-4 w-4 text-brand-accent" /> Download Invoice / Summary
+                </a>
+              ) : (
+                <div className="text-center text-xs text-brand-muted p-3 border border-dashed border-edge rounded bg-surface-muted">
+                  Invoice PDF not generated yet
+                </div>
+              )}
+              <button
+                onClick={printPackingSlip}
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-edge bg-white px-4 py-3.5 text-xs font-bold text-ink-primary hover:bg-surface-muted transition shadow-sm"
+              >
+                <Printer className="h-4 w-4 text-ink-secondary" /> Print Packing Slip
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   );
 }
-
 function PaginationControls({ page, pageSize, totalCount, onChangePage, onChangePageSize }) {
   const totalPages = Math.ceil(totalCount / pageSize) || 1;
   const startRange = (page - 1) * pageSize + 1;
@@ -1998,7 +2160,7 @@ function PaymentsTab({ authFetch, regions }) {
             <div className="divide-y divide-edge-subtle">
               {manualCapture.slice(0, 6).map((o) => (
                 <div key={o.id} className="flex flex-col justify-between gap-2 px-4 py-3 text-sm sm:flex-row sm:items-center">
-                  <div><p className="font-semibold text-ink-primary">Order #{o.id} · {o.email}</p><p className="text-xs text-brand-muted">{o.payment_method} · {formatMoney(o.currency_code, o.payment_captured_amount)} captured of {formatMoney(o.currency_code, o.payment_authorized_amount || o.total)}</p></div>
+                  <div><p className="font-semibold text-ink-primary">Order #{o.id} | {o.email}</p><p className="text-xs text-brand-muted">{o.payment_method} | {formatMoney(o.currency_code, o.payment_captured_amount)} captured of {formatMoney(o.currency_code, o.payment_authorized_amount || o.total)}</p></div>
                   <span className={`w-fit rounded-xs px-2 py-0.5 text-[10px] font-semibold ${PAYMENT_STATUS_COLOR[o.payment_status] || 'bg-surface-muted text-ink-secondary'}`}>{o.payment_status || 'PENDING'}</span>
                 </div>
               ))}
@@ -2791,6 +2953,26 @@ function SupportTab({ authFetch }) {
   const [loading, setLoading] = useState(true);
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState('');
+
+  const syncEmails = () => {
+    setSyncing(true);
+    setSyncMsg('');
+    authFetch('/api/admin/support-tickets/sync/', { method: 'POST' })
+      .then((r) => r.json().then((data) => ({ ok: r.ok, data })))
+      .then(({ ok, data }) => {
+        if (!ok) throw new Error(data.error || 'Failed to sync support inbox.');
+        setSyncMsg(data.message);
+        load();
+        setTimeout(() => setSyncMsg(''), 4000);
+      })
+      .catch((e) => {
+        setSyncMsg(`Sync Error: ${e.message}`);
+        setTimeout(() => setSyncMsg(''), 6000);
+      })
+      .finally(() => setSyncing(false));
+  };
 
   const load = useCallback(() => {
     setLoading(true);
@@ -2822,7 +3004,23 @@ function SupportTab({ authFetch }) {
     <div className="space-y-6">
       {/* Support Tickets */}
       <div>
-        <h3 className="text-sm font-semibold text-ink-primary mb-3">Customer Support Tickets ({tickets.length})</h3>
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <h3 className="text-sm font-semibold text-ink-primary">Customer Support Tickets ({tickets.length})</h3>
+          <button
+            onClick={syncEmails}
+            disabled={syncing}
+            className="btn-primary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold uppercase disabled:opacity-60"
+          >
+            {syncing ? 'Syncing...' : 'Sync Support Inbox'}
+          </button>
+        </div>
+
+        {syncMsg && (
+          <div className={`text-xs p-2.5 rounded border mb-3 font-semibold ${syncMsg.startsWith('Sync Error') ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-brand-success/10 text-ink-success border-brand-success/30'}`}>
+            {syncMsg}
+          </div>
+        )}
+
         <div className="overflow-x-auto rounded-md border border-edge bg-white shadow-card">
           <table className="w-full text-left text-xs font-medium">
             <thead className="bg-surface-muted text-[10px] font-medium uppercase tracking-wide text-ink-muted border-b border-edge">
@@ -2946,6 +3144,7 @@ const MARKETING_CHANNELS_CATALOG = [
   { code: 'GOOGLE_MERCHANT', name: 'Google Merchant Center', desc: 'Sync catalogs and verify product feeds dynamically.', icon: Globe },
   { code: 'GOOGLE_ADS', name: 'Google Ads', desc: 'Run search and Performance Max campaigns.', icon: TrendingUp },
   { code: 'GOOGLE_ANALYTICS', name: 'Google Analytics (GA4)', desc: 'Track storefront visitors, conversions, and metrics.', icon: Activity },
+  { code: 'GOOGLE_TAG_MANAGER', name: 'Google Tag Manager', desc: 'Manage website tags, triggers, and tracking pixels from a central container.', icon: Tag },
   { code: 'FACEBOOK_BUSINESS', name: 'Facebook Business Manager', desc: 'Manage catalog feeds and business assets.', icon: Layers },
   { code: 'FACEBOOK_ADS', name: 'Facebook & Instagram Ads', desc: 'Target customer audiences on Meta.', icon: TrendingUp },
   { code: 'META_PIXEL', name: 'Meta Pixels & Conversion API', desc: 'Send server-side commerce events for targeting.', icon: Activity },
@@ -2953,14 +3152,23 @@ const MARKETING_CHANNELS_CATALOG = [
   { code: 'THIRD_PARTY', name: 'Omnisend / Email tools', desc: 'Send automated newsletters and checkout emails.', icon: Mail }
 ];
 
+const AVAILABLE_WEBHOOK_EVENTS = [
+  { code: 'order.created', label: 'Order Created', desc: 'Triggered when a shopper drafts/creates an order.' },
+  { code: 'order.paid', label: 'Order Paid', desc: 'Triggered when order payment is confirmed.' },
+  { code: 'order.cancelled', label: 'Order Cancelled', desc: 'Triggered when an order is cancelled.' },
+  { code: 'order.refunded', label: 'Order Refunded', desc: 'Triggered when a full or partial refund is processed.' },
+  { code: 'product.created', label: 'Product Created', desc: 'Triggered when a product is added.' },
+  { code: 'product.updated', label: 'Product Updated', desc: 'Triggered when product details are changed.' },
+  { code: 'inventory.updated', label: 'Inventory Updated', desc: 'Triggered when a warehouse stock level is adjusted.' },
+];
+
 function IntegrationsTab({ authFetch }) {
-  const [activeSubTab, setActiveSubTab] = useState('marketing'); // marketing | system
+  const [activeSubTab, setActiveSubTab] = useState('marketing'); // marketing | credentials | outbound | inbound
   const [integrations, setIntegrations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedChannel, setSelectedChannel] = useState(null);
   
-  // System connectors — loaded from the SYSTEM_CONNECTORS setting. Start empty;
-  // never hardcode credentials in the frontend.
+  // System connectors credentials registry
   const [connectors, setConnectors] = useState({
     delhivery_api_key: '',
     cloudflare_zone_id: '',
@@ -2969,33 +3177,79 @@ function IntegrationsTab({ authFetch }) {
     razorpay_key_id: '',
     stripe_webhook_secret: ''
   });
-  const [webhookLogs, setWebhookLogs] = useState([]);
-  const [selectedLog, setSelectedLog] = useState(null);
 
-  const load = useCallback(() => {
+  // Outbound Webhook Subscriptions
+  const [subscriptions, setSubscriptions] = useState([]);
+  const [deliveries, setDeliveries] = useState([]);
+  const [showSubForm, setShowSubForm] = useState(false);
+  const [editingSub, setEditingSub] = useState(null);
+  const [newSub, setNewSub] = useState({ name: '', url: '', events: [], is_active: true });
+  const [selectedOutboundLog, setSelectedOutboundLog] = useState(null);
+
+  // Incoming Webhook logs from DB
+  const [incomingLogs, setIncomingLogs] = useState([]);
+  const [selectedIncomingLog, setSelectedIncomingLog] = useState(null);
+
+  const loadMarketing = useCallback(() => {
+    authFetch('/api/admin/marketing-integrations/')
+      .then((r) => r.json())
+      .then((d) => setIntegrations(Array.isArray(d) ? d : d.results || []))
+      .catch(() => {});
+  }, [authFetch]);
+
+  const loadCredentials = useCallback(() => {
+    authFetch('/api/admin/settings/SYSTEM_CONNECTORS/')
+      .then((r) => r.ok ? r.json().then(d => d.value) : null)
+      .then((sysData) => {
+        if (sysData && typeof sysData === 'object') {
+          setConnectors((prev) => ({ ...prev, ...sysData }));
+        }
+      })
+      .catch(() => {});
+  }, [authFetch]);
+
+  const loadOutbound = useCallback(() => {
+    Promise.all([
+      authFetch('/api/admin/webhook-subscriptions/').then(r => r.ok ? r.json() : []),
+      authFetch('/api/admin/webhook-deliveries/').then(r => r.ok ? r.json() : [])
+    ]).then(([subs, logs]) => {
+      setSubscriptions(Array.isArray(subs) ? subs : subs.results || []);
+      setDeliveries(Array.isArray(logs) ? logs : logs.results || []);
+    }).catch(() => {});
+  }, [authFetch]);
+
+  const loadInbound = useCallback(() => {
+    authFetch('/api/admin/incoming-webhooks/')
+      .then(r => r.ok ? r.json() : [])
+      .then(logs => setIncomingLogs(Array.isArray(logs) ? logs : logs.results || []))
+      .catch(() => {});
+  }, [authFetch]);
+
+  const loadAll = useCallback(() => {
     setLoading(true);
     Promise.all([
-      authFetch('/api/admin/marketing-integrations/').then((r) => r.json()).catch(() => []),
-      authFetch('/api/admin/settings/SYSTEM_CONNECTORS/')
-        .then((r) => r.ok ? r.json().then(d => d.value) : null)
-        .catch(() => null),
-      authFetch('/api/admin/settings/WEBHOOK_LOGS/')
-        .then((r) => r.ok ? r.json().then(d => d.value) : null)
-        .catch(() => null)
-    ]).then(([mktData, sysData, logsData]) => {
-      setIntegrations(Array.isArray(mktData) ? mktData : mktData.results || []);
-      if (sysData && typeof sysData === 'object') setConnectors((prev) => ({ ...prev, ...sysData }));
-      setWebhookLogs(Array.isArray(logsData) ? logsData : []);
+      authFetch('/api/admin/marketing-integrations/').then(r => r.ok ? r.json() : []),
+      authFetch('/api/admin/settings/SYSTEM_CONNECTORS/').then(r => r.ok ? r.json().then(d => d.value) : {}),
+      authFetch('/api/admin/webhook-subscriptions/').then(r => r.ok ? r.json() : []),
+      authFetch('/api/admin/webhook-deliveries/').then(r => r.ok ? r.json() : []),
+      authFetch('/api/admin/incoming-webhooks/').then(r => r.ok ? r.json() : [])
+    ]).then(([mkt, creds, subs, outLogs, inLogs]) => {
+      setIntegrations(Array.isArray(mkt) ? mkt : mkt.results || []);
+      if (creds && typeof creds === 'object') setConnectors(prev => ({ ...prev, ...creds }));
+      setSubscriptions(Array.isArray(subs) ? subs : subs.results || []);
+      setDeliveries(Array.isArray(outLogs) ? outLogs : outLogs.results || []);
+      setIncomingLogs(Array.isArray(inLogs) ? inLogs : inLogs.results || []);
     }).finally(() => setLoading(false));
   }, [authFetch]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadAll(); }, [loadAll]);
 
+  // Marketing Connectors Actions
   const toggleConnection = (channelCode) => {
     const matched = integrations.find(i => i.channel === channelCode);
     if (matched) {
       if (confirm(`Disconnect from ${matched.name}? This will stop product feeds sync.`)) {
-        authFetch(`/api/admin/marketing-integrations/${matched.id}/`, { method: 'DELETE' }).then(load);
+        authFetch(`/api/admin/marketing-integrations/${matched.id}/`, { method: 'DELETE' }).then(loadMarketing);
       }
     } else {
       const meta = MARKETING_CHANNELS_CATALOG.find(c => c.code === channelCode);
@@ -3015,7 +3269,7 @@ function IntegrationsTab({ authFetch }) {
       })
     }).then(() => {
       setSelectedChannel(null);
-      load();
+      loadMarketing();
     });
   };
 
@@ -3023,10 +3277,11 @@ function IntegrationsTab({ authFetch }) {
     if (!integration?.id) return;
     authFetch(`/api/admin/marketing-integrations/${integration.id}/sync/`, { method: 'POST', body: JSON.stringify({}) })
       .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
-      .then(({ ok, d }) => { alert(ok ? (d.message || 'Catalog sync completed.') : (d.message || 'Sync failed.')); load(); })
+      .then(({ ok, d }) => { alert(ok ? (d.message || 'Catalog sync completed.') : (d.message || 'Sync failed.')); loadMarketing(); })
       .catch(() => alert('Sync failed — please try again.'));
   };
 
+  // API Credentials Actions
   const saveConnectors = () => {
     authFetch('/api/admin/settings/SYSTEM_CONNECTORS/', {
       method: 'PUT',
@@ -3039,36 +3294,94 @@ function IntegrationsTab({ authFetch }) {
       .then(() => alert("System API connector keys saved successfully!"));
   };
 
-  // Honest configuration check (not a fake random ping). A real live ping to the
-  // third-party API would run server-side once the integration is enabled.
-  const CONNECTOR_KEYS = {
-    'Delhivery': 'delhivery_api_key',
-    'Cloudflare': 'cloudflare_zone_id',
-    'Klaviyo': 'klaviyo_private_key',
-    'Google Analytics': 'ga4_measurement_id',
-    'Stripe/Razorpay': 'stripe_webhook_secret',
+  // Outbound Webhooks Actions
+  const handleToggleEvent = (code) => {
+    setNewSub(prev => {
+      const events = prev.events.includes(code)
+        ? prev.events.filter(e => e !== code)
+        : [...prev.events, code];
+      return { ...prev, events };
+    });
   };
-  const testHealth = (systemName) => {
-    const key = CONNECTOR_KEYS[systemName];
-    const configured = key ? Boolean((connectors[key] || '').trim()) : false;
-    if (configured) {
-      alert(`${systemName}: credentials are configured. Save them, then enable the integration — a live connection test runs server-side.`);
-    } else {
-      alert(`${systemName}: no credentials entered yet. Add the key above and click "Save Connector Credentials".`);
+
+  const saveSubscription = () => {
+    const isEdit = Boolean(newSub.id);
+    const url = isEdit 
+      ? `/api/admin/webhook-subscriptions/${newSub.id}/` 
+      : '/api/admin/webhook-subscriptions/';
+    const method = isEdit ? 'PUT' : 'POST';
+
+    authFetch(url, {
+      method: method,
+      body: JSON.stringify(newSub)
+    }).then(r => {
+      if (r.ok) {
+        setShowSubForm(false);
+        setNewSub({ name: '', url: '', events: [], is_active: true });
+        loadOutbound();
+      } else {
+        alert("Failed to save webhook subscription.");
+      }
+    });
+  };
+
+  const testSubscription = (sub) => {
+    authFetch(`/api/admin/webhook-subscriptions/${sub.id}/test_delivery/`, { method: 'POST' })
+      .then(r => r.json())
+      .then(d => {
+        alert("Test ping queued. Delivery Log: " + d.delivery_id);
+        loadOutbound();
+      });
+  };
+
+  const deleteSubscription = (sub) => {
+    if (confirm(`Are you sure you want to delete the webhook "${sub.name}"?`)) {
+      authFetch(`/api/admin/webhook-subscriptions/${sub.id}/`, { method: 'DELETE' })
+        .then(() => loadOutbound());
     }
   };
 
-  if (loading) return <p className="text-sm text-brand-muted">Loading active channels and connectors...</p>;
+  const retryOutboundDelivery = (log) => {
+    authFetch(`/api/admin/webhook-deliveries/${log.id}/retry/`, { method: 'POST' })
+      .then(r => {
+        if (r.ok) {
+          alert("Delivery queued for retry.");
+          setSelectedOutboundLog(null);
+          loadOutbound();
+        } else {
+          alert("Failed to retry delivery.");
+        }
+      });
+  };
+
+  // Incoming Webhook Actions
+  const reprocessIncomingEvent = (log) => {
+    authFetch(`/api/admin/incoming-webhooks/${log.id}/retry/`, { method: 'POST' })
+      .then(r => {
+        if (r.ok) {
+          alert("Reprocessing triggered in background.");
+          setSelectedIncomingLog(null);
+          loadInbound();
+        } else {
+          alert("Failed to trigger reprocessing.");
+        }
+      });
+  };
+
+  if (loading) return <p className="text-sm text-brand-muted">Loading integrations and webhook registries...</p>;
 
   return (
     <div className="space-y-4">
       {/* Subtab Navigation */}
       <div className="flex gap-2 border-b border-edge-subtle pb-2">
         <button onClick={() => setActiveSubTab('marketing')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm ${activeSubTab === 'marketing' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Marketing Channels</button>
-        <button onClick={() => setActiveSubTab('system')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm ${activeSubTab === 'system' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Webhooks &amp; API Keys</button>
+        <button onClick={() => setActiveSubTab('credentials')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm ${activeSubTab === 'credentials' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>API Credentials</button>
+        <button onClick={() => setActiveSubTab('outbound')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm ${activeSubTab === 'outbound' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Outbound Webhooks</button>
+        <button onClick={() => setActiveSubTab('inbound')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm ${activeSubTab === 'inbound' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Incoming Webhooks</button>
       </div>
 
-      {activeSubTab === 'marketing' ? (
+      {/* MARKETING CHANNELS TAB */}
+      {activeSubTab === 'marketing' && (
         <div className="grid gap-4 md:grid-cols-2">
           {MARKETING_CHANNELS_CATALOG.map((chan) => {
             const active = integrations.find(i => i.channel === chan.code);
@@ -3100,83 +3413,347 @@ function IntegrationsTab({ authFetch }) {
             );
           })}
         </div>
-      ) : (
-        <div className="grid gap-6 md:grid-cols-[1fr_400px]">
-          {/* API keys credentials form */}
-          <div className="bg-white border border-edge rounded-lg p-5 space-y-4">
-            <h3 className="text-sm font-semibold text-ink-primary">API Key &amp; Credentials Center</h3>
-            <p className="text-xs text-brand-muted font-medium">Input production credentials below. Secret values are accepted by the server but are never returned to the browser.</p>
-            
-            <div className="space-y-3.5 text-xs">
-              <div className="border-b border-edge-subtle pb-3">
-                <div className="flex justify-between items-center mb-1">
-                  <label className="font-semibold text-ink-primary">Delhivery Courier API Access Token</label>
-                  <button onClick={() => testHealth('Delhivery')} className="text-ink-accent font-semibold text-[10px] uppercase">Test ping</button>
-                </div>
-                <input type="password" value={connectors.delhivery_api_key} onChange={(e) => setConnectors({ ...connectors, delhivery_api_key: e.target.value })} className="w-full rounded-sm border border-edge p-2 font-mono" />
-              </div>
+      )}
 
-              <div className="border-b border-edge-subtle pb-3">
-                <div className="flex justify-between items-center mb-1">
-                  <label className="font-semibold text-ink-primary">Cloudflare CDN Zone Token &amp; ID</label>
-                  <button onClick={() => testHealth('Cloudflare')} className="text-ink-accent font-semibold text-[10px] uppercase">Test API</button>
-                </div>
-                <input type="password" value={connectors.cloudflare_zone_id} onChange={(e) => setConnectors({ ...connectors, cloudflare_zone_id: e.target.value })} className="w-full rounded-sm border border-edge p-2 font-mono" />
-              </div>
-
-              <div className="border-b border-edge-subtle pb-3">
-                <div className="flex justify-between items-center mb-1">
-                  <label className="font-semibold text-ink-primary">Klaviyo Private API Key</label>
-                  <button onClick={() => testHealth('Klaviyo')} className="text-ink-accent font-semibold text-[10px] uppercase">Test sync</button>
-                </div>
-                <input type="password" value={connectors.klaviyo_private_key} onChange={(e) => setConnectors({ ...connectors, klaviyo_private_key: e.target.value })} className="w-full rounded-sm border border-edge p-2 font-mono" />
-              </div>
-
-              <div className="border-b border-edge-subtle pb-3">
-                <div className="flex justify-between items-center mb-1">
-                  <label className="font-semibold text-ink-primary">Google Analytics GA4 Measurement ID</label>
-                  <button onClick={() => testHealth('Google Analytics')} className="text-ink-accent font-semibold text-[10px] uppercase">Test script</button>
-                </div>
-                <input value={connectors.ga4_measurement_id} onChange={(e) => setConnectors({ ...connectors, ga4_measurement_id: e.target.value })} className="w-full rounded-sm border border-edge p-2 font-mono" />
-              </div>
-
-              <div className="border-b border-edge-subtle pb-3">
-                <div className="flex justify-between items-center mb-1">
-                  <label className="font-semibold text-ink-primary">Stripe / Razorpay Endpoint Webhook Secrets</label>
-                  <button onClick={() => testHealth('Stripe/Razorpay')} className="text-ink-accent font-semibold text-[10px] uppercase">Verify endpoints</button>
-                </div>
-                <input type="password" value={connectors.stripe_webhook_secret} onChange={(e) => setConnectors({ ...connectors, stripe_webhook_secret: e.target.value })} className="w-full rounded-sm border border-edge p-2 font-mono" />
-              </div>
-
-              <button onClick={saveConnectors} className="btn-primary w-full py-2.5 font-semibold uppercase text-xs">Save Connector Credentials</button>
+      {/* SYSTEM API CREDENTIALS TAB */}
+      {activeSubTab === 'credentials' && (
+        <div className="bg-white border border-edge rounded-lg p-5 max-w-2xl space-y-4">
+          <h3 className="text-sm font-semibold text-ink-primary">API Key &amp; Credentials Center</h3>
+          <p className="text-xs text-brand-muted font-medium">Input production credentials below. Secret values are accepted by the server but are never returned to the browser.</p>
+          
+          <div className="space-y-3.5 text-xs">
+            <div className="border-b border-edge-subtle pb-3">
+              <label className="font-semibold text-ink-primary block mb-1">Delhivery Courier API Access Token</label>
+              <input type="password" value={connectors.delhivery_api_key} onChange={(e) => setConnectors({ ...connectors, delhivery_api_key: e.target.value })} className="w-full rounded-sm border border-edge p-2 font-mono" />
             </div>
+
+            <div className="border-b border-edge-subtle pb-3">
+              <label className="font-semibold text-ink-primary block mb-1">Cloudflare CDN Zone Token &amp; ID</label>
+              <input type="password" value={connectors.cloudflare_zone_id} onChange={(e) => setConnectors({ ...connectors, cloudflare_zone_id: e.target.value })} className="w-full rounded-sm border border-edge p-2 font-mono" />
+            </div>
+
+            <div className="border-b border-edge-subtle pb-3">
+              <label className="font-semibold text-ink-primary block mb-1">Klaviyo Private API Key</label>
+              <input type="password" value={connectors.klaviyo_private_key} onChange={(e) => setConnectors({ ...connectors, klaviyo_private_key: e.target.value })} className="w-full rounded-sm border border-edge p-2 font-mono" />
+            </div>
+
+            <div className="border-b border-edge-subtle pb-3">
+              <label className="font-semibold text-ink-primary block mb-1">Google Analytics GA4 Measurement ID</label>
+              <input value={connectors.ga4_measurement_id} onChange={(e) => setConnectors({ ...connectors, ga4_measurement_id: e.target.value })} className="w-full rounded-sm border border-edge p-2 font-mono" />
+            </div>
+
+            <div className="border-b border-edge-subtle pb-3">
+              <label className="font-semibold text-ink-primary block mb-1">Stripe / Razorpay Endpoint Webhook Secrets</label>
+              <input type="password" value={connectors.stripe_webhook_secret} onChange={(e) => setConnectors({ ...connectors, stripe_webhook_secret: e.target.value })} className="w-full rounded-sm border border-edge p-2 font-mono" />
+            </div>
+
+            <button onClick={saveConnectors} className="btn-primary w-full py-2.5 font-semibold uppercase text-xs">Save Connector Credentials</button>
+          </div>
+        </div>
+      )}
+
+      {/* OUTBOUND WEBHOOKS MANAGER TAB */}
+      {activeSubTab === 'outbound' && (
+        <div className="space-y-6">
+          {/* Subscriptions List */}
+          <div className="bg-white border border-edge rounded-lg p-5 space-y-4">
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="text-sm font-semibold text-ink-primary">Outbound Webhooks (Subscriptions)</h3>
+                <p className="text-xs text-brand-muted">Notify external services instantly when orders are paid, products are updated, or stock levels change.</p>
+              </div>
+              <button onClick={() => { setNewSub({ name: '', url: '', events: [], is_active: true }); setShowSubForm(true); }} className="btn-primary px-3 py-1.5 text-xs font-semibold uppercase flex items-center gap-1"><Plus className="h-3.5 w-3.5" /> Add Endpoint</button>
+            </div>
+
+            {subscriptions.length === 0 ? (
+              <div className="text-center py-8 border border-dashed border-edge rounded-md">
+                <Megaphone className="mx-auto h-8 w-8 text-brand-muted mb-2" />
+                <p className="text-xs text-brand-muted">No webhook subscriptions defined yet.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs divide-y divide-edge">
+                  <thead>
+                    <tr className="text-ink-subtle bg-surface-muted font-semibold">
+                      <th className="p-3">Name</th>
+                      <th className="p-3">Endpoint URL</th>
+                      <th className="p-3">Signing Secret</th>
+                      <th className="p-3">Subscribed Events</th>
+                      <th className="p-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-edge">
+                    {subscriptions.map(sub => (
+                      <tr key={sub.id} className="hover:bg-surface-muted/50">
+                        <td className="p-3 font-semibold text-ink-primary">{sub.name}</td>
+                        <td className="p-3 font-mono text-ink-secondary max-w-[200px] truncate">{sub.url}</td>
+                        <td className="p-3 font-mono text-ink-secondary">{sub.secret ? `${sub.secret.slice(0, 8)}...` : 'N/A'}</td>
+                        <td className="p-3 flex flex-wrap gap-1">
+                          {sub.events.map(ev => (
+                            <span key={ev} className="bg-surface-muted border border-edge text-[9px] font-mono px-1 rounded-sm text-ink-muted">{ev}</span>
+                          ))}
+                        </td>
+                        <td className="p-3 text-right space-x-2">
+                          <button onClick={() => testSubscription(sub)} className="text-ink-accent font-semibold hover:underline">Ping test</button>
+                          <button onClick={() => { setNewSub(sub); setShowSubForm(true); }} className="text-ink-primary font-semibold hover:underline">Edit</button>
+                          <button onClick={() => deleteSubscription(sub)} className="text-brand-danger font-semibold hover:underline"><Trash2 className="h-4 w-4 inline-block" /></button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
-          {/* Webhook logs history list */}
-          <div className="bg-surface-inverse border border-white/10 rounded-lg p-4 flex flex-col h-[520px]">
-            <div className="flex justify-between items-center mb-3 border-b border-white/10 pb-2">
-              <h4 className="text-xs font-medium text-white/70 uppercase tracking-wider">Incoming Webhook Logs</h4>
-              <span className="rounded-xs bg-brand-accent/20 text-brand-accent px-1.5 py-0.2 text-[8px] font-semibold">RECEIVER LIVE</span>
-            </div>
+          {/* Delivery Logs */}
+          <div className="bg-white border border-edge rounded-lg p-5 space-y-4">
+            <h3 className="text-sm font-semibold text-ink-primary">Outbound Webhook Deliveries (Recent)</h3>
+            
+            {deliveries.length === 0 ? (
+              <p className="text-xs text-brand-muted text-center py-4">No outbound deliveries recorded.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs divide-y divide-edge">
+                  <thead>
+                    <tr className="text-ink-subtle bg-surface-muted font-semibold">
+                      <th className="p-3">Event</th>
+                      <th className="p-3">Receiver</th>
+                      <th className="p-3">Status</th>
+                      <th className="p-3">Attempts</th>
+                      <th className="p-3">Response Code</th>
+                      <th className="p-3">Timestamp</th>
+                      <th className="p-3 text-right">Details</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-edge font-medium">
+                    {deliveries.slice(0, 15).map(log => (
+                      <tr key={log.id} className="hover:bg-surface-muted/50">
+                        <td className="p-3 font-mono font-semibold text-ink-accent">{log.event_type}</td>
+                        <td className="p-3 text-ink-secondary">{log.subscription_name}</td>
+                        <td className="p-3">
+                          <span className={`rounded-xs px-2 py-0.5 text-[10px] font-semibold font-mono ${
+                            log.status === 'SUCCESS' ? 'bg-green-100 text-green-800' :
+                            log.status === 'FAILED' ? 'bg-amber-100 text-amber-800' :
+                            log.status === 'DLQ' ? 'bg-rose-100 text-rose-800' :
+                            'bg-blue-100 text-blue-800'
+                          }`}>
+                            {log.status}
+                          </span>
+                        </td>
+                        <td className="p-3 font-mono">{log.attempts} / 7</td>
+                        <td className="p-3 font-mono font-semibold">{log.response_status || 'Connection Error'}</td>
+                        <td className="p-3 text-ink-subtle font-mono">{formatDateTime(log.created_at)}</td>
+                        <td className="p-3 text-right">
+                          <button onClick={() => setSelectedOutboundLog(log)} className="text-ink-accent font-semibold hover:underline">Inspect</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
-            <div className="flex-1 overflow-y-auto divide-y divide-white/10 space-y-1.5">
-              {webhookLogs.map((log, i) => (
-                <div key={i} className="py-2 flex justify-between items-center cursor-pointer hover:bg-white/5 px-2 rounded-sm" onClick={() => setSelectedLog(log)}>
-                  <div>
-                    <span className="font-mono text-[9px] font-semibold uppercase text-brand-accent block">{log.event}</span>
-                    <span className="text-[10px] text-white/50 font-medium">{log.gateway} · {new Date(log.ts).toLocaleTimeString()}</span>
-                  </div>
-                  <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded-xs font-semibold ${log.status === 200 ? 'bg-green-950 text-green-400' : 'bg-rose-950 text-rose-400'}`}>{log.status}</span>
+      {/* INCOMING WEBHOOK EVENTS MONITOR TAB */}
+      {activeSubTab === 'inbound' && (
+        <div className="bg-white border border-edge rounded-lg p-5 space-y-4">
+          <div className="flex justify-between items-center border-b border-edge-subtle pb-3">
+            <div>
+              <h3 className="text-sm font-semibold text-ink-primary font-sans">Incoming Webhook Events (Database)</h3>
+              <p className="text-xs text-brand-muted">Monitor gateway hits (Stripe, Razorpay, PayPal) and manually retry failed event executions.</p>
+            </div>
+            <span className="rounded-xs bg-brand-success/10 text-ink-success px-2 py-0.5 text-[9px] font-semibold font-mono">GATEWAY RECEIVER ONLINE</span>
+          </div>
+
+          {incomingLogs.length === 0 ? (
+            <p className="text-xs text-brand-muted text-center py-8">No incoming webhook events found in database.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs divide-y divide-edge">
+                <thead>
+                  <tr className="text-ink-subtle bg-surface-muted font-semibold">
+                    <th className="p-3">Gateway</th>
+                    <th className="p-3">Event ID</th>
+                    <th className="p-3">Event Type</th>
+                    <th className="p-3">Status</th>
+                    <th className="p-3">Attempts</th>
+                    <th className="p-3">Received At</th>
+                    <th className="p-3 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-edge font-medium">
+                  {incomingLogs.slice(0, 20).map(log => (
+                    <tr key={log.id} className="hover:bg-surface-muted/50">
+                      <td className="p-3 font-semibold text-ink-accent font-mono">{log.gateway}</td>
+                      <td className="p-3 font-mono text-ink-secondary truncate max-w-[120px]">{log.event_id}</td>
+                      <td className="p-3 font-mono text-ink-secondary">{log.event_type}</td>
+                      <td className="p-3">
+                        <span className={`rounded-xs px-2 py-0.5 text-[10px] font-semibold font-mono ${
+                          log.status === 'PROCESSED' ? 'bg-green-100 text-green-800' :
+                          log.status === 'FAILED' ? 'bg-rose-100 text-rose-800' :
+                          log.status === 'DLQ' ? 'bg-purple-100 text-purple-800' :
+                          'bg-amber-100 text-amber-800'
+                        }`}>
+                          {log.status}
+                        </span>
+                      </td>
+                      <td className="p-3 font-mono">{log.attempts}</td>
+                      <td className="p-3 text-ink-subtle font-mono">{formatDateTime(log.created_at)}</td>
+                      <td className="p-3 text-right">
+                        <button onClick={() => setSelectedIncomingLog(log)} className="text-ink-accent font-semibold hover:underline">Details &amp; Retry</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* OUTBOUND SUBSCRIPTION CREATE/EDIT MODAL */}
+      {showSubForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-overlay backdrop-blur-xs p-4">
+          <div className="w-full max-w-lg bg-white rounded-lg border border-edge p-6 shadow-overlay space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center pb-2 border-b border-edge-subtle">
+              <h3 className="text-sm font-semibold text-ink-primary uppercase">{newSub.id ? 'Edit Webhook Endpoint' : 'Create Webhook Endpoint'}</h3>
+              <button onClick={() => setShowSubForm(false)} className="rounded-sm p-1 hover:bg-surface-muted"><X className="h-5 w-5 text-brand-muted" /></button>
+            </div>
+            
+            <div className="space-y-3.5 text-xs">
+              <div>
+                <label className="font-semibold text-ink-primary block mb-1">Friendly Name</label>
+                <input placeholder="e.g. ERP integration" value={newSub.name} onChange={(e) => setNewSub({ ...newSub, name: e.target.value })} className="w-full rounded-sm border border-edge p-2 text-sm" />
+              </div>
+
+              <div>
+                <label className="font-semibold text-ink-primary block mb-1">Target Endpoint URL</label>
+                <input placeholder="e.g. https://api.myserver.com/webhooks" value={newSub.url} onChange={(e) => setNewSub({ ...newSub, url: e.target.value })} className="w-full rounded-sm border border-edge p-2 font-mono text-sm" />
+              </div>
+
+              <div>
+                <label className="font-semibold text-ink-primary block mb-2">Subscribe to Events</label>
+                <div className="space-y-2 border border-edge rounded-md p-3 bg-surface-muted max-h-48 overflow-y-auto">
+                  {AVAILABLE_WEBHOOK_EVENTS.map(ev => (
+                    <label key={ev.code} className="flex items-start gap-2.5 cursor-pointer">
+                      <input type="checkbox" checked={newSub.events.includes(ev.code)} onChange={() => handleToggleEvent(ev.code)} className="mt-0.5" />
+                      <div>
+                        <span className="font-semibold font-mono text-ink-primary block">{ev.code}</span>
+                        <span className="text-[10px] text-brand-muted">{ev.desc}</span>
+                      </div>
+                    </label>
+                  ))}
                 </div>
-              ))}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input type="checkbox" id="sub_active" checked={newSub.is_active} onChange={(e) => setNewSub({ ...newSub, is_active: e.target.checked })} />
+                <label htmlFor="sub_active" className="font-semibold text-ink-primary cursor-pointer">Active (immediately deliver events)</label>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button onClick={saveSubscription} className="btn-primary flex-1 py-2.5 text-xs font-semibold uppercase">Save Webhook</button>
+                <button onClick={() => setShowSubForm(false)} className="flex-1 rounded-sm border border-edge py-2.5 text-xs font-semibold uppercase">Cancel</button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
+      {/* OUTBOUND LOG INSPECT MODAL */}
+      {selectedOutboundLog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-overlay backdrop-blur-xs p-4">
+          <div className="w-full max-w-2xl bg-white rounded-lg border border-edge p-6 shadow-overlay space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center pb-2 border-b border-edge-subtle">
+              <h3 className="text-sm font-semibold text-ink-primary uppercase">Outbound Webhook Log Drawer</h3>
+              <button onClick={() => setSelectedOutboundLog(null)}><X className="h-5 w-5 text-brand-muted" /></button>
+            </div>
+            
+            <div className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-4 bg-surface-muted p-3 rounded-md font-medium text-ink-secondary">
+                <p><span className="font-semibold text-ink-subtle">LOG ID:</span> <span className="font-mono text-[10px]">{selectedOutboundLog.id}</span></p>
+                <p><span className="font-semibold text-ink-subtle">EVENT TYPE:</span> <span className="font-mono text-[10px]">{selectedOutboundLog.event_type}</span></p>
+                <p><span className="font-semibold text-ink-subtle">RECEIVER:</span> {selectedOutboundLog.subscription_name}</p>
+                <p><span className="font-semibold text-ink-subtle">STATUS:</span> {selectedOutboundLog.status}</p>
+                <p><span className="font-semibold text-ink-subtle">ATTEMPTS:</span> {selectedOutboundLog.attempts} / 7</p>
+                <p><span className="font-semibold text-ink-subtle">RESPONSE STATUS:</span> {selectedOutboundLog.response_status || 'N/A'}</p>
+              </div>
+
+              <div>
+                <span className="font-semibold text-ink-primary block mb-1.5">JSON Payload Sent:</span>
+                <pre className="p-3 bg-surface-inverse text-green-400 font-mono text-[9px] rounded-sm overflow-x-auto max-h-40">{JSON.stringify(selectedOutboundLog.payload, null, 2)}</pre>
+              </div>
+
+              {selectedOutboundLog.response_body && (
+                <div>
+                  <span className="font-semibold text-ink-primary block mb-1.5">Response Body (Truncated):</span>
+                  <pre className="p-3 bg-surface-inverse text-white/80 font-mono text-[9px] rounded-sm overflow-x-auto max-h-32">{selectedOutboundLog.response_body}</pre>
+                </div>
+              )}
+
+              {selectedOutboundLog.error_message && (
+                <div className="p-3 bg-rose-50 border border-rose-100 rounded-sm">
+                  <span className="font-semibold text-brand-danger block mb-1">Error Message:</span>
+                  <p className="font-mono text-[10px] text-brand-danger whitespace-pre-wrap">{selectedOutboundLog.error_message}</p>
+                </div>
+              )}
+
+              <div className="flex gap-2 border-t border-edge-subtle pt-3">
+                <button onClick={() => retryOutboundDelivery(selectedOutboundLog)} className="btn-primary flex-1 py-2 text-xs font-semibold uppercase">Retry Delivery Now</button>
+                <button onClick={() => setSelectedOutboundLog(null)} className="flex-1 rounded-sm border border-edge py-2 text-xs font-semibold uppercase">Close</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* INCOMING LOG INSPECT MODAL */}
+      {selectedIncomingLog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-overlay backdrop-blur-xs p-4">
+          <div className="w-full max-w-2xl bg-white rounded-lg border border-edge p-6 shadow-overlay space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center pb-2 border-b border-edge-subtle">
+              <h3 className="text-sm font-semibold text-ink-primary uppercase">Incoming Gateway Webhook Event</h3>
+              <button onClick={() => setSelectedIncomingLog(null)}><X className="h-5 w-5 text-brand-muted" /></button>
+            </div>
+            
+            <div className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-4 bg-surface-muted p-3 rounded-md font-medium text-ink-secondary">
+                <p><span className="font-semibold text-ink-subtle">ID:</span> <span className="font-mono text-[10px]">{selectedIncomingLog.id}</span></p>
+                <p><span className="font-semibold text-ink-subtle">GATEWAY:</span> <span className="font-mono text-[10px]">{selectedIncomingLog.gateway}</span></p>
+                <p><span className="font-semibold text-ink-subtle">EVENT ID:</span> {selectedIncomingLog.event_id}</p>
+                <p><span className="font-semibold text-ink-subtle">EVENT TYPE:</span> {selectedIncomingLog.event_type}</p>
+                <p><span className="font-semibold text-ink-subtle">STATUS:</span> {selectedIncomingLog.status}</p>
+                <p><span className="font-semibold text-ink-subtle">ATTEMPTS:</span> {selectedIncomingLog.attempts}</p>
+              </div>
+
+              <div>
+                <span className="font-semibold text-ink-primary block mb-1.5">JSON Payload Received:</span>
+                <pre className="p-3 bg-surface-inverse text-green-400 font-mono text-[9px] rounded-sm overflow-x-auto max-h-40">{JSON.stringify(selectedIncomingLog.payload, null, 2)}</pre>
+              </div>
+
+              {selectedIncomingLog.error_log && (
+                <div className="p-3 bg-rose-50 border border-rose-100 rounded-sm">
+                  <span className="font-semibold text-brand-danger block mb-1">Execution Error Stacktrace:</span>
+                  <pre className="font-mono text-[9px] text-brand-danger whitespace-pre-wrap overflow-x-auto max-h-40">{selectedIncomingLog.error_log}</pre>
+                </div>
+              )}
+
+              <div className="flex gap-2 border-t border-edge-subtle pt-3">
+                <button onClick={() => reprocessIncomingEvent(selectedIncomingLog)} className="btn-primary flex-1 py-2 text-xs font-semibold uppercase">Reprocess Event Now</button>
+                <button onClick={() => setSelectedIncomingLog(null)} className="flex-1 rounded-sm border border-edge py-2 text-xs font-semibold uppercase">Close</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MARKETING CHANNEL CONNECT MODAL */}
       {selectedChannel && (
-        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-          <div className="w-full max-w-md bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-overlay backdrop-blur-xs p-4">
+          <div className="w-full max-w-md bg-white rounded-lg border border-edge p-6 shadow-overlay space-y-4">
             <h3 className="text-lg font-semibold text-ink-primary">Connect {selectedChannel.name}</h3>
             <div className="space-y-3">
               <input placeholder="Client Customer ID / Merchant ID / Pixel ID" value={selectedChannel.credentials.identifier || ''} onChange={(e) => setSelectedChannel({ ...selectedChannel, credentials: { ...selectedChannel.credentials, identifier: e.target.value } })} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
@@ -3189,22 +3766,299 @@ function IntegrationsTab({ authFetch }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
 
-      {selectedLog && (
-        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-          <div className="w-full max-w-md bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
-            <div className="flex justify-between items-center pb-2 border-b border-edge-subtle">
-              <h3 className="text-sm font-semibold text-ink-primary uppercase">Webhook Details</h3>
-              <button onClick={() => setSelectedLog(null)}><X className="h-5 w-5 text-brand-muted" /></button>
+/* ------------------------------------------------------------- Glossary Tab */
+function GlossaryTab({ authFetch }) {
+  const [terms, setTerms] = useState([]);
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [editTerm, setEditTerm] = useState(null); // When editing/creating
+  const [modalOpen, setModalOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  const loadTerms = useCallback(() => {
+    setLoading(true);
+    authFetch('/api/admin/glossary/')
+      .then((r) => r.ok ? r.json() : [])
+      .then((data) => setTerms(data))
+      .catch(() => alert('Failed to load glossary terms.'))
+      .finally(() => setLoading(false));
+  }, [authFetch]);
+
+  useEffect(() => {
+    loadTerms();
+  }, [loadTerms]);
+
+  const handleCreate = () => {
+    setEditTerm({ term: '', definition: '', category: '', image_url: '' });
+    setModalOpen(true);
+  };
+
+  const handleEdit = (term) => {
+    setEditTerm({ ...term });
+    setModalOpen(true);
+  };
+
+  const handleDelete = (id) => {
+    if (confirm('Are you sure you want to delete this glossary term?')) {
+      authFetch(`/api/admin/glossary/${id}/`, { method: 'DELETE' })
+        .then((r) => {
+          if (r.ok) {
+            loadTerms();
+          } else {
+            alert('Failed to delete term.');
+          }
+        });
+    }
+  };
+
+  const handleUploadImage = async (file) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const url = await uploadAdminMedia(authFetch, file);
+      if (url) {
+        setEditTerm((prev) => ({ ...prev, image_url: url }));
+      }
+    } catch (err) {
+      alert('Failed to upload image: ' + err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleSave = () => {
+    if (!editTerm.term.trim() || !editTerm.definition.trim()) {
+      alert('Term and Definition are required.');
+      return;
+    }
+
+    const isEdit = !!editTerm.id;
+    const url = isEdit ? `/api/admin/glossary/${editTerm.id}/` : '/api/admin/glossary/';
+    const method = isEdit ? 'PUT' : 'POST';
+
+    authFetch(url, {
+      method,
+      body: JSON.stringify(editTerm),
+    })
+      .then(async (r) => {
+        if (r.ok) {
+          setModalOpen(false);
+          setEditTerm(null);
+          loadTerms();
+        } else {
+          const errData = await r.json().catch(() => ({}));
+          alert('Save failed: ' + (JSON.stringify(errData) || r.statusText));
+        }
+      });
+  };
+
+  const filtered = terms.filter(t => 
+    t.term.toLowerCase().includes(search.toLowerCase()) ||
+    t.definition.toLowerCase().includes(search.toLowerCase()) ||
+    (t.category && t.category.toLowerCase().includes(search.toLowerCase()))
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* Search and Add Header */}
+      <div className="flex flex-col sm:flex-row gap-3 sm:items-center justify-between">
+        <div className="relative max-w-sm flex-1">
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-brand-muted" />
+          <input
+            placeholder="Search term, definition, or category..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-9 pr-4 py-2 border border-edge rounded-md text-xs placeholder:text-brand-muted focus:outline-none focus:border-ink-primary bg-white shadow-card"
+          />
+        </div>
+        <button
+          onClick={handleCreate}
+          className="btn-primary py-2 px-4 rounded-sm text-xs font-semibold uppercase flex items-center gap-1.5 self-start"
+        >
+          <Plus className="h-4 w-4" /> Add Glossary Term
+        </button>
+      </div>
+
+      {/* Glossary Table/List */}
+      {loading ? (
+        <div className="flex justify-center items-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-brand-muted" />
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="bg-white border border-edge rounded-lg p-12 text-center shadow-card">
+          <BookOpen className="h-10 w-10 text-brand-muted mx-auto mb-3" />
+          <h3 className="text-sm font-semibold text-ink-primary">No glossary terms found</h3>
+          <p className="text-xs text-brand-muted mt-1">Try modifying your search query or add a new term.</p>
+        </div>
+      ) : (
+        <div className="bg-white border border-edge rounded-lg overflow-hidden shadow-card">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-edge bg-surface-muted/50 text-brand-muted font-semibold uppercase text-[10px]">
+                  <th className="px-5 py-3 w-1/4">Term / Word</th>
+                  <th className="px-5 py-3 w-1/6">Category</th>
+                  <th className="px-5 py-3 w-5/12">Definition</th>
+                  <th className="px-5 py-3 w-1/12 text-center">Image</th>
+                  <th className="px-5 py-3 w-1/12 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-edge-subtle">
+                {filtered.map((item) => (
+                  <tr key={item.id} className="hover:bg-surface-muted/30">
+                    <td className="px-5 py-3.5 font-semibold text-ink-primary">{item.term}</td>
+                    <td className="px-5 py-3.5">
+                      {item.category ? (
+                        <span className="bg-brand-success/10 text-ink-success rounded-xs px-2 py-0.5 font-medium uppercase text-[10px]">
+                          {item.category}
+                        </span>
+                      ) : (
+                        <span className="text-brand-muted italic text-[10px]">None</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3.5 text-brand-muted max-w-xs truncate">{item.definition}</td>
+                    <td className="px-5 py-3.5 text-center">
+                      {item.image_url ? (
+                        <img
+                          src={item.image_url}
+                          alt={item.term}
+                          className="h-8 w-8 object-contain rounded border border-edge bg-surface-muted mx-auto"
+                        />
+                      ) : (
+                        <span className="text-brand-muted text-[10px]">-</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => handleEdit(item)}
+                          className="text-ink-primary hover:text-ink-accent font-semibold flex items-center gap-0.5"
+                        >
+                          <Pencil className="h-3 w-3" /> Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(item.id)}
+                          className="text-ink-danger hover:text-red-700 font-semibold flex items-center gap-0.5"
+                        >
+                          <Trash2 className="h-3 w-3" /> Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* CRUD modal */}
+      {modalOpen && editTerm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-overlay backdrop-blur-xs p-4">
+          <div className="w-full max-w-lg bg-white rounded-lg border border-edge p-6 shadow-overlay space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-edge-subtle pb-3">
+              <h3 className="text-md font-semibold text-ink-primary">
+                {editTerm.id ? 'Edit Glossary Term' : 'Add New Glossary Term'}
+              </h3>
+              <button onClick={() => setModalOpen(false)} className="text-brand-muted hover:text-ink-primary">
+                <X className="h-5 w-5" />
+              </button>
             </div>
-            <div className="space-y-2 text-xs">
-              <p><span className="font-semibold text-ink-subtle">EVENT TYPE:</span> {selectedLog.event}</p>
-              <p><span className="font-semibold text-ink-subtle">SOURCE:</span> {selectedLog.gateway}</p>
-              <p><span className="font-semibold text-ink-subtle">RECEIVED AT:</span> {formatDateTime(selectedLog.ts)}</p>
+            
+            <div className="space-y-4 text-xs">
               <div>
-                <span className="font-semibold text-ink-subtle block mb-1">RAW JSON PAYLOAD:</span>
-                <pre className="p-3 bg-surface-inverse text-green-400 font-mono text-[9px] rounded-sm overflow-x-auto max-h-48">{JSON.stringify(selectedLog.payload, null, 2)}</pre>
+                <label className="font-semibold text-ink-primary block mb-1">Term / Word *</label>
+                <input
+                  value={editTerm.term}
+                  onChange={(e) => setEditTerm({ ...editTerm, term: e.target.value })}
+                  placeholder="e.g. BJC, Collagen, Osteoarthritis"
+                  className="w-full rounded-sm border border-edge p-2.5"
+                  required
+                />
               </div>
+
+              <div>
+                <label className="font-semibold text-ink-primary block mb-1">Category (Optional)</label>
+                <input
+                  value={editTerm.category}
+                  onChange={(e) => setEditTerm({ ...editTerm, category: e.target.value })}
+                  placeholder="e.g. Biochemistry, Nutraceuticals, Biosecurity"
+                  className="w-full rounded-sm border border-edge p-2.5"
+                />
+              </div>
+
+              <div>
+                <label className="font-semibold text-ink-primary block mb-1">Definition *</label>
+                <textarea
+                  value={editTerm.definition}
+                  onChange={(e) => setEditTerm({ ...editTerm, definition: e.target.value })}
+                  placeholder="Enter a concise, clear definition of this term..."
+                  rows={4}
+                  className="w-full rounded-sm border border-edge p-2.5"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="font-semibold text-ink-primary block mb-1.5">Illustrative Image (Optional)</label>
+                <div className="flex gap-4 items-start">
+                  <div className="flex-1 space-y-2">
+                    <input
+                      type="text"
+                      placeholder="Paste image URL..."
+                      value={editTerm.image_url}
+                      onChange={(e) => setEditTerm({ ...editTerm, image_url: e.target.value })}
+                      className="w-full rounded-sm border border-edge p-2 text-xs"
+                    />
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-brand-muted font-medium">Or upload file:</span>
+                      <label className="cursor-pointer border border-edge px-3 py-1 bg-surface-muted hover:bg-edge/20 rounded text-[10px] font-semibold uppercase flex items-center gap-1">
+                        <Upload className="h-3 w-3" />
+                        {uploading ? 'Uploading...' : 'Choose File'}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => handleUploadImage(e.target.files[0])}
+                          className="hidden"
+                          disabled={uploading}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                  
+                  {editTerm.image_url && (
+                    <div className="h-16 w-16 border border-edge rounded bg-surface-muted flex items-center justify-center relative group overflow-hidden">
+                      <img src={editTerm.image_url} alt="Preview" className="h-full w-full object-contain" />
+                      <button 
+                        onClick={() => setEditTerm({ ...editTerm, image_url: '' })}
+                        className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
+                        type="button"
+                      >
+                        <X className="h-4 w-4 text-white" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2 justify-end border-t border-edge-subtle pt-3">
+              <button
+                onClick={() => setModalOpen(false)}
+                className="rounded-sm border border-edge px-4 py-2 text-xs font-semibold uppercase hover:bg-surface-muted"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                className="btn-primary rounded-sm px-5 py-2 text-xs font-semibold uppercase"
+              >
+                Save Term
+              </button>
             </div>
           </div>
         </div>
@@ -3214,21 +4068,261 @@ function IntegrationsTab({ authFetch }) {
 }
 
 
+/* ------------------------------------------------------------- FAQ Tab */
+function FAQTab({ authFetch }) {
+  const [faqs, setFaqs] = useState([]);
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [editFaq, setEditFaq] = useState(null); // When editing/creating
+  const [modalOpen, setModalOpen] = useState(false);
+
+  const loadFaqs = useCallback(() => {
+    setLoading(true);
+    authFetch('/api/admin/faqs/')
+      .then((r) => r.ok ? r.json() : [])
+      .then((data) => setFaqs(data))
+      .catch(() => alert('Failed to load FAQs.'))
+      .finally(() => setLoading(false));
+  }, [authFetch]);
+
+  useEffect(() => {
+    loadFaqs();
+  }, [loadFaqs]);
+
+  const handleCreate = () => {
+    setEditFaq({ question: '', answer: '', category: 'General', is_active: true, display_order: 0 });
+    setModalOpen(true);
+  };
+
+  const handleEdit = (faq) => {
+    setEditFaq({ ...faq });
+    setModalOpen(true);
+  };
+
+  const handleDelete = (id) => {
+    if (confirm('Are you sure you want to delete this FAQ?')) {
+      authFetch(`/api/admin/faqs/${id}/`, { method: 'DELETE' })
+        .then((r) => {
+          if (r.ok) {
+            loadFaqs();
+          } else {
+            alert('Failed to delete FAQ.');
+          }
+        });
+    }
+  };
+
+  const handleSave = () => {
+    if (!editFaq.question.trim() || !editFaq.answer.trim()) {
+      alert('Question and Answer are required.');
+      return;
+    }
+
+    const isEdit = !!editFaq.id;
+    const url = isEdit ? `/api/admin/faqs/${editFaq.id}/` : `/api/admin/faqs/`;
+    const method = isEdit ? 'PUT' : 'POST';
+
+    authFetch(url, {
+      method,
+      body: JSON.stringify(editFaq)
+    })
+      .then(async (r) => {
+        if (r.ok) {
+          setModalOpen(false);
+          setEditFaq(null);
+          loadFaqs();
+        } else {
+          const err = await r.json().catch(() => ({}));
+          alert('Failed to save FAQ: ' + JSON.stringify(err));
+        }
+      });
+  };
+
+  const filtered = faqs.filter(f => 
+    f.question.toLowerCase().includes(search.toLowerCase()) ||
+    f.answer.toLowerCase().includes(search.toLowerCase()) ||
+    (f.category || '').toLowerCase().includes(search.toLowerCase())
+  );
+
+  if (loading) return <p className="text-sm text-brand-muted">Loading FAQ panel...</p>;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row justify-between gap-3 items-center bg-white p-4 rounded-md border border-edge">
+        <div className="relative w-full sm:max-w-xs">
+          <input
+            type="text"
+            placeholder="Search FAQs..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full rounded-sm border border-edge pl-8 pr-3 py-1.5 text-xs text-ink-primary font-semibold"
+          />
+          <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-brand-muted" />
+        </div>
+        <button onClick={handleCreate} className="btn-primary py-1.5 px-3 rounded-sm text-xs font-semibold uppercase flex items-center gap-1 shrink-0">
+          <Plus className="h-3.5 w-3.5" /> Add FAQ
+        </button>
+      </div>
+
+      <div className="bg-white border border-edge rounded-lg overflow-hidden shadow-xs">
+        <table className="w-full border-collapse text-left text-xs">
+          <thead>
+            <tr className="border-b border-edge bg-surface-muted uppercase text-brand-muted font-bold tracking-wider">
+              <th className="p-3.5">Category</th>
+              <th className="p-3.5 w-1/3">Question</th>
+              <th className="p-3.5 w-1/3">Answer</th>
+              <th className="p-3.5 text-center">Order</th>
+              <th className="p-3.5 text-center">Status</th>
+              <th className="p-3.5 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-edge-subtle font-semibold text-ink-primary">
+            {filtered.map((faq) => (
+              <tr key={faq.id} className="hover:bg-surface-muted transition-colors">
+                <td className="p-3.5">
+                  <span className="inline-block bg-brand-success/15 text-brand-success text-[10px] uppercase font-bold tracking-wide rounded-sm px-1.5 py-0.5">
+                    {faq.category || 'General'}
+                  </span>
+                </td>
+                <td className="p-3.5 font-bold">{faq.question}</td>
+                <td className="p-3.5 text-ink-secondary max-w-xs truncate">{faq.answer}</td>
+                <td className="p-3.5 text-center">{faq.display_order}</td>
+                <td className="p-3.5 text-center">
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-xs ${faq.is_active ? 'bg-brand-success/10 text-ink-success' : 'bg-brand-muted/10 text-brand-muted'}`}>
+                    {faq.is_active ? 'ACTIVE' : 'HIDDEN'}
+                  </span>
+                </td>
+                <td className="p-3.5 text-right">
+                  <div className="flex justify-end gap-1.5">
+                    <button onClick={() => handleEdit(faq)} className="p-1 rounded-sm border border-edge hover:bg-surface-muted text-brand-muted hover:text-ink-primary" title="Edit">
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button onClick={() => handleDelete(faq.id)} className="p-1 rounded-sm border border-red-200 hover:bg-red-50 text-red-500" title="Delete">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={6} className="text-center py-10 text-brand-muted">
+                  No FAQs found. Click "Add FAQ" to create one.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* ADD/EDIT FAQ MODAL */}
+      {modalOpen && editFaq && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-overlay backdrop-blur-xs p-4">
+          <div className="w-full max-w-md bg-white rounded-lg border border-edge p-6 shadow-overlay space-y-4">
+            <div className="flex items-center justify-between border-b border-edge-subtle pb-3">
+              <h3 className="text-md font-semibold text-ink-primary">
+                {editFaq.id ? 'Edit General FAQ' : 'Add General FAQ'}
+              </h3>
+              <button onClick={() => setModalOpen(false)} className="text-brand-muted hover:text-ink-primary">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="space-y-3 text-xs font-semibold text-ink-primary">
+              <div>
+                <label className="block mb-1">Question *</label>
+                <input
+                  value={editFaq.question}
+                  onChange={(e) => setEditFaq({ ...editFaq, question: e.target.value })}
+                  placeholder="e.g. How do I request a refund?"
+                  className="w-full rounded-sm border border-edge p-2.5 text-xs text-ink-primary font-semibold"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block mb-1">Answer *</label>
+                <textarea
+                  value={editFaq.answer}
+                  onChange={(e) => setEditFaq({ ...editFaq, answer: e.target.value })}
+                  placeholder="Write the FAQ answer..."
+                  rows={4}
+                  className="w-full rounded-sm border border-edge p-2.5 text-xs text-ink-primary font-semibold"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block mb-1">Category</label>
+                <input
+                  value={editFaq.category}
+                  onChange={(e) => setEditFaq({ ...editFaq, category: e.target.value })}
+                  placeholder="e.g. Shipping, Payments, Returns"
+                  className="w-full rounded-sm border border-edge p-2.5 text-xs text-ink-primary font-semibold"
+                />
+              </div>
+
+              <div>
+                <label className="block mb-1">Display Order</label>
+                <input
+                  type="number"
+                  value={editFaq.display_order}
+                  onChange={(e) => setEditFaq({ ...editFaq, display_order: parseInt(e.target.value) || 0 })}
+                  className="w-full rounded-sm border border-edge p-2.5 text-xs text-ink-primary font-semibold"
+                />
+              </div>
+
+              <label className="flex items-center gap-1.5 cursor-pointer pt-1">
+                <input
+                  type="checkbox"
+                  checked={editFaq.is_active}
+                  onChange={(e) => setEditFaq({ ...editFaq, is_active: e.target.checked })}
+                  className="rounded-xs border border-edge text-ink-accent"
+                />
+                Active (Show on FAQ Page)
+              </label>
+            </div>
+
+            <div className="flex gap-2 justify-end border-t border-edge-subtle pt-3">
+              <button
+                onClick={() => setModalOpen(false)}
+                className="rounded-sm border border-edge px-4 py-2 text-xs font-semibold uppercase hover:bg-surface-muted"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                className="btn-primary rounded-sm px-5 py-2 text-xs font-semibold uppercase"
+              >
+                Save FAQ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 /* --------------------------------------------------------- Content Pages */
 function ContentOverviewTab({ authFetch, go }) {
-  const [counts, setCounts] = useState({ pages: 0, blogs: 0, media: 0 });
+  const [counts, setCounts] = useState({ pages: 0, blogs: 0, media: 0, glossary: 0, faq: 0 });
 
   useEffect(() => {
     Promise.all([
       authFetch('/api/admin/content-pages/').then((r) => (r.ok ? r.json() : null)),
       authFetch('/api/admin/blog-posts/').then((r) => (r.ok ? r.json() : null)),
       authFetch('/api/admin/settings/MEDIA_ASSETS/').then((r) => (r.ok ? r.json() : null)),
-    ]).then(([pages, blogs, media]) => {
+      authFetch('/api/admin/glossary/').then((r) => (r.ok ? r.json() : null)),
+      authFetch('/api/admin/faqs/').then((r) => (r.ok ? r.json() : null)),
+    ]).then(([pages, blogs, media, glossary, faqs]) => {
       setCounts({
         pages: Array.isArray(pages) ? pages.length : pages?.results?.length || 0,
         blogs: Array.isArray(blogs) ? blogs.length : blogs?.results?.length || 0,
         media: Array.isArray(media?.value) ? media.value.length : 0,
+        glossary: Array.isArray(glossary) ? glossary.length : glossary?.results?.length || 0,
+        faq: Array.isArray(faqs) ? faqs.length : faqs?.results?.length || 0,
       });
     }).catch(() => {});
   }, [authFetch]);
@@ -3238,14 +4332,16 @@ function ContentOverviewTab({ authFetch, go }) {
     { key: 'blogs', title: 'Blog', detail: `${counts.blogs} articles`, icon: Film },
     { key: 'navigation', title: 'Menus', detail: 'Header and footer links', icon: MenuIcon },
     { key: 'media', title: 'Media', detail: `${counts.media} assets`, icon: ImageIcon },
+    { key: 'glossary', title: 'Glossary Manager', detail: `${counts.glossary} terms`, icon: BookOpen },
+    { key: 'faq', title: 'FAQ Manager', detail: `${counts.faq} questions`, icon: HelpCircle },
   ];
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       {cards.map((card) => {
         const Icon = card.icon;
         return (
-          <button key={card.key} type="button" onClick={() => go(card.key)} className="rounded-lg border border-edge bg-white p-5 text-left hover:border-edge-strong hover:shadow-card">
+          <button key={card.key} type="button" onClick={() => go(card.key)} className="rounded-lg border border-edge bg-white p-5 text-left hover:border-edge-strong hover:shadow-card transition">
             <Icon className="mb-4 h-5 w-5 text-ink-accent" />
             <p className="text-sm font-semibold text-ink-primary">{card.title}</p>
             <p className="mt-1 text-xs text-brand-muted">{card.detail}</p>
@@ -3684,7 +4780,7 @@ function AnalyticsOverview({ authFetch }) {
 }
 
 /* ------------------------------------------------------------- Settings */
-function SettingsTab({ authFetch }) {
+function GeneralSettingsTab({ authFetch }) {
   const [checkoutSettings, setCheckoutSettings] = useState({ allow_guest_checkout: true });
   const [checkoutSaving, setCheckoutSaving] = useState(false);
   const [checkoutSaved, setCheckoutSaved] = useState(false);
@@ -4065,8 +5161,16 @@ function SettingsTab({ authFetch }) {
             <textarea rows={2} value={seoSettings.metaDescription || ''} onChange={(e) => setSeoSettings({ ...seoSettings, metaDescription: e.target.value })} className="w-full rounded border border-edge p-2 bg-surface" />
           </div>
           <div>
-            <label className="block font-semibold text-ink-primary mb-1">Google Analytics ID (G-XXXXX)</label>
+            <label className="block font-semibold text-ink-primary mb-1">Google Analytics ID UK (G-XXXXX)</label>
             <input type="text" value={seoSettings.googleAnalytics || ''} onChange={(e) => setSeoSettings({ ...seoSettings, googleAnalytics: e.target.value })} className="w-full rounded border border-edge p-2 bg-surface" />
+          </div>
+          <div>
+            <label className="block font-semibold text-ink-primary mb-1">Google Analytics ID India (G-XXXXX)</label>
+            <input type="text" value={seoSettings.googleAnalyticsIN || ''} onChange={(e) => setSeoSettings({ ...seoSettings, googleAnalyticsIN: e.target.value })} className="w-full rounded border border-edge p-2 bg-surface" />
+          </div>
+          <div>
+            <label className="block font-semibold text-ink-primary mb-1">Google Site Verification Token</label>
+            <input type="text" value={seoSettings.googleSiteVerification || ''} onChange={(e) => setSeoSettings({ ...seoSettings, googleSiteVerification: e.target.value })} className="w-full rounded border border-edge p-2 bg-surface" placeholder="e.g. google-site-verification-token" />
           </div>
           <div>
             <label className="block font-semibold text-ink-primary mb-1">Google Tag Manager (GTM-XXXXX)</label>
@@ -4091,14 +5195,53 @@ function SettingsTab({ authFetch }) {
   );
 }
 
+function SettingsTab({ authFetch, regions }) {
+  const [subTab, setSubTab] = useState('general'); // general | payments | emails | shipping | theme | cookie-consent
+
+  const SUB_TABS = [
+    { key: 'general', label: 'General' },
+    { key: 'payments', label: 'Payments' },
+    { key: 'emails', label: 'Emails' },
+    { key: 'shipping', label: 'Shipping' },
+    { key: 'theme', label: 'Theme' },
+    { key: 'cookie-consent', label: 'Cookie Consent' },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap gap-2 border-b border-edge-subtle pb-2">
+        {SUB_TABS.map((t) => (
+          <button key={t.key} onClick={() => setSubTab(t.key)}
+            className={`px-3 py-1.5 text-xs font-semibold uppercase rounded-lg transition-colors ${subTab === t.key ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-4">
+        {subTab === 'general' && <GeneralSettingsTab authFetch={authFetch} />}
+        {subTab === 'payments' && <PaymentsTab authFetch={authFetch} regions={regions} />}
+        {subTab === 'emails' && <EmailsTab authFetch={authFetch} regions={regions} />}
+        {subTab === 'shipping' && <ShippingTab authFetch={authFetch} regions={regions} />}
+        {subTab === 'theme' && <ThemeTab authFetch={authFetch} />}
+        {subTab === 'cookie-consent' && <CookieConsentTab authFetch={authFetch} />}
+      </div>
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------- Customer Reviews Moderation */
 function ReviewsTab({ authFetch }) {
   const [reviews, setReviews] = useState([]);
   const [replies, setReplies] = useState({});
+  const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [replyText, setReplyText] = useState('');
   const [replyingTo, setReplyingTo] = useState(null);
-  const [error, setError] = useState('');
+  
+  // State for Admin CRUD operations
+  const [editReview, setEditReview] = useState(null);
+  const [crudModalOpen, setCrudModalOpen] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -4107,9 +5250,13 @@ function ReviewsTab({ authFetch }) {
       authFetch('/api/admin/settings/REVIEW_REPLIES/')
         .then((r) => r.ok ? r.json().then(d => d.value) : {})
         .catch(() => ({})),
-    ]).then(([revList, replyData]) => {
+      authFetch('/api/admin/products/')
+        .then((r) => r.ok ? r.json() : [])
+        .catch(() => []),
+    ]).then(([revList, replyData, prodList]) => {
       setReviews(Array.isArray(revList) ? revList : revList.results || []);
       setReplies(replyData || {});
+      setProducts(Array.isArray(prodList) ? prodList : prodList.results || []);
     }).finally(() => setLoading(false));
   }, [authFetch]);
 
@@ -4125,6 +5272,12 @@ function ReviewsTab({ authFetch }) {
 
   const toggleFeature = (id) => {
     authFetch(`/api/admin/reviews/${id}/toggle_feature/`, { method: 'POST' }).then(() => load());
+  };
+
+  const deleteReview = (id) => {
+    if (confirm("Are you sure you want to permanently delete this customer review?")) {
+      authFetch(`/api/admin/reviews/${id}/`, { method: 'DELETE' }).then(() => load());
+    }
   };
 
   const saveReply = () => {
@@ -4150,12 +5303,43 @@ function ReviewsTab({ authFetch }) {
       });
   };
 
+  const handleSaveReview = () => {
+    if (!editReview.product || !editReview.user_name.trim() || !editReview.user_email.trim() || !editReview.comment.trim()) {
+      alert("Please fill in all required fields.");
+      return;
+    }
+    const isEdit = !!editReview.id;
+    const url = isEdit ? `/api/admin/reviews/${editReview.id}/` : `/api/admin/reviews/`;
+    const method = isEdit ? 'PUT' : 'POST';
+
+    authFetch(url, {
+      method,
+      body: JSON.stringify(editReview)
+    })
+      .then(async (r) => {
+        if (r.ok) {
+          setCrudModalOpen(false);
+          setEditReview(null);
+          load();
+        } else {
+          const err = await r.json().catch(() => ({}));
+          alert("Failed to save review: " + (JSON.stringify(err) || r.statusText));
+        }
+      });
+  };
+
   if (loading) return <p className="text-sm text-brand-muted">Loading reviews moderation panel...</p>;
 
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center bg-white p-4 rounded-md border border-edge">
         <p className="text-xs text-brand-muted">{reviews.length} total customer reviews pending or moderated</p>
+        <button onClick={() => {
+          setEditReview({ product: '', user_name: '', user_email: '', rating: 5, comment: '', is_verified_purchase: false, is_approved: true, is_featured: false, review_media_urls: [] });
+          setCrudModalOpen(true);
+        }} className="btn-primary py-1.5 px-3 rounded-sm text-xs font-semibold uppercase flex items-center gap-1">
+          <Plus className="h-3.5 w-3.5" /> Add Review
+        </button>
       </div>
 
       <div className="space-y-3">
@@ -4202,7 +5386,10 @@ function ReviewsTab({ authFetch }) {
               </div>
             )}
 
-            <div className="flex gap-2 pt-2 border-t border-edge-subtle justify-end">
+            <div className="flex gap-2 pt-2 border-t border-edge-subtle justify-end items-center">
+              <button onClick={() => { setEditReview({ ...rev }); setCrudModalOpen(true); }} className="px-2.5 py-1 text-[10px] border border-edge hover:bg-surface-muted text-ink-primary rounded-sm uppercase font-semibold flex items-center gap-0.5"><Pencil className="h-2.5 w-2.5" /> Edit</button>
+              <button onClick={() => deleteReview(rev.id)} className="px-2.5 py-1 text-[10px] border border-red-200 hover:bg-red-50 text-red-600 rounded-sm uppercase font-semibold flex items-center gap-0.5"><Trash2 className="h-2.5 w-2.5" /> Delete</button>
+              <div className="flex-1" />
               {!rev.is_approved ? (
                 <button onClick={() => approve(rev.id)} className="px-3 py-1.5 text-[10px] bg-ink-success hover:bg-ink-success/90 text-white rounded-sm uppercase font-semibold">Approve</button>
               ) : (
@@ -4237,6 +5424,140 @@ function ReviewsTab({ authFetch }) {
           </div>
         </div>
       )}
+
+      {/* ADD/EDIT REVIEW MODAL */}
+      {crudModalOpen && editReview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-overlay backdrop-blur-xs p-4">
+          <div className="w-full max-w-md bg-white rounded-lg border border-edge p-6 shadow-overlay space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-edge-subtle pb-3">
+              <h3 className="text-md font-semibold text-ink-primary">
+                {editReview.id ? 'Edit Product Review' : 'Add New Review'}
+              </h3>
+              <button onClick={() => setCrudModalOpen(false)} className="text-brand-muted hover:text-ink-primary">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="space-y-3.5 text-xs">
+              <div>
+                <label className="font-semibold text-ink-primary block mb-1">Product *</label>
+                <select
+                  value={editReview.product}
+                  onChange={(e) => setEditReview({ ...editReview, product: e.target.value })}
+                  className="w-full rounded-sm border border-edge p-2.5 bg-white text-xs font-semibold text-ink-primary"
+                  disabled={!!editReview.id}
+                  required
+                >
+                  <option value="">Select Product...</option>
+                  {products.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({p.sku})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="font-semibold text-ink-primary block mb-1">Customer Name *</label>
+                <input
+                  value={editReview.user_name}
+                  onChange={(e) => setEditReview({ ...editReview, user_name: e.target.value })}
+                  placeholder="e.g. John Doe"
+                  className="w-full rounded-sm border border-edge p-2.5 font-semibold text-ink-primary"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="font-semibold text-ink-primary block mb-1">Customer Email *</label>
+                <input
+                  type="email"
+                  value={editReview.user_email}
+                  onChange={(e) => setEditReview({ ...editReview, user_email: e.target.value })}
+                  placeholder="e.g. john@example.com"
+                  className="w-full rounded-sm border border-edge p-2.5 font-semibold text-ink-primary"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="font-semibold text-ink-primary block mb-1">Rating *</label>
+                <select
+                  value={editReview.rating}
+                  onChange={(e) => setEditReview({ ...editReview, rating: parseInt(e.target.value) })}
+                  className="w-full rounded-sm border border-edge p-2.5 bg-white font-semibold text-ink-primary"
+                  required
+                >
+                  {[5, 4, 3, 2, 1].map((r) => (
+                    <option key={r} value={r}>
+                      {r} Stars
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="font-semibold text-ink-primary block mb-1">Comment *</label>
+                <textarea
+                  value={editReview.comment}
+                  onChange={(e) => setEditReview({ ...editReview, comment: e.target.value })}
+                  placeholder="Write customer review comment..."
+                  rows={3}
+                  className="w-full rounded-sm border border-edge p-2.5 font-semibold text-ink-primary"
+                  required
+                />
+              </div>
+
+              <div className="flex gap-4 pt-1 flex-wrap">
+                <label className="flex items-center gap-1.5 font-semibold text-ink-primary cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editReview.is_verified_purchase}
+                    onChange={(e) => setEditReview({ ...editReview, is_verified_purchase: e.target.checked })}
+                    className="rounded-xs border border-edge text-ink-accent"
+                  />
+                  Verified Purchase
+                </label>
+                
+                <label className="flex items-center gap-1.5 font-semibold text-ink-primary cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editReview.is_approved}
+                    onChange={(e) => setEditReview({ ...editReview, is_approved: e.target.checked })}
+                    className="rounded-xs border border-edge text-ink-accent"
+                  />
+                  Approved (Visible)
+                </label>
+
+                <label className="flex items-center gap-1.5 font-semibold text-ink-primary cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editReview.is_featured}
+                    onChange={(e) => setEditReview({ ...editReview, is_featured: e.target.checked })}
+                    className="rounded-xs border border-edge text-ink-accent"
+                  />
+                  Featured
+                </label>
+              </div>
+            </div>
+
+            <div className="flex gap-2 justify-end border-t border-edge-subtle pt-3">
+              <button
+                onClick={() => setCrudModalOpen(false)}
+                className="rounded-sm border border-edge px-4 py-2 text-xs font-semibold uppercase hover:bg-surface-muted"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveReview}
+                className="btn-primary rounded-sm px-5 py-2 text-xs font-semibold uppercase"
+              >
+                Save Review
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -4245,8 +5566,8 @@ function ReviewsTab({ authFetch }) {
 function ThemeTab({ authFetch }) {
   const [theme, setTheme] = useState({
     primaryColor: '#6d28d9',
-    accentColor: '#f59e0b',
-    fontName: 'Outfit',
+    accentColor: '#3b82f6',
+    fontName: 'Inter',
     logoUrl: '/logo-mark.png',
     logoWordmarkUrl: '/logo-wordmark.png',
     whatsappNumberIN: '918047100000',
@@ -4255,8 +5576,8 @@ function ThemeTab({ authFetch }) {
     emailUK: 'support@scleroproteins.co.uk',
     phoneIN: '+91 80 4710 0000',
     phoneUK: '+44 (0)20 4574 0000',
-    borderRadius: '12px',
-    glassmorphism: 'Medium',
+    borderRadius: '6px',
+    glassmorphism: 'None',
     customCss: ''
   });
   const [saving, setSaving] = useState(false);
@@ -4324,30 +5645,8 @@ function ThemeTab({ authFetch }) {
         
         <div className="space-y-3 text-xs">
           <div>
-            <label className="block font-semibold text-ink-primary mb-1">Primary Brand Color</label>
-            <div className="flex gap-2 items-center">
-              <input type="color" value={theme.primaryColor} onChange={(e) => setTheme({ ...theme, primaryColor: e.target.value })} className="h-9 w-9 rounded-sm cursor-pointer border border-edge p-0.5" />
-              <input type="text" value={theme.primaryColor} onChange={(e) => setTheme({ ...theme, primaryColor: e.target.value })} className="flex-1 rounded-sm border border-edge p-2 font-mono" />
-            </div>
-            <div className="flex gap-1 mt-1.5">
-              {['#6d28d9', '#3b82f6', '#0f766e', '#1e293b', '#e11d48'].map((c) => (
-                <button key={c} onClick={() => setTheme({ ...theme, primaryColor: c })} className="h-5 w-5 rounded-full border border-edge" style={{ backgroundColor: c }} />
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="block font-semibold text-ink-primary mb-1">Accent Highlight Color</label>
-            <div className="flex gap-2 items-center">
-              <input type="color" value={theme.accentColor} onChange={(e) => setTheme({ ...theme, accentColor: e.target.value })} className="h-9 w-9 rounded-sm cursor-pointer border border-edge p-0.5" />
-              <input type="text" value={theme.accentColor} onChange={(e) => setTheme({ ...theme, accentColor: e.target.value })} className="flex-1 rounded-sm border border-edge p-2 font-mono" />
-            </div>
-          </div>
-
-          <div>
             <label className="block font-semibold text-ink-primary mb-1">Typography (Body Font)</label>
-            <select value={theme.fontName} onChange={(e) => setTheme({ ...theme, fontName: e.target.value })} className="w-full rounded-sm border border-edge p-2">
-              <option value="Outfit">Outfit (Geometric & Clean)</option>
+            <select value={theme.fontName} onChange={(e) => setTheme({ ...theme, fontName: e.target.value })} className="w-full rounded-sm border border-edge p-2 bg-white text-ink-primary">
               <option value="Inter">Inter (Highly Readable)</option>
               <option value="Playfair Display">Playfair Display (Premium Serif)</option>
               <option value="System">System Sans (Default)</option>
@@ -4356,21 +5655,10 @@ function ThemeTab({ authFetch }) {
 
           <div>
             <label className="block font-semibold text-ink-primary mb-1">Border Roundness</label>
-            <select value={theme.borderRadius} onChange={(e) => setTheme({ ...theme, borderRadius: e.target.value })} className="w-full rounded-sm border border-edge p-2">
+            <select value={theme.borderRadius} onChange={(e) => setTheme({ ...theme, borderRadius: e.target.value })} className="w-full rounded-sm border border-edge p-2 bg-white text-ink-primary">
               <option value="0px">Sharp Corners (0px)</option>
               <option value="6px">Subtle Round (6px)</option>
-              <option value="12px">Premium Curved (12px)</option>
               <option value="24px">Organic Round (24px)</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block font-semibold text-ink-primary mb-1">Glassmorphism Blur</label>
-            <select value={theme.glassmorphism} onChange={(e) => setTheme({ ...theme, glassmorphism: e.target.value })} className="w-full rounded-sm border border-edge p-2">
-              <option value="None">None (Solid backgrounds)</option>
-              <option value="Low">Low (Subtle opacity)</option>
-              <option value="Medium">Medium (Polished glass)</option>
-              <option value="High">High (Deep blur)</option>
             </select>
           </div>
 
@@ -4642,21 +5930,33 @@ function NavigationTab({ authFetch, regions }) {
   const load = useCallback(() => {
     setLoading(true);
     Promise.all([
-      authFetch('/api/admin/settings/NAVIGATION_MENUS/').then(r => r.ok ? r.json() : null),
-      authFetch('/api/admin/settings/FOOTER_SETTINGS/').then(r => r.ok ? r.json() : null)
+      authFetch('/api/admin/settings/NAVIGATION_MENUS/').then(r => r.ok ? r.json() : null).catch(() => null),
+      authFetch('/api/admin/settings/FOOTER_SETTINGS/').then(r => r.ok ? r.json() : null).catch(() => null)
     ]).then(([headerData, footerData]) => {
-      setHeaderLinks(headerData?.value || [
+      const rawHeader = headerData?.value;
+      const headerVal = Array.isArray(rawHeader) ? rawHeader : [
         { label: 'Home', url: '/' },
         { label: 'Shop', url: '/catalog' },
         { label: 'Science', url: '/science' },
         { label: 'Support', url: '/support' }
-      ]);
-      setFooterLinks(footerData?.value || {
+      ];
+      setHeaderLinks(headerVal);
+      
+      const rawFooter = footerData?.value;
+      const footerVal = (rawFooter && typeof rawFooter === 'object' && !Array.isArray(rawFooter)) ? rawFooter : {
         shop: [{ label: 'Proteins', url: '/catalog' }, { label: 'Amino Acids', url: '/catalog' }],
         company: [{ label: 'About', url: '/about' }, { label: 'Careers', url: '/careers' }],
         support: [{ label: 'FAQ', url: '/faq' }, { label: 'Contact', url: '/contact' }],
         legal: [{ label: 'Privacy', url: '/privacy' }, { label: 'Terms', url: '/terms' }]
-      });
+      };
+      
+      const normalizedFooter = {
+        shop: Array.isArray(footerVal.shop) ? footerVal.shop : [],
+        company: Array.isArray(footerVal.company) ? footerVal.company : [],
+        support: Array.isArray(footerVal.support) ? footerVal.support : [],
+        legal: Array.isArray(footerVal.legal) ? footerVal.legal : [],
+      };
+      setFooterLinks(normalizedFooter);
     }).finally(() => setLoading(false));
   }, [authFetch]);
 
@@ -5008,18 +6308,22 @@ function NewsletterTab({ authFetch }) {
     Promise.all([
       authFetch('/api/admin/customers/').then(r => r.json()).catch(() => []),
       authFetch('/api/admin/customer-segments/').then(r => r.json()).catch(() => []),
-      authFetch('/api/admin/settings/NEWSLETTER_SUBSCRIBERS/').then(r => r.ok ? r.json() : null),
-      authFetch('/api/admin/settings/NEWSLETTER_FLOWS/').then(r => r.ok ? r.json() : null)
+      authFetch('/api/admin/settings/NEWSLETTER_SUBSCRIBERS/').then(r => r.ok ? r.json() : null).catch(() => null),
+      authFetch('/api/admin/settings/NEWSLETTER_FLOWS/').then(r => r.ok ? r.json() : null).catch(() => null)
     ]).then(([custs, segs, subSettings, flowSettings]) => {
       // Extract customers who accepts marketing plus manual subscribers
-      const marketingCusts = (Array.isArray(custs) ? custs : custs.results || [])
-        .filter(c => c.email_newsletter || c.email_marketing)
-        .map(c => ({ email: c.email, first_name: c.first_name, last_name: c.last_name, source: 'Customer Register' }));
+      const custsList = custs ? (Array.isArray(custs) ? custs : custs.results || []) : [];
+      const marketingCusts = custsList
+        .filter(c => c && (c.email_newsletter || c.email_marketing))
+        .map(c => ({ email: c.email, first_name: c.first_name || 'Customer', last_name: c.last_name || '', source: 'Customer Register' }));
       
-      const manualSubs = subSettings?.value || [];
+      const rawManualSubs = subSettings?.value;
+      const manualSubs = Array.isArray(rawManualSubs) ? rawManualSubs : [];
       setSubscribers([...marketingCusts, ...manualSubs]);
       setSegments(Array.isArray(segs) ? segs : segs.results || []);
-      setFlows(flowSettings?.value || [
+      
+      const rawFlows = flowSettings?.value;
+      setFlows(Array.isArray(rawFlows) ? rawFlows : [
         { id: 1, name: 'Abandoned Checkout Email Recovery Flow', is_enabled: true, sent: 242, recovered: 48, rate: '19.8%', steps: ['1 hour: Restock Reminder', '24 hours: 10% Discount Code'] },
         { id: 2, name: 'Post-Purchase Nurture sequence', is_enabled: true, sent: 512, recovered: 89, rate: '17.3%', steps: ['3 days: Usage Instructions', '7 days: Review Request'] }
       ]);
@@ -5977,10 +7281,6 @@ const NAV_GROUPS = [
   ] },
   { title: 'Content', items: [
     { key: 'content', label: 'Content', icon: FileText },
-    { key: 'pages', label: 'Pages & banners', icon: FileText },
-    { key: 'blogs', label: 'Blog', icon: Film },
-    { key: 'navigation', label: 'Menus', icon: MenuIcon },
-    { key: 'media', label: 'Media', icon: ImageIcon },
   ] },
   { title: 'Staff', items: [
     { key: 'staff', label: 'Staff & permissions', icon: UserRound },
@@ -5989,12 +7289,7 @@ const NAV_GROUPS = [
     { key: 'audit', label: 'Audit logs', icon: Activity },
   ] },
   { title: 'Settings', items: [
-    { key: 'settings', label: 'General', icon: Sliders },
-    { key: 'payments', label: 'Payments', icon: CreditCard },
-    { key: 'emails', label: 'Emails', icon: Mail },
-    { key: 'shipping', label: 'Shipping', icon: Truck },
-    { key: 'theme', label: 'Theme', icon: Palette },
-    { key: 'cookie-consent', label: 'Cookie consent', icon: Cookie },
+    { key: 'settings', label: 'Settings', icon: Sliders },
   ] },
 ];
 const NAV = NAV_GROUPS.flatMap((g) => g.items);
@@ -6870,13 +8165,15 @@ export default function AdminPage() {
           {section === 'segments' && <SegmentsTab authFetch={authFetch} />}
           {section === 'support' && <SupportTab authFetch={authFetch} />}
           {section === 'integrations' && <IntegrationsTab authFetch={authFetch} />}
+          {section === 'glossary' && <GlossaryTab authFetch={authFetch} />}
+          {section === 'faq' && <FAQTab authFetch={authFetch} />}
           {/* hero-banners merged into 'pages' (Pages & Banners) per spec 2026-06-24. */}
           {section === 'content' && <ContentOverviewTab authFetch={authFetch} go={setSection} />}
           {section === 'pages' && <PagesAndBannersTab authFetch={authFetch} />}
           {section === 'blogs' && <BlogsTab authFetch={authFetch} />}
           {section === 'home' && <HomeTab authFetch={authFetch} go={setSection} />}
           {section === 'analytics' && <AnalyticsAndReportsTab authFetch={authFetch} />}
-          {section === 'settings' && <SettingsTab authFetch={authFetch} />}
+          {section === 'settings' && <SettingsTab authFetch={authFetch} regions={regions} />}
 
           {/* Enterprise Added Modules */}
           {section === 'reviews' && <ReviewsTab authFetch={authFetch} />}

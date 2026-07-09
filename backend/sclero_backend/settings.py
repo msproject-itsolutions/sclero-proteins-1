@@ -118,6 +118,8 @@ INSTALLED_APPS = [
     'apps.enquiries.apps.EnquiriesConfig',
     'apps.analytics.apps.AnalyticsConfig',
     'apps.fraud.apps.FraudConfig',
+    'apps.webhooks.apps.WebhooksConfig',
+    'apps.glossary.apps.GlossaryConfig',
 ]
 
 MIDDLEWARE = [

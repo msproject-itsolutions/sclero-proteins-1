@@ -31,6 +31,20 @@ export const initTrackingScripts = (settings = {}, consent = {}) => {
     gtag('config', settings.google_analytics_id);
   }
 
+  // 1.5. Google Tag GTM Container (e.g. GT-XXXXXX or GTM-XXXXXX)
+  if (allowAnalytics && isValidId(settings.google_gtm_id)) {
+    const gtmScript = document.createElement('script');
+    gtmScript.async = true;
+    gtmScript.src = `https://www.googletagmanager.com/gtag/js?id=${settings.google_gtm_id}`;
+    document.head.appendChild(gtmScript);
+
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { window.dataLayer.push(arguments); }
+    window.gtag = gtag;
+    gtag('js', new Date());
+    gtag('config', settings.google_gtm_id);
+  }
+
   // 2. Meta Pixel (Facebook)
   if (allowMarketing && isValidId(settings.meta_pixel_id)) {
     /* eslint-disable */
