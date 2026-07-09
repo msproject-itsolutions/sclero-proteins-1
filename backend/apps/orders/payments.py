@@ -4,21 +4,20 @@ Payment gateway routing + adapters.
 Goals:
   * Smart, region-locked routing — a gateway can only be charged if it is
     enabled for the order's region (Razorpay/COD for India, Stripe/PayPal for UK).
-  * One uniform interface (`charge` / `refund`) regardless of provider.
+  * One uniform interface (`charge` / `verify_transaction` / `refund` / `verify_webhook_signature` / `parse_webhook_event`) regardless of provider.
   * Refund integrity — refunds are always issued through the SAME gateway and
-    currency the order was paid with; this module is the single place that
-    enforces that.
+    currency the order was paid with.
 
 Live SDK calls are made only when a gateway is configured with real credentials
 AND the provider SDK is installed. Otherwise a deterministic sandbox result is
-returned, preserving the project's existing sandbox checkout behaviour. Staff
-paste real keys from the admin panel later — no code change required here.
+returned, preserving the project's existing sandbox checkout behaviour.
 """
 import hashlib
 import hmac
 import json
 import os
 import time
+import logging
 from decimal import Decimal
 
 import requests
@@ -26,6 +25,7 @@ from django.conf import settings
 
 from apps.admin_dashboard.models import PaymentGateway
 
+logger = logging.getLogger(__name__)
 
 class PaymentError(Exception):
     """Raised for routing/validation/charge failures. Carries an HTTP-friendly message."""
@@ -107,23 +107,146 @@ class BaseGatewayAdapter:
             )
         return self._sandbox_refund(order, amount, reason)
 
+    def verify_webhook_signature(self, raw_body: bytes, headers: dict, secret: str) -> bool:
+        """
+        Gateway-specific verification of the webhook request.
+        Must be overridden by subclasses.
+        """
+        raise NotImplementedError("Subclasses must implement verify_webhook_signature.")
+
+    def parse_webhook_event(self, payload: dict) -> dict:
+        """
+        Normalizes raw webhook payloads into a standardized event dictionary.
+        Returns:
+            {
+                'event_type': str,  # 'payment.succeeded', 'payment.failed', 'refund.processed', 'unknown'
+                'payment_id': str,  # Gateway transaction ID
+                'order_id': str,    # Optional Sclero Proteins order ID
+                'amount': Decimal,  # Transaction amount (optional)
+                'status': str       # Gateway status
+            }
+        """
+        raise NotImplementedError("Subclasses must implement parse_webhook_event.")
+
+    def process_subscription(self, customer, subscription_payload):
+        """
+        Processes subscription creation, updates, and cancellations.
+        Overridden by gateways supporting subscriptions (Stripe/PayPal).
+        """
+        raise NotImplementedError("Subclasses must implement process_subscription if supported.")
+
 
 class RazorpayAdapter(BaseGatewayAdapter):
     code = "RAZORPAY"
-    # LIVE hook: verify payload['payment_id'] + payload['signature'] via
-    # `razorpay` SDK against publishable_key/secret_key, then return SUCCESS.
+
+    def verify_webhook_signature(self, raw_body: bytes, headers: dict, secret: str) -> bool:
+        sig_header = headers.get('HTTP_X_RAZORPAY_SIGNATURE', '')
+        return verify_razorpay_signature(raw_body, sig_header, secret)
+
+    def parse_webhook_event(self, payload: dict) -> dict:
+        event_type = payload.get('event', '')
+        payment_entity = payload.get('payload', {}).get('payment', {}).get('entity', {})
+        
+        normalized_event = 'unknown'
+        if event_type in ('payment.captured', 'order.paid'):
+            normalized_event = 'payment.succeeded'
+        elif event_type == 'payment.failed':
+            normalized_event = 'payment.failed'
+        elif event_type == 'refund.processed':
+            normalized_event = 'refund.processed'
+
+        payment_id = payment_entity.get('order_id') or payment_entity.get('id') or ''
+        notes = payment_entity.get('notes', {})
+        order_id = notes.get('order_id')
+
+        amount = Decimal('0.00')
+        if payment_entity.get('amount'):
+            amount = Decimal(str(payment_entity.get('amount'))) / Decimal('100.00')
+
+        return {
+            'event_type': normalized_event,
+            'payment_id': payment_id,
+            'order_id': order_id,
+            'amount': amount,
+            'status': payment_entity.get('status', '')
+        }
 
 
 class StripeAdapter(BaseGatewayAdapter):
     code = "STRIPE"
-    # LIVE hook: retrieve/confirm the PaymentIntent (payload['payment_id'])
-    # via the `stripe` SDK using secret_key, then return SUCCESS.
+
+    def verify_webhook_signature(self, raw_body: bytes, headers: dict, secret: str) -> bool:
+        sig_header = headers.get('HTTP_STRIPE_SIGNATURE', '')
+        return verify_stripe_signature(raw_body, sig_header, secret)
+
+    def parse_webhook_event(self, payload: dict) -> dict:
+        event_type = payload.get('type', '')
+        data_obj = payload.get('data', {}).get('object', {})
+        
+        normalized_event = 'unknown'
+        if event_type in ('payment_intent.succeeded', 'charge.succeeded'):
+            normalized_event = 'payment.succeeded'
+        elif event_type in ('payment_intent.payment_failed', 'charge.failed'):
+            normalized_event = 'payment.failed'
+        elif event_type in ('charge.refunded',):
+            normalized_event = 'refund.processed'
+
+        payment_id = data_obj.get('id') or data_obj.get('payment_intent') or ''
+        metadata = data_obj.get('metadata', {})
+        order_id = metadata.get('order_id') or data_obj.get('client_reference_id')
+
+        amount = Decimal('0.00')
+        if data_obj.get('amount_received') or data_obj.get('amount'):
+            amt_val = data_obj.get('amount_received') or data_obj.get('amount')
+            amount = Decimal(str(amt_val)) / Decimal('100.00')
+
+        return {
+            'event_type': normalized_event,
+            'payment_id': payment_id,
+            'order_id': order_id,
+            'amount': amount,
+            'status': data_obj.get('status', '')
+        }
 
 
 class PayPalAdapter(BaseGatewayAdapter):
     code = "PAYPAL"
-    # LIVE hook: capture the approved order id (payload['payment_id']) via the
-    # PayPal Orders API using secret_key + extra_config['merchant_id'].
+
+    def verify_webhook_signature(self, raw_body: bytes, headers: dict, secret: str) -> bool:
+        webhook_id = (self.gateway.extra_config or {}).get('webhook_id') or os.getenv('PAYPAL_WEBHOOK_ID', '')
+        client_id = self.gateway.publishable_key or os.getenv('PAYPAL_CLIENT_ID', '')
+        client_secret = self.gateway.secret_key or os.getenv('PAYPAL_CLIENT_SECRET', '')
+        return verify_paypal_signature(
+            headers, raw_body, webhook_id, client_id, client_secret, self.gateway.mode
+        )
+
+    def parse_webhook_event(self, payload: dict) -> dict:
+        event_type = payload.get('event_type', '')
+        resource = payload.get('resource', {})
+        
+        normalized_event = 'unknown'
+        if event_type in ('PAYMENT.CAPTURE.COMPLETED', 'CHECKOUT.ORDER.APPROVED'):
+            normalized_event = 'payment.succeeded'
+        elif event_type in ('PAYMENT.CAPTURE.DENIED', 'PAYMENT.CAPTURE.DECLINED'):
+            normalized_event = 'payment.failed'
+        elif event_type in ('PAYMENT.CAPTURE.REFUNDED',):
+            normalized_event = 'refund.processed'
+
+        payment_id = resource.get('id') or resource.get('parent_payment') or ''
+        order_id = resource.get('custom_id') or resource.get('invoice_number')
+
+        amount = Decimal('0.00')
+        amt_struct = resource.get('amount', {})
+        if amt_struct.get('value'):
+            amount = Decimal(str(amt_struct.get('value')))
+
+        return {
+            'event_type': normalized_event,
+            'payment_id': payment_id,
+            'order_id': order_id,
+            'amount': amount,
+            'status': resource.get('status', '')
+        }
 
 
 class CODAdapter(BaseGatewayAdapter):
@@ -131,7 +254,6 @@ class CODAdapter(BaseGatewayAdapter):
     supports_live = True
 
     def charge(self, order, payload):
-        # No money moves now; payment is collected on delivery.
         return {
             "status": "PENDING",
             "transaction_id": f"cod_{order.id}",
@@ -139,7 +261,6 @@ class CODAdapter(BaseGatewayAdapter):
         }
 
     def refund(self, order, amount, reason=""):
-        # COD refunds are handled manually/offline; record the intent.
         return {
             "status": "REFUND_PENDING",
             "refund_id": f"cod_refund_{order.id}",
@@ -147,13 +268,33 @@ class CODAdapter(BaseGatewayAdapter):
                     "message": "Manual/offline COD refund required"},
         }
 
+    def verify_webhook_signature(self, raw_body: bytes, headers: dict, secret: str) -> bool:
+        return True # COD has no external webhooks
 
-_ADAPTERS = {
-    "RAZORPAY": RazorpayAdapter,
-    "STRIPE": StripeAdapter,
-    "PAYPAL": PayPalAdapter,
-    "COD": CODAdapter,
-}
+    def parse_webhook_event(self, payload: dict) -> dict:
+        return {
+            'event_type': 'unknown',
+            'payment_id': '',
+            'order_id': '',
+            'amount': Decimal('0.00'),
+            'status': ''
+        }
+
+
+_ADAPTERS = {}
+
+def register_adapter(code: str, adapter_cls):
+    """
+    Registers a payment gateway adapter class dynamically.
+    Allows future payment methods to be added without modifying core files.
+    """
+    _ADAPTERS[code.upper()] = adapter_cls
+
+# Register default gateways
+register_adapter("RAZORPAY", RazorpayAdapter)
+register_adapter("STRIPE", StripeAdapter)
+register_adapter("PAYPAL", PayPalAdapter)
+register_adapter("COD", CODAdapter)
 
 
 def get_adapter(gateway):
@@ -163,16 +304,9 @@ def get_adapter(gateway):
     return adapter
 
 
-# --------------------------------------------------------------------------- #
-# Routing
-# --------------------------------------------------------------------------- #
 def resolve_gateway(region, code):
     """
     Region-locked gateway resolution ("smart routing").
-
-    Returns an adapter for `code` only if that gateway is ENABLED for `region`.
-    Raises PaymentError otherwise — this is what prevents, e.g., a UK order
-    being pushed through Razorpay.
     """
     code = (code or "").upper()
     gateway = PaymentGateway.objects.filter(
@@ -207,11 +341,7 @@ def gateway_is_checkout_ready(gateway) -> bool:
 
 def refund_payment(order, amount=None, reason=""):
     """
-    Issue a refund with integrity guarantees:
-      * routed through the SAME gateway the order was paid with (order.payment_method),
-      * and only if that gateway is still enabled for the order's region,
-      * amount defaults to the full order total and is implicitly in the order's
-        original currency (order.currency_code) — no cross-currency refunds.
+    Issue a refund with integrity guarantees.
     """
     amount = Decimal(str(amount)) if amount is not None else order.total
     if amount <= 0 or amount > order.total:
@@ -229,10 +359,6 @@ def refund_payment(order, amount=None, reason=""):
 # --------------------------------------------------------------------------- #
 def verify_stripe_signature(payload_bytes: bytes, sig_header: str,
                             secret: str, tolerance: int = 300) -> bool:
-    """Verify a Stripe-Signature header ("t=...,v1=...") against the raw body.
-
-    Returns False on any parse error, timestamp drift > tolerance, or HMAC mismatch.
-    """
     if not sig_header or not secret:
         return False
     try:
@@ -253,7 +379,6 @@ def verify_stripe_signature(payload_bytes: bytes, sig_header: str,
 
 def verify_razorpay_signature(payload_bytes: bytes, sig_header: str,
                               secret: str) -> bool:
-    """Verify Razorpay's X-Razorpay-Signature (HMAC-SHA256 over raw body)."""
     if not secret:
         return False
     try:
@@ -267,11 +392,6 @@ def verify_razorpay_signature(payload_bytes: bytes, sig_header: str,
 def verify_paypal_signature(headers, payload_bytes: bytes, webhook_id: str,
                             client_id: str, client_secret: str,
                             mode: str = 'LIVE') -> bool:
-    """Verify a PayPal webhook through PayPal's signature-verification API.
-
-    Verification is fail-closed: missing headers/credentials, network errors,
-    non-2xx responses, and malformed payloads all return False.
-    """
     required = {
         'auth_algo': headers.get('HTTP_PAYPAL_AUTH_ALGO', ''),
         'cert_url': headers.get('HTTP_PAYPAL_CERT_URL', ''),

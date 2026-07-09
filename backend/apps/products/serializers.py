@@ -42,8 +42,7 @@ class ProductReviewAdminSerializer(serializers.ModelSerializer):
         fields = ['id', 'product', 'product_sku', 'product_name', 'user_name', 'user_email',
                   'rating', 'comment', 'is_verified_purchase', 'is_approved', 'is_featured',
                   'review_media_urls', 'created_at']
-        read_only_fields = ['product', 'user_name', 'user_email', 'rating', 'comment',
-                            'review_media_urls', 'created_at']
+        read_only_fields = ['created_at']
 
 class ProductListSerializer(serializers.ModelSerializer):
     price = serializers.SerializerMethodField()

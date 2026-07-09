@@ -1221,7 +1221,10 @@ class StripeWebhookView(views.APIView):
 
         secret = (gateway.extra_config or {}).get('webhook_secret') \
             or _os.getenv('STRIPE_WEBHOOK_SECRET', '')
-        if not verify_stripe_signature(raw, sig_header, secret):
+        
+        from apps.orders.payments import get_adapter
+        adapter = get_adapter(gateway)
+        if not adapter.verify_webhook_signature(raw, request.META, secret):
             return Response({"error": "Invalid signature."},
                             status=status.HTTP_400_BAD_REQUEST)
 
@@ -1231,8 +1234,9 @@ class StripeWebhookView(views.APIView):
             return Response({"error": "Malformed payload."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        event_id = payload.get('id') or ''
-        event_type = payload.get('type') or ''
+        parsed_event = adapter.parse_webhook_event(payload)
+        event_id = parsed_event.get('payment_id') or payload.get('id') or ''
+        event_type = parsed_event.get('event_type') or payload.get('type') or ''
         if not event_id or not event_type:
             return Response({"error": "Webhook event id and type are required."},
                             status=status.HTTP_400_BAD_REQUEST)
@@ -1255,14 +1259,18 @@ class StripeWebhookView(views.APIView):
         )
 
         try:
-            data_obj = (payload.get('data') or {}).get('object') or {}
-            payment_id = data_obj.get('id') or data_obj.get('payment_intent')
-            order = Order.objects.filter(payment_id=payment_id).first() if payment_id else None
-            if event_type == 'payment_intent.succeeded' or event_type == 'charge.succeeded':
+            payment_id = parsed_event.get('payment_id')
+            order = None
+            if payment_id:
+                order = Order.objects.filter(payment_id=payment_id).first()
+            if not order and parsed_event.get('order_id'):
+                order = Order.objects.filter(id=parsed_event.get('order_id')).first()
+
+            if parsed_event.get('event_type') == 'payment.succeeded':
                 _apply_order_payment_state(order, 'PAID', status_field='PROCESSING' if order and order.status == 'PENDING' else None)
-            elif event_type in ('payment_intent.payment_failed', 'charge.failed'):
+            elif parsed_event.get('event_type') == 'payment.failed':
                 _apply_order_payment_state(order, 'FAILED')
-            elif event_type in ('charge.refunded',):
+            elif parsed_event.get('event_type') == 'refund.processed':
                 _apply_order_payment_state(order, 'REFUNDED')
             we.status = 'PROCESSED'
             we.save(update_fields=['status'])
@@ -1290,7 +1298,10 @@ class RazorpayWebhookView(views.APIView):
 
         secret = (gateway.extra_config or {}).get('webhook_secret') \
             or _os.getenv('RAZORPAY_WEBHOOK_SECRET', '')
-        if not verify_razorpay_signature(raw, sig_header, secret):
+        
+        from apps.orders.payments import get_adapter
+        adapter = get_adapter(gateway)
+        if not adapter.verify_webhook_signature(raw, request.META, secret):
             return Response({"error": "Invalid signature."},
                             status=status.HTTP_400_BAD_REQUEST)
 
@@ -1300,9 +1311,9 @@ class RazorpayWebhookView(views.APIView):
             return Response({"error": "Malformed payload."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        payment_entity = ((payload.get('payload') or {}).get('payment') or {}).get('entity') or {}
-        event_id = payment_entity.get('id') or ''
-        event_type = payload.get('event') or ''
+        parsed_event = adapter.parse_webhook_event(payload)
+        event_id = parsed_event.get('payment_id') or ''
+        event_type = parsed_event.get('event_type') or payload.get('event') or ''
         if not event_id or not event_type:
             return Response({"error": "Webhook event id and type are required."},
                             status=status.HTTP_400_BAD_REQUEST)
@@ -1325,13 +1336,18 @@ class RazorpayWebhookView(views.APIView):
         )
 
         try:
-            payment_id = payment_entity.get('order_id') or payment_entity.get('id')
-            order = Order.objects.filter(payment_id=payment_id).first() if payment_id else None
-            if event_type in ('payment.captured', 'order.paid'):
+            payment_id = parsed_event.get('payment_id')
+            order = None
+            if payment_id:
+                order = Order.objects.filter(payment_id=payment_id).first()
+            if not order and parsed_event.get('order_id'):
+                order = Order.objects.filter(id=parsed_event.get('order_id')).first()
+
+            if parsed_event.get('event_type') == 'payment.succeeded':
                 _apply_order_payment_state(order, 'PAID', status_field='PROCESSING' if order and order.status == 'PENDING' else None)
-            elif event_type == 'payment.failed':
+            elif parsed_event.get('event_type') == 'payment.failed':
                 _apply_order_payment_state(order, 'FAILED')
-            elif event_type == 'refund.processed':
+            elif parsed_event.get('event_type') == 'refund.processed':
                 _apply_order_payment_state(order, 'REFUNDED')
             we.status = 'PROCESSED'
             we.save(update_fields=['status'])
@@ -1356,13 +1372,12 @@ class PaypalWebhookView(views.APIView):
             return Response({"error": "PayPal gateway is not configured."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        webhook_id = (gateway.extra_config or {}).get('webhook_id') \
+        secret = (gateway.extra_config or {}).get('webhook_id') \
             or _os.getenv('PAYPAL_WEBHOOK_ID', '')
-        client_id = gateway.publishable_key or _os.getenv('PAYPAL_CLIENT_ID', '')
-        client_secret = gateway.secret_key or _os.getenv('PAYPAL_CLIENT_SECRET', '')
-        if not verify_paypal_signature(
-            request.META, raw, webhook_id, client_id, client_secret, gateway.mode
-        ):
+        
+        from apps.orders.payments import get_adapter
+        adapter = get_adapter(gateway)
+        if not adapter.verify_webhook_signature(raw, request.META, secret):
             return Response({"error": "Invalid signature."},
                             status=status.HTTP_400_BAD_REQUEST)
 
@@ -1372,8 +1387,9 @@ class PaypalWebhookView(views.APIView):
             return Response({"error": "Malformed payload."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        event_id = payload.get('id') or ''
-        event_type = payload.get('event_type') or ''
+        parsed_event = adapter.parse_webhook_event(payload)
+        event_id = parsed_event.get('payment_id') or payload.get('id') or ''
+        event_type = parsed_event.get('event_type') or payload.get('event_type') or ''
         if not event_id or not event_type:
             return Response({"error": "Webhook event id and type are required."},
                             status=status.HTTP_400_BAD_REQUEST)
@@ -1396,14 +1412,18 @@ class PaypalWebhookView(views.APIView):
         )
 
         try:
-            resource = payload.get('resource') or {}
-            payment_id = resource.get('id') or resource.get('parent_payment')
-            order = Order.objects.filter(payment_id=payment_id).first() if payment_id else None
-            if event_type in ('PAYMENT.CAPTURE.COMPLETED', 'CHECKOUT.ORDER.APPROVED'):
+            payment_id = parsed_event.get('payment_id')
+            order = None
+            if payment_id:
+                order = Order.objects.filter(payment_id=payment_id).first()
+            if not order and parsed_event.get('order_id'):
+                order = Order.objects.filter(id=parsed_event.get('order_id')).first()
+
+            if parsed_event.get('event_type') == 'payment.succeeded':
                 _apply_order_payment_state(order, 'PAID', status_field='PROCESSING' if order and order.status == 'PENDING' else None)
-            elif event_type in ('PAYMENT.CAPTURE.DENIED', 'PAYMENT.CAPTURE.DECLINED'):
+            elif parsed_event.get('event_type') == 'payment.failed':
                 _apply_order_payment_state(order, 'FAILED')
-            elif event_type in ('PAYMENT.CAPTURE.REFUNDED',):
+            elif parsed_event.get('event_type') == 'refund.processed':
                 _apply_order_payment_state(order, 'REFUNDED')
             we.status = 'PROCESSED'
             we.save(update_fields=['status'])
@@ -1414,6 +1434,92 @@ class PaypalWebhookView(views.APIView):
             we.save(update_fields=['status', 'error_message', 'error_log'])
 
         return Response({"status": "ok"}, status=status.HTTP_200_OK)
+
+
+class UnifiedPaymentWebhookView(views.APIView):
+    """
+    Standardized API endpoint for dynamically receiving and verifying payment webhooks.
+    Enables plug-and-play gateway integrations without needing new routes.
+    """
+    permission_classes = [AllowAny]
+    parser_classes = []
+
+    def post(self, request, gateway_code):
+        raw = request.body
+        gateway_code = gateway_code.upper()
+        gateway = _resolve_gateway_row(gateway_code)
+        if not gateway:
+            return Response({"error": f"Gateway {gateway_code} is not configured."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        from apps.orders.payments import get_adapter
+        adapter = get_adapter(gateway)
+        
+        secret = (gateway.extra_config or {}).get('webhook_secret') \
+            or (gateway.extra_config or {}).get('webhook_id') \
+            or _os.getenv(f'{gateway_code}_WEBHOOK_SECRET', '')
+
+        if not adapter.verify_webhook_signature(raw, request.META, secret):
+            return Response({"error": "Invalid signature."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            payload = _json.loads(raw.decode('utf-8'))
+        except Exception:
+            return Response({"error": "Malformed payload."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        parsed_event = adapter.parse_webhook_event(payload)
+        event_id = parsed_event.get('payment_id') or str(payload.get('id') or '')
+        event_type = parsed_event.get('event_type') or str(payload.get('type') or payload.get('event') or '')
+        
+        if not event_id:
+            import hashlib
+            event_id = f"evt_{hashlib.md5(raw).hexdigest()}"
+
+        we, created = WebhookEvent.objects.get_or_create(
+            gateway=gateway_code,
+            event_id=event_id,
+            defaults={
+                'event_type': event_type,
+                'payload': payload,
+                'status': 'PENDING',
+            },
+        )
+        if not created:
+            return Response({"status": "duplicate"}, status=status.HTTP_200_OK)
+            
+        record_audit(
+            'webhook.received', target_type='WebhookEvent', target_id=we.id,
+            summary=f'{gateway_code} {event_type}',
+            changes={'gateway': gateway_code, 'event_type': event_type, 'event_id': event_id},
+        )
+
+        try:
+            payment_id = parsed_event.get('payment_id')
+            order = None
+            if payment_id:
+                order = Order.objects.filter(payment_id=payment_id).first()
+            if not order and parsed_event.get('order_id'):
+                order = Order.objects.filter(id=parsed_event.get('order_id')).first()
+
+            if parsed_event.get('event_type') == 'payment.succeeded':
+                _apply_order_payment_state(order, 'PAID', status_field='PROCESSING' if order and order.status == 'PENDING' else None)
+            elif parsed_event.get('event_type') == 'payment.failed':
+                _apply_order_payment_state(order, 'FAILED')
+            elif parsed_event.get('event_type') == 'refund.processed':
+                _apply_order_payment_state(order, 'REFUNDED')
+
+            we.status = 'PROCESSED'
+            we.save(update_fields=['status'])
+        except Exception as exc:
+            we.status = 'FAILED'
+            we.error_message = str(exc)
+            we.error_log = str(exc)
+            we.save(update_fields=['status', 'error_message', 'error_log'])
+
+        return Response({"status": "ok"}, status=status.HTTP_200_OK)
+
 
 
 class CouponAdminViewSet(viewsets.ModelViewSet):

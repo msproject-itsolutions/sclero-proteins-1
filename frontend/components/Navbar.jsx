@@ -161,12 +161,26 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
     { label: 'Knowledge Hub', url: '/knowledge-hub' },
     { label: 'Wholesale', url: '/bulk' },
     { label: 'Insights', url: '/blog' },
+    { label: 'Glossary', url: '/glossary' },
   ];
+  const rawNavLinks = cmsNavLinks && cmsNavLinks.length ? cmsNavLinks : fallbackNavLinks;
   const navLinks = !mounted
     ? fallbackNavLinks
-    : (cmsNavLinks && cmsNavLinks.length ? cmsNavLinks : fallbackNavLinks)
+    : (rawNavLinks.some((l) => l.url === '/glossary') ? rawNavLinks : [...rawNavLinks, { label: 'Glossary', url: '/glossary' }])
         .filter((link) => !link.region_limit || String(link.region_limit).toUpperCase() === currentRegion)
-        .filter((link) => link.label && link.url);
+        .filter((link) => link.label && link.url)
+        .filter((link) => {
+          const lowerUrl = (link.url || '').toLowerCase();
+          const lowerLabel = (link.label || '').toLowerCase();
+          return !(
+            lowerUrl.includes('#science') ||
+            lowerUrl.includes('#sustainability') ||
+            lowerUrl.includes('/science') ||
+            lowerUrl.includes('/sustainability') ||
+            lowerLabel.includes('science') ||
+            lowerLabel.includes('sustainability')
+          );
+        });
 
   const formatRegionDisplay = (code) => {
     if (code === 'IN') return '🇮🇳 India';
@@ -183,7 +197,7 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
     <nav className="sticky top-0 z-40 w-full border-b border-edge bg-brand-bg md:bg-brand-bg/95 md:backdrop-blur-md">
       <div className="mx-auto flex h-[72px] max-w-container items-center justify-between px-3 sm:px-6 lg:px-10">
         <Link href="/" aria-label="Sclero Proteins home">
-          <LogoLockup markClass="h-9 w-9" wordClass="h-[15px] sm:h-[17px]" />
+          <LogoLockup markClass="h-9 w-9" wordClass="h-[22px] sm:h-[26px]" />
         </Link>
 
         <div className="hidden items-center gap-8 text-[14px] md:flex">
@@ -352,7 +366,7 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
 
             <div className="flex items-center justify-between border-b border-edge px-5 py-4">
               <Link href="/" ref={firstMobileLinkRef} onClick={closeMobile} aria-label="Sclero Proteins home">
-                <LogoLockup markClass="h-8 w-8" wordClass="h-[14px]" />
+                <LogoLockup markClass="h-8 w-8" wordClass="h-[20px]" />
               </Link>
               <button
                 type="button"

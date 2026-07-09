@@ -95,13 +95,48 @@ function CheckoutModalInner({ onClose }) {
       }
     }
 
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      if (prevActiveElement && typeof prevActiveElement.focus === 'function') {
-        prevActiveElement.focus();
+  }, [onClose]);
+
+  // Google Customer Reviews Opt-In Integration
+  useEffect(() => {
+    if (!completedOrder) return;
+
+    const loadGoogleSurvey = () => {
+      const estDate = new Date();
+      estDate.setDate(estDate.getDate() + 5); // Estimated 5 days shipping
+      const yyyy = estDate.getFullYear();
+      const mm = String(estDate.getMonth() + 1).padStart(2, '0');
+      const dd = String(estDate.getDate()).padStart(2, '0');
+      const formattedEstDate = `${yyyy}-${mm}-${dd}`;
+
+      const renderOptIn = () => {
+        if (window.gapi && window.gapi.surveyoptin) {
+          window.gapi.surveyoptin.render({
+            "merchant_id": 5823522590,
+            "order_id": String(completedOrder.id),
+            "email": completedOrder.email || email,
+            "delivery_country": currentRegion === 'IN' ? 'IN' : 'GB',
+            "estimated_delivery_date": formattedEstDate
+          });
+        }
+      };
+
+      if (window.gapi && window.gapi.load) {
+        window.gapi.load('surveyoptin', renderOptIn);
+      } else {
+        window.renderOptIn = () => {
+          window.gapi.load('surveyoptin', renderOptIn);
+        };
+        const script = document.createElement('script');
+        script.src = 'https://apis.google.com/js/platform.js?onload=renderOptIn';
+        script.async = true;
+        script.defer = true;
+        document.body.appendChild(script);
       }
     };
-  }, [onClose]);
+
+    loadGoogleSurvey();
+  }, [completedOrder, email, currentRegion]);
 
   // 2. Fetch gateways driven by region configuration
   const fetchGateways = React.useCallback(() => {

@@ -31,6 +31,7 @@ export default function ProductDetailClient({ sku }) {
   const [quantity, setQuantity] = useState(1);
   const [activeImage, setActiveImage] = useState(0);
   const [activeTab, setActiveTab] = useState('description');
+  const [expandedFaq, setExpandedFaq] = useState(null);
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [wishlistItemId, setWishlistItemId] = useState(null);
   const [wishlistLoading, setWishlistLoading] = useState(false);
@@ -529,6 +530,7 @@ export default function ProductDetailClient({ sku }) {
                   { id: 'ingredients', label: 'Ingredients' },
                   { id: 'how_to_use', label: 'How to Use' },
                   { id: 'science', label: 'Science & Research' },
+                  { id: 'faqs', label: 'FAQs' },
                   { id: 'shipping', label: 'Shipping & Tax' },
                 ].map((t) => (
                   <button
@@ -609,6 +611,40 @@ export default function ProductDetailClient({ sku }) {
                     <p className="text-xs md:text-sm leading-relaxed text-ink-secondary">
                       We offer next-business-day shipping from our local Haywards Heath (UK) and Anand (India) logistics centers. Taxes (VAT for UK, GST for India) are completely inclusive in the listed price. Free shipping applies automatically above regional order limits (£50 for UK, ₹3,000 for India).
                     </p>
+                  </div>
+                )}
+
+                {activeTab === 'faqs' && (
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-medium uppercase tracking-wider text-ink-primary">Product Frequently Asked Questions</h3>
+                    {product.faq && product.faq.length > 0 ? (
+                      <div className="space-y-3 mt-4">
+                        {product.faq.map((item, idx) => {
+                          const isOpen = expandedFaq === idx;
+                          return (
+                            <div key={idx} className="border border-edge rounded-lg overflow-hidden bg-white">
+                              <button
+                                type="button"
+                                onClick={() => setExpandedFaq(isOpen ? null : idx)}
+                                className="w-full flex justify-between items-center p-4 text-left font-semibold text-xs md:text-sm text-ink-primary hover:bg-surface-muted transition-colors"
+                              >
+                                <span>{item.q}</span>
+                                <ChevronDown className={`h-4 w-4 text-brand-muted shrink-0 transition-transform duration-300 ${isOpen ? 'rotate-180 text-ink-accent' : ''}`} />
+                              </button>
+                              <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isOpen ? 'max-h-96 border-t border-edge-subtle p-4 bg-surface-muted' : 'max-h-0'}`}>
+                                <p className="text-xs md:text-sm leading-relaxed text-ink-secondary">
+                                  {item.a}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-xs md:text-sm leading-relaxed text-brand-muted italic mt-2">
+                        No product-specific FAQs available for this item at this time.
+                      </p>
+                    )}
                   </div>
                 )}
 

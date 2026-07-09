@@ -10,9 +10,12 @@ import { initTrackingScripts } from '../utils/analytics';
 
 const trackingSettings = {
   google_analytics_id: process.env.NEXT_PUBLIC_GA4_ID || '',
+  google_gtm_id: process.env.NEXT_PUBLIC_GTM_ID || 'GT-WBKDQ395',
   meta_pixel_id: process.env.NEXT_PUBLIC_META_PIXEL_ID || '',
   tiktok_pixel_id: process.env.NEXT_PUBLIC_TIKTOK_PIXEL_ID || '',
 };
+
+let activeTrackingSettings = { ...trackingSettings };
 
 function readCookieConsent() {
   if (typeof window === 'undefined') return null;
@@ -31,9 +34,6 @@ export default function useStoreBootstrap() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    // .com geo-router fallback: if the edge didn't already redirect us (no
-    // Cloudflare/Vercel country header), resolve the country server-side via
-    // /api/geo/ (IP / MaxMind) and forward to the matching ccTLD.
     if (typeof window !== 'undefined' && normalizeHost(window.location.hostname) === COM_HOST) {
       fetch(getApiUrl('/api/geo/'))
         .then((r) => (r.ok ? r.json() : null))
@@ -45,7 +45,7 @@ export default function useStoreBootstrap() {
         .catch(() => {
           window.location.replace(`https://${hostForRegion('UK')}${window.location.pathname}`);
         });
-      return; // we're navigating away; skip the rest of bootstrap
+      return;
     }
 
     let sid = localStorage.getItem('sclero_session_id');
@@ -56,7 +56,7 @@ export default function useStoreBootstrap() {
     dispatch(setSessionId(sid));
 
     const consent = readCookieConsent();
-    if (consent) initTrackingScripts(trackingSettings, consent);
+    if (consent) initTrackingScripts(activeTrackingSettings, consent);
 
     // Load store-wide config (tax mode + guest checkout + branding) once on boot.
     fetch(getApiUrl('/api/store-config/'))
@@ -69,12 +69,41 @@ export default function useStoreBootstrap() {
         if (cfg && cfg.branding) {
           dispatch(setBranding(cfg.branding));
         }
+
+        // Dynamically override tracking settings from DB if configured
+        const seo = cfg?.seo_settings || {};
+        const isIndia = hostRegion === 'IN' || (typeof window !== 'undefined' && window.location.hostname.endsWith('.in'));
+        
+        activeTrackingSettings = {
+          google_analytics_id: (isIndia ? seo.googleAnalyticsIN : seo.googleAnalytics) || process.env.NEXT_PUBLIC_GA4_ID || (isIndia ? 'G-1LXXS0E8KX' : 'G-SXFL6ENWL7'),
+          google_gtm_id: seo.gtm || process.env.NEXT_PUBLIC_GTM_ID || 'GT-WBKDQ395',
+          meta_pixel_id: seo.fbPixel || process.env.NEXT_PUBLIC_META_PIXEL_ID || '',
+          tiktok_pixel_id: process.env.NEXT_PUBLIC_TIKTOK_PIXEL_ID || '',
+        };
+        
+        if (consent) {
+          // Re-initialize scripts with DB settings
+          window.__scleroTrackingInitialized = false;
+          initTrackingScripts(activeTrackingSettings, consent);
+        }
+
+        // Inject google-site-verification meta tag if present
+        if (typeof document !== 'undefined' && seo.googleSiteVerification) {
+          let meta = document.querySelector('meta[name="google-site-verification"]');
+          if (!meta) {
+            meta = document.createElement('meta');
+            meta.name = 'google-site-verification';
+            document.head.appendChild(meta);
+          }
+          meta.content = seo.googleSiteVerification;
+        }
       })
       .catch(() => {});
 
 
     const onConsentUpdated = (event) => {
-      initTrackingScripts(trackingSettings, event.detail || {});
+      window.__scleroTrackingInitialized = false;
+      initTrackingScripts(activeTrackingSettings, event.detail || {});
     };
     window.addEventListener('cookie-consent-updated', onConsentUpdated);
 

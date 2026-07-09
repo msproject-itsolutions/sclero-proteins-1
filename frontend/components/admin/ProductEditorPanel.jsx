@@ -685,7 +685,6 @@ function AttributesEditor({ editing, onChange }) {
 
 /* ─── MAIN EDITOR PANEL ─────────────────────────────────────────────────── */
 export default function ProductEditorPanel({ editing, onChange, onClose, onSave, saving, err, regions, categories, authFetch }) {
-  const [activeTab, setActiveTab] = useState('general');
   const isNew = !editing.id;
   const productType = toText(editing.product_type) || 'Simple';
   const isVariable = productType === 'Variable';
@@ -696,8 +695,6 @@ export default function ProductEditorPanel({ editing, onChange, onClose, onSave,
         handle: toText(editing._seo.handle),
       }
     : { title: '', description: '', handle: '' };
-
-  const tabs = TABS.filter(t => t.id !== 'variants' || isVariable);
 
   const setEditing = onChange;
 
@@ -734,21 +731,6 @@ export default function ProductEditorPanel({ editing, onChange, onClose, onSave,
         </div>
       </div>
 
-      {/* Tab nav */}
-      <div className="flex gap-0 border-b border-edge bg-white px-4 overflow-x-auto flex-shrink-0">
-        {tabs.map(t => {
-          const Icon = t.icon;
-          return (
-            <button key={t.id} onClick={() => setActiveTab(t.id)} type="button"
-              className={`flex items-center gap-1.5 whitespace-nowrap border-b-2 px-4 py-3 text-sm font-semibold transition
-                ${activeTab === t.id ? 'border-ink-primary text-ink-accent' : 'border-transparent text-ink-muted hover:text-ink-secondary'}`}>
-              <Icon className="h-3.5 w-3.5" />
-              {t.label}
-            </button>
-          );
-        })}
-      </div>
-
       {/* Error banner */}
       {err && (
         <div className="flex items-center gap-2 border-b border-red-200 bg-red-50 px-6 py-2.5 flex-shrink-0">
@@ -758,12 +740,14 @@ export default function ProductEditorPanel({ editing, onChange, onClose, onSave,
       )}
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 lg:px-8">
-
-          {/* ── TAB: General ── */}
-          {activeTab === 'general' && (
-            <div className="space-y-5">
+      <div className="flex-1 overflow-y-auto bg-brand-bg">
+        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            {/* Main Content Column */}
+            <div className="lg:col-span-2 space-y-6">
+              
+              {/* Basic Information */}
               <div className="rounded-lg border border-edge bg-white p-6 space-y-4 shadow-card">
                 <p className="text-sm font-semibold text-ink-primary border-b border-edge-subtle pb-3">Basic Information</p>
                 <div className="grid grid-cols-3 gap-4">
@@ -818,107 +802,112 @@ export default function ProductEditorPanel({ editing, onChange, onClose, onSave,
                 </div>
               </div>
 
-              {/* Collections */}
-              <div className="rounded-lg border border-edge bg-white p-6 shadow-card">
-                <p className="text-sm font-semibold text-ink-primary mb-3">Collections</p>
-                <div className="flex flex-wrap gap-2">
-                  {categories.map(c => {
-                    const on = editing._categories.includes(c.id);
-                    return (
-                      <button key={c.id} type="button"
-                        onClick={() => setEditing({ ...editing, _categories: on ? editing._categories.filter(x => x !== c.id) : [...editing._categories, c.id] })}
-                        className={`rounded-sm border px-3 py-1 text-xs font-medium transition
-                          ${on ? 'border-ink-primary bg-surface-muted text-ink-primary' : 'border-edge bg-white text-ink-secondary hover:border-edge-strong'}`}>
-                        {c.name}
-                      </button>
-                    );
-                  })}
-                  {categories.length === 0 && <p className="text-xs text-ink-subtle">No collections defined yet.</p>}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ── TAB: Media ── */}
-          {activeTab === 'media' && (
-            <div className="rounded-lg border border-edge bg-white p-6 shadow-card">
-              <div className="mb-4">
-                <p className="text-sm font-semibold text-ink-primary">Product Media</p>
-                <p className="text-xs text-ink-subtle mt-0.5">Upload images/videos or add URLs. Drag to reorder. First item is the cover.</p>
-              </div>
-              <MediaEditor media={editing._media || []} onChange={setMedia} authFetch={authFetch} />
-            </div>
-          )}
-
-          {/* ── TAB: Variants ── */}
-          {activeTab === 'variants' && isVariable && (
-            <div className="space-y-4">
+              {/* Product Media */}
               <div className="rounded-lg border border-edge bg-white p-6 shadow-card">
                 <div className="mb-4">
-                  <p className="text-sm font-semibold text-ink-primary">Product Options &amp; Variants</p>
-                  <p className="text-xs text-ink-subtle mt-0.5">Define up to 3 option types. Combinations are generated automatically.</p>
+                  <p className="text-sm font-semibold text-ink-primary">Product Media</p>
+                  <p className="text-xs text-ink-subtle mt-0.5">Upload images/videos or add URLs. Drag to reorder. First item is the cover.</p>
                 </div>
-                <VariantsEditor editing={editing} onChange={setEditing} media={editing._media || []} />
+                <MediaEditor media={editing._media || []} onChange={setMedia} authFetch={authFetch} />
               </div>
-            </div>
-          )}
 
-          {/* ── TAB: Pricing ── */}
-          {activeTab === 'pricing' && (
-            <div className="space-y-4">
-              {isVariable ? (
-                <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 p-5">
-                  <Info className="h-5 w-5 text-amber-500 flex-shrink-0" />
+              {/* Options & Variants */}
+              {isVariable && (
+                <div className="rounded-lg border border-edge bg-white p-6 shadow-card">
+                  <div className="mb-4">
+                    <p className="text-sm font-semibold text-ink-primary">Product Options &amp; Variants</p>
+                    <p className="text-xs text-ink-subtle mt-0.5">Define up to 3 option types. Combinations are generated automatically.</p>
+                  </div>
+                  <VariantsEditor editing={editing} onChange={setEditing} media={editing._media || []} />
+                </div>
+              )}
+
+              {/* Pricing & Stock */}
+              <div className="rounded-lg border border-edge bg-white p-6 shadow-card space-y-4">
+                <div>
+                  <p className="text-sm font-semibold text-ink-primary">Regional Pricing &amp; Stock</p>
+                  {isVariable ? (
+                    <p className="text-xs text-amber-600 mt-1 font-medium">Variable product default regional presets. Individual pricing is managed under Variants.</p>
+                  ) : (
+                    <p className="text-xs text-ink-subtle mt-0.5">Set selling prices, promotional rates, and available inventory levels per region.</p>
+                  )}
+                </div>
+                <div className="space-y-3">
+                  {editing._regional.map((row, i) => (
+                    <div key={row.region} className="rounded-md border border-edge p-4 bg-surface-subtle space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-ink-primary uppercase tracking-wider">{row.code} Region</span>
+                        <label className="flex items-center gap-1.5 text-xs text-ink-secondary cursor-pointer font-medium">
+                          <input type="checkbox" checked={row.is_visible}
+                            onChange={(e) => setRegional(i, { is_visible: e.target.checked })} className="accent-ink-primary" />
+                          Visible
+                        </label>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <label className={LABEL_CLS}>Price</label>
+                          <input value={row.price} onChange={(e) => setRegional(i, { price: e.target.value })}
+                            placeholder="0.00" className={INPUT_CLS} />
+                        </div>
+                        <div>
+                          <label className={LABEL_CLS}>Promo Price</label>
+                          <input value={row.promotional_price} onChange={(e) => setRegional(i, { promotional_price: e.target.value })}
+                            placeholder="0.00" className={INPUT_CLS} />
+                        </div>
+                        <div>
+                          <label className={LABEL_CLS}>Stock (units)</label>
+                          <input value={row.available} onChange={(e) => setRegional(i, { available: e.target.value })}
+                            type="number" placeholder="0" className={INPUT_CLS} />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Specifications & Attributes */}
+              <div className="rounded-lg border border-edge bg-white p-6 shadow-card">
+                <AttributesEditor editing={editing} onChange={setEditing} />
+              </div>
+
+              {/* FAQ Editor */}
+              <div className="rounded-lg border border-edge bg-white p-6 shadow-card space-y-4">
+                <div className="flex items-center justify-between border-b border-edge-subtle pb-3">
                   <div>
-                    <p className="text-sm font-semibold text-ink-accent">Variable product pricing</p>
-                    <p className="text-xs text-ink-accent mt-0.5">Prices are set per variant in the Variants tab. Regional configs below apply as base defaults.</p>
+                    <p className="text-sm font-semibold text-ink-primary">Product FAQs</p>
+                    <p className="text-xs text-ink-subtle mt-0.5">Add common questions and answers specific to this product.</p>
                   </div>
+                  <button onClick={() => setEditing({ ...editing, faq: [...(editing.faq || []), { q: '', a: '' }] })} type="button"
+                    className="inline-flex items-center gap-1 rounded-sm border border-edge px-3 py-1.5 text-xs font-semibold text-ink-secondary hover:bg-surface-muted transition">
+                    <Plus className="h-3.5 w-3.5" /> Add FAQ
+                  </button>
                 </div>
-              ) : null}
-              <div className="rounded-lg border border-edge bg-white p-6 shadow-card space-y-3">
-                <p className="text-sm font-semibold text-ink-primary border-b border-edge-subtle pb-3">Regional Pricing &amp; Stock</p>
-                {editing._regional.map((row, i) => (
-                  <div key={row.region} className="rounded-md border border-edge p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-ink-secondary uppercase tracking-wide">{row.code}</span>
-                      <label className="flex items-center gap-1.5 text-xs text-ink-muted cursor-pointer">
-                        <input type="checkbox" checked={row.is_visible}
-                          onChange={(e) => setRegional(i, { is_visible: e.target.checked })} className="accent-ink-primary" />
-                        Visible
-                      </label>
+                <div className="space-y-3">
+                  {(editing.faq || []).map((faq, i) => (
+                    <div key={i} className="rounded-md border border-edge p-3 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <input value={faq.q} onChange={(e) => { const f = [...editing.faq]; f[i] = { ...f[i], q: e.target.value }; setEditing({ ...editing, faq: f }); }}
+                          placeholder="Question" className="flex-1 rounded-sm border border-edge px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-edge-focus/30" />
+                        <button onClick={() => setEditing({ ...editing, faq: editing.faq.filter((_, x) => x !== i) })} type="button"
+                          className="text-ink-subtle hover:text-ink-danger transition">
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <textarea value={faq.a} onChange={(e) => { const f = [...editing.faq]; f[i] = { ...f[i], a: e.target.value }; setEditing({ ...editing, faq: f }); }}
+                        placeholder="Answer" rows={2}
+                        className="w-full rounded-sm border border-edge px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-edge-focus/30" />
                     </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      <div>
-                        <label className={LABEL_CLS}>Price</label>
-                        <input value={row.price} onChange={(e) => setRegional(i, { price: e.target.value })}
-                          placeholder="0.00" className="w-full rounded-sm border border-edge px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-edge-focus/30 focus:border-ink-primary" />
-                      </div>
-                      <div>
-                        <label className={LABEL_CLS}>Promo Price</label>
-                        <input value={row.promotional_price} onChange={(e) => setRegional(i, { promotional_price: e.target.value })}
-                          placeholder="0.00" className="w-full rounded-sm border border-edge px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-edge-focus/30 focus:border-ink-primary" />
-                      </div>
-                      <div>
-                        <label className={LABEL_CLS}>Stock (units)</label>
-                        <input value={row.available} onChange={(e) => setRegional(i, { available: e.target.value })}
-                          type="number" placeholder="0"
-                          className="w-full rounded-sm border border-edge px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-edge-focus/30 focus:border-ink-primary" />
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                  {!(editing.faq || []).length && <p className="text-xs text-ink-subtle">No FAQs added yet.</p>}
+                </div>
               </div>
+
             </div>
-          )}
 
-          {/* ── TAB: Attributes ── */}
-          {activeTab === 'attributes' && (
-            <AttributesEditor editing={editing} onChange={setEditing} />
-          )}
-
-          {/* ── TAB: Settings ── */}
-          {activeTab === 'settings' && (
-            <div className="space-y-4">
+            {/* Sidebar Column */}
+            <div className="space-y-6">
+              
+              {/* Product Status & Visibility */}
               <div className="rounded-lg border border-edge bg-white p-6 shadow-card space-y-4">
                 <p className="text-sm font-semibold text-ink-primary border-b border-edge-subtle pb-3">Product Status</p>
                 <label className="flex items-center gap-3 cursor-pointer">
@@ -943,34 +932,28 @@ export default function ProductEditorPanel({ editing, onChange, onClose, onSave,
                 </label>
               </div>
 
-              {/* FAQ Editor */}
-              <div className="rounded-lg border border-edge bg-white p-6 shadow-card space-y-3">
-                <div className="flex items-center justify-between border-b border-edge-subtle pb-3">
-                  <p className="text-sm font-semibold text-ink-primary">FAQ</p>
-                  <button onClick={() => setEditing({ ...editing, faq: [...(editing.faq || []), { q: '', a: '' }] })} type="button"
-                    className="inline-flex items-center gap-1 rounded-sm border border-edge px-3 py-1.5 text-xs font-semibold text-ink-secondary hover:border-edge-strong transition">
-                    <Plus className="h-3.5 w-3.5" /> Add FAQ
-                  </button>
-                </div>
-                {(editing.faq || []).map((faq, i) => (
-                  <div key={i} className="rounded-md border border-edge p-3 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <input value={faq.q} onChange={(e) => { const f = [...editing.faq]; f[i] = { ...f[i], q: e.target.value }; setEditing({ ...editing, faq: f }); }}
-                        placeholder="Question" className="flex-1 rounded-sm border border-edge px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-edge-focus/30" />
-                      <button onClick={() => setEditing({ ...editing, faq: editing.faq.filter((_, x) => x !== i) })} type="button"
-                        className="text-ink-subtle hover:text-ink-danger transition">
-                        <X className="h-4 w-4" />
+              {/* Collections */}
+              <div className="rounded-lg border border-edge bg-white p-6 shadow-card">
+                <p className="text-sm font-semibold text-ink-primary mb-3">Collections / Categories</p>
+                <div className="flex flex-wrap gap-2">
+                  {categories.map(c => {
+                    const on = editing._categories.includes(c.id);
+                    return (
+                      <button key={c.id} type="button"
+                        onClick={() => setEditing({ ...editing, _categories: on ? editing._categories.filter(x => x !== c.id) : [...editing._categories, c.id] })}
+                        className={`rounded-sm border px-3 py-1 text-xs font-medium transition
+                          ${on ? 'border-ink-primary bg-surface-muted text-ink-primary' : 'border-edge bg-white text-ink-secondary hover:border-edge-strong'}`}>
+                        {c.name}
                       </button>
-                    </div>
-                    <textarea value={faq.a} onChange={(e) => { const f = [...editing.faq]; f[i] = { ...f[i], a: e.target.value }; setEditing({ ...editing, faq: f }); }}
-                      placeholder="Answer" rows={2}
-                      className="w-full rounded-sm border border-edge px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-edge-focus/30" />
-                  </div>
-                ))}
-                {!(editing.faq || []).length && <p className="text-xs text-ink-subtle">No FAQs added yet.</p>}
+                    );
+                  })}
+                  {categories.length === 0 && <p className="text-xs text-ink-subtle">No collections defined yet.</p>}
+                </div>
               </div>
+
             </div>
-          )}
+
+          </div>
         </div>
       </div>
     </div>

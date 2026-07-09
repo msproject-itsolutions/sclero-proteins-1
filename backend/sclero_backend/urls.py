@@ -33,7 +33,10 @@ from apps.orders.views import (
     CartViewSet, CheckoutView, ApplyCouponView, RefundView, MyOrdersView,
     OrderAdminViewSet, RefundAdminViewSet, InvoiceAdminViewSet, AbandonedCheckoutsView,
     StripeWebhookView, RazorpayWebhookView, PaypalWebhookView,
-    CouponAdminViewSet,
+    UnifiedPaymentWebhookView, CouponAdminViewSet,
+)
+from apps.webhooks.views import (
+    WebhookSubscriptionViewSet, WebhookDeliveryViewSet, IncomingWebhookEventViewSet
 )
 from apps.admin_dashboard.views import (
     FeatureToggleViewSet, SystemSettingViewSet, HeroBannerSlideViewSet, PaymentGatewayViewSet, EmailTemplateViewSet,
@@ -94,12 +97,16 @@ router.register(r'admin/approval-requests', ApprovalRequestViewSet, basename='ad
 router.register(r'admin/bundles', BundleAdminViewSet, basename='admin-bundle')
 router.register(r'admin/coupons', CouponAdminViewSet, basename='admin-coupon')
 router.register(r'admin/risk-assessments', RiskAssessmentAdminViewSet, basename='admin-risk-assessment')
+router.register(r'admin/webhook-subscriptions', WebhookSubscriptionViewSet, basename='admin-webhook-subscription')
+router.register(r'admin/webhook-deliveries', WebhookDeliveryViewSet, basename='admin-webhook-delivery')
+router.register(r'admin/incoming-webhooks', IncomingWebhookEventViewSet, basename='admin-incoming-webhook')
 
 urlpatterns = [
     path('api/health/live/', live, name='health_live'),
     path('api/health/ready/', ready, name='health_ready'),
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
+    path('api/', include('apps.glossary.urls')),
     path('api/', include('apps.analytics.urls')),
     path('api/detect-region/', detect_region, name='detect_region'),
     path('api/geo/', geo_detect, name='geo_detect'),
@@ -146,6 +153,7 @@ urlpatterns = [
     path('api/webhooks/stripe/', StripeWebhookView.as_view(), name='webhook_stripe'),
     path('api/webhooks/razorpay/', RazorpayWebhookView.as_view(), name='webhook_razorpay'),
     path('api/webhooks/paypal/', PaypalWebhookView.as_view(), name='webhook_paypal'),
+    path('api/webhooks/payment/<str:gateway_code>/', UnifiedPaymentWebhookView.as_view(), name='webhook_payment_unified'),
     path('api/orders/mine/', MyOrdersView.as_view(), name='my_orders'),
     path('api/admin/abandoned-checkouts/', AbandonedCheckoutsView.as_view(), name='abandoned_checkouts'),
     path('api/orders/<int:order_id>/refund/', RefundView.as_view(), name='order_refund'),
