@@ -6172,7 +6172,7 @@ function MediaLibraryTab({ authFetch }) {
     authFetch('/api/admin/settings/MEDIA_ASSETS/')
       .then(r => r.ok ? r.json() : null)
       .then(d => {
-        setAssets(d?.value || [
+        setAssets(Array.isArray(d?.value) ? d.value : [
           { name: 'Sclero Whey Protein Isolate Pack', url: 'https://images.unsplash.com/photo-1579758629938-03607ccdbaba?q=80&w=200', size: '2.4 MB', date: '2026-06-15' },
           { name: 'Pure Marine Peptide Collagen Bottle', url: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?q=80&w=200', size: '1.8 MB', date: '2026-06-18' },
           { name: 'Molecular Formulation Laboratory', url: 'https://images.unsplash.com/photo-1532187643603-ba119ca4109e?q=80&w=200', size: '4.1 MB', date: '2026-06-20' },
