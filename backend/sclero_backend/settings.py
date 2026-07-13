@@ -145,6 +145,7 @@ except ImportError:
     _WHITENOISE_AVAILABLE = False
 
 ROOT_URLCONF = 'sclero_backend.urls'
+TEST_RUNNER = 'sclero_backend.test_runner.ProjectDiscoverRunner'
 
 TEMPLATES = [
     {
