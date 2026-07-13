@@ -1,6 +1,6 @@
 # Direct production dependencies are pinned for repeatable image builds.
 # Refresh deliberately, then run `python -m pip_audit -r requirements.txt`.
-Django==5.2.15
+Django==5.2.16
 djangorestframework==3.17.1
 djangorestframework-simplejwt==5.5.1
 django-cors-headers==4.9.0

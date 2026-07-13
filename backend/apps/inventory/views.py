@@ -60,7 +60,7 @@ class StockLevelAdminViewSet(viewsets.ModelViewSet):
     def low_stock_alert(self, request):
         """Get all stock levels below their threshold, optionally filtered by region."""
         queryset = self.get_queryset().filter(
-            available__lte=models.F('low_stock_threshold')
+            available__lte=F('low_stock_threshold')
         )
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)

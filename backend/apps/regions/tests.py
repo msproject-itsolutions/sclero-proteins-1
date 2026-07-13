@@ -144,3 +144,55 @@ class ScleroProteinsTests(APITestCase):
         pdf_path = os.path.join(settings.MEDIA_ROOT, invoice.pdf_file.name)
         self.assertTrue(os.path.exists(pdf_path))
         self.assertTrue(pdf_path.endswith('.pdf'))
+
+    def test_checkout_consumes_stock_across_multiple_active_warehouses(self):
+        """Regional availability should aggregate and deduct across warehouses."""
+        overflow_wh = Warehouse.objects.create(
+            name='IN Overflow Warehouse',
+            region=self.region_in,
+            address='Overflow',
+        )
+        StockLevel.objects.filter(
+            warehouse=self.wh_in,
+            product=self.prod_glut,
+        ).update(available=1)
+        StockLevel.objects.create(
+            warehouse=overflow_wh,
+            product=self.prod_glut,
+            available=2,
+        )
+
+        url_add = reverse('cart_add')
+        add_response = self.client.post(url_add, {
+            'session_id': 'multi-warehouse-session',
+            'region': 'IN',
+            'product_id': self.prod_glut.id,
+            'quantity': 3,
+        })
+        self.assertEqual(add_response.status_code, status.HTTP_200_OK)
+
+        url_checkout = reverse('checkout')
+        response = self.client.post(url_checkout, {
+            'session_id': 'multi-warehouse-session',
+            'region': 'IN',
+            'email': 'multi@example.com',
+            'shipping_name': 'Multi Warehouse Buyer',
+            'shipping_phone': '+919999999998',
+            'shipping_address_line1': '456 Test St',
+            'shipping_city': 'Ahmedabad',
+            'shipping_state': 'Gujarat',
+            'shipping_postal_code': '380015',
+            'shipping_country': 'IN',
+            'payment_method': 'Razorpay',
+            'payment_id': 'pay_multi_warehouse',
+        }, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(
+            StockLevel.objects.get(warehouse=self.wh_in, product=self.prod_glut).available,
+            0,
+        )
+        self.assertEqual(
+            StockLevel.objects.get(warehouse=overflow_wh, product=self.prod_glut).available,
+            0,
+        )

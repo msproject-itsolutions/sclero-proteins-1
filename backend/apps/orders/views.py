@@ -23,6 +23,64 @@ from .utils import generate_invoice_pdf
 from .payments import resolve_gateway, refund_payment, PaymentError
 from .email_service import send_order_email
 
+
+def _region_warehouse_queryset(region):
+    return Warehouse.objects.filter(region=region, is_active=True).order_by('id')
+
+
+def _region_stock_queryset(product, region, *, for_update=False):
+    queryset = StockLevel.objects.filter(
+        product=product,
+        warehouse__in=_region_warehouse_queryset(region),
+    ).select_related('warehouse')
+    if for_update:
+        queryset = queryset.select_for_update()
+    return queryset.order_by('-available', 'warehouse_id', 'id')
+
+
+def _region_total_available_stock(product, region):
+    return _region_stock_queryset(product, region).aggregate(
+        total=Sum('available')
+    )['total'] or 0
+
+
+def _deduct_region_stock(product, region, quantity):
+    remaining = quantity
+    stock_rows = list(_region_stock_queryset(product, region, for_update=True))
+    total_available = sum(stock.available for stock in stock_rows)
+    if total_available < quantity:
+        raise PaymentError(
+            f"Product {product.name} is out of stock in this region."
+        )
+
+    for stock in stock_rows:
+        if remaining <= 0:
+            break
+        take = min(stock.available, remaining)
+        if take <= 0:
+            continue
+        stock.available -= take
+        stock.save(update_fields=['available', 'updated_at'])
+        remaining -= take
+
+
+def _restock_region_item(product, region, quantity):
+    stock_rows = list(_region_stock_queryset(product, region, for_update=True))
+    if stock_rows:
+        target = stock_rows[0]
+    else:
+        warehouse = _region_warehouse_queryset(region).first()
+        if not warehouse:
+            return
+        target, _created = StockLevel.objects.get_or_create(
+            warehouse=warehouse,
+            product=product,
+            defaults={'available': 0, 'reserved': 0, 'low_stock_threshold': 10},
+        )
+    target.available += quantity
+    target.save(update_fields=['available', 'updated_at'])
+
+
 class MyOrdersView(generics.ListAPIView):
     """Order history for the authenticated customer.
 
@@ -97,13 +155,7 @@ class CartViewSet(viewsets.ViewSet):
             return Response({"error": "Product is not available in your region."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Check stock level in this region's warehouses
-        warehouses = Warehouse.objects.filter(region=cart.region, is_active=True)
-        stock_level = StockLevel.objects.filter(product=product, warehouse__in=warehouses).first() # Simplify for single/primary warehouse
-        
-        total_available = 0
-        if stock_level:
-            total_available = stock_level.available
-            
+        total_available = _region_total_available_stock(product, cart.region)
         if total_available < quantity:
             return Response({"error": f"Only {total_available} units are available in your region's stock."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -136,10 +188,7 @@ class CartViewSet(viewsets.ViewSet):
             cart_item.delete()
         else:
             # Verify stock
-            warehouses = Warehouse.objects.filter(region=cart.region, is_active=True)
-            stock_level = StockLevel.objects.filter(product=cart_item.product, warehouse__in=warehouses).first()
-            total_available = stock_level.available if stock_level else 0
-            
+            total_available = _region_total_available_stock(cart_item.product, cart.region)
             if total_available < quantity:
                 return Response({"error": f"Only {total_available} units available in stock."}, status=status.HTTP_400_BAD_REQUEST)
                 
@@ -262,7 +311,11 @@ class CheckoutView(views.APIView):
 
         # 1. Fetch Region & Cart
         region = get_object_or_404(Region, code=region_code, is_active=True)
-        cart = Cart.objects.filter(session_id=session_id, region=region).first()
+        cart = (
+            Cart.objects.filter(session_id=session_id, region=region)
+            .prefetch_related('items__product')
+            .first()
+        )
         if not cart or not cart.items.exists():
             return Response({"error": "Cart is empty or invalid."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -289,13 +342,9 @@ class CheckoutView(views.APIView):
             subtotal += item_price * qty
 
             # Inventory deduction
-            warehouses = Warehouse.objects.filter(region=region, is_active=True)
-            stock = StockLevel.objects.select_for_update().filter(product=product, warehouse__in=warehouses).first()
-            if not stock or stock.available < qty:
+            if _region_total_available_stock(product, region) < qty:
                 return Response({"error": f"Product {product.name} is out of stock in this region."}, status=status.HTTP_400_BAD_REQUEST)
-            
-            stock.available -= qty
-            stock.save()
+            _deduct_region_stock(product, region, qty)
             
             order_items_to_create.append((product, qty, item_price))
 
@@ -606,14 +655,8 @@ class RefundView(views.APIView):
 
         # Optionally return stock to the region's warehouse.
         if str(request.data.get('restock', '')).lower() in ('1', 'true', 'yes'):
-            warehouses = Warehouse.objects.filter(region=order.region, is_active=True)
             for item in order.items.all():
-                stock = StockLevel.objects.select_for_update().filter(
-                    product=item.product, warehouse__in=warehouses
-                ).first()
-                if stock:
-                    stock.available += item.quantity
-                    stock.save(update_fields=['available'])
+                _restock_region_item(item.product, order.region, item.quantity)
 
         if is_full:
             order.status = 'REFUNDED'

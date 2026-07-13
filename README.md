@@ -120,7 +120,20 @@ Run the following checks before committing code for deployment:
    python manage.py makemigrations --check --dry-run
    ```
    Confirms all schema changes have corresponding migration files.
-3. **Log Check**:
+3. **Django Test Suite**:
+   ```bash
+   cd backend
+   python manage.py test
+   ```
+   Runs the installed backend app suites, including checkout, inventory, auth,
+   webhooks, glossary, and admin serialization coverage.
+4. **Dependency Audit**:
+   ```bash
+   cd backend
+   python -m pip_audit -r requirements.txt
+   ```
+   Flags known Python package vulnerabilities before shipping.
+5. **Log Check**:
    Confirm that all API client exceptions handle 401 token expirations cleanly by dropping cached tokens and returning to guest views.
 
 For shared-VPS deployment, backups, TLS bootstrapping, health checks, rollback,
