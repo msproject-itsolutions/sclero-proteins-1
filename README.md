@@ -208,6 +208,11 @@ If replacement or validation fails, it makes a best-effort switch back to the
 previous application images; the verified database/media backup remains the
 authoritative rollback point for migrations or content.
 
+Before replacement, the candidate image runs Django's production configuration,
+model-drift and migration-plan checks against the live database without changing
+it. If a later health check fails, the failed container logs are captured under
+`/var/log/sclero-proteins/` before the previous images are restored.
+
 After the one-time `.env` setup, every release is deployed from the clean,
 already-updated checkout with one command:
 

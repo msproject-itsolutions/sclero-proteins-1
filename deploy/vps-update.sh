@@ -21,8 +21,9 @@ done
 
 previous_revision="$(git rev-parse HEAD)"
 echo "==> Updating the checkout"
-git fetch origin --prune
-git pull --ff-only
+current_branch="$(git branch --show-current)"
+[[ -n "$current_branch" ]] || die "Detached HEAD is not supported for automatic updates"
+git pull --ff-only origin "$current_branch"
 
 tag="$(git rev-parse --short=12 HEAD)"
 echo "==> Running the repeatable production deployment"
