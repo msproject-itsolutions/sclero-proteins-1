@@ -125,9 +125,18 @@ restore_nginx() {
   if [[ "$exit_code" -ne 0 && "$release_replaced" == true && -n "$previous_image_tag" ]]; then
     echo "Deployment failed; attempting to restore the previous application images." >&2
     sed -i "s/^APP_IMAGE_TAG=.*/APP_IMAGE_TAG=${previous_image_tag}/" "$repo_dir/.env"
-    if ! docker compose up -d --wait --force-recreate --remove-orphans; then
+    local rollback_compose=""
+    rollback_compose="$(mktemp "$repo_dir/.rollback-compose.XXXXXX.yml")"
+    if git -c safe.directory="$repo_dir" show \
+      "${previous_image_tag}:docker-compose.yml" > "$rollback_compose" 2>/dev/null; then
+      if ! docker compose -f "$rollback_compose" up \
+        -d --wait --force-recreate --remove-orphans; then
+        echo "Rollback with the previous Compose definition failed." >&2
+      fi
+    elif ! docker compose up -d --wait --force-recreate --remove-orphans; then
       echo "Automatic application rollback failed; use the verified backup and inspect container logs." >&2
     fi
+    rm -f "$rollback_compose"
   fi
   if [[ "$exit_code" -ne 0 && "$nginx_changed" == true ]]; then
     echo "Deployment failed; restoring the previous Sclero nginx site." >&2

@@ -213,6 +213,10 @@ model-drift and migration-plan checks against the live database without changing
 it. If a later health check fails, the failed container logs are captured under
 `/var/log/sclero-proteins/` before the previous images are restored.
 
+The host nginx is the only public listener and owns the HTTP-to-HTTPS redirect.
+Django deliberately accepts private HTTP from the isolated Compose network so
+health probes and Next.js server-side API calls are not redirected internally.
+
 After the one-time `.env` setup, every release is deployed from the clean,
 already-updated checkout with one command:
 
