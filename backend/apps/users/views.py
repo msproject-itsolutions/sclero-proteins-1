@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import secrets
 import requests
 from django.conf import settings
@@ -12,7 +13,9 @@ from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
-from django.db.models import Q
+from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from django.db.models import Q, Sum
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import check_password, make_password
@@ -23,10 +26,14 @@ from .serializers import (
     RoleSerializer, StaffUserSerializer, WishlistItemSerializer, WishlistSerializer,
     CustomerSegmentSerializer, CustomerActivitySerializer, SupportTicketSerializer,
 )
-from .permissions import require_permission, PERMISSIONS, client_ip_is_allowed
+from .permissions import (
+    require_permission, ENFORCED_PERMISSION_GROUPS, client_ip_is_allowed,
+)
 from apps.audit.context import client_ip_from_request
+from apps.orders.models import Order
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 OTP_MAX_AGE_SECONDS = 10 * 60
 
@@ -66,9 +73,6 @@ def get_tokens_for_user(user):
         'refresh': str(refresh),
         'access': str(refresh.access_token),
     }
-
-from rest_framework_simplejwt.views import TokenObtainPairView
-
 
 class AuditedLoginView(TokenObtainPairView):
     """Password login with audit trail, IP restrictions, and 2FA gating.
@@ -194,6 +198,7 @@ class AuditedLoginView(TokenObtainPairView):
             try:
                 _send_email_otp(email, otp_code, subject='Your Sclero Proteins two-factor code')
             except Exception:
+                logger.exception('Two-factor email delivery failed for user %s.', actor.pk)
                 actor.otp_secret = ''
                 actor.save(update_fields=['otp_secret'])
                 return Response(
@@ -219,6 +224,41 @@ class AuditedLoginView(TokenObtainPairView):
         })
 
 
+class CookieTokenRefreshView(TokenRefreshView):
+    """Rotate the refresh token from an HttpOnly cookie for browser clients."""
+
+    permission_classes = [AllowAny]
+    throttle_scope = 'auth'
+
+    def post(self, request, *args, **kwargs):
+        if request.headers.get('X-Sclero-Client') != 'storefront' and not request.data.get('refresh'):
+            return Response({'detail': 'Invalid browser request.'}, status=status.HTTP_400_BAD_REQUEST)
+        payload = request.data.copy()
+        if not payload.get('refresh'):
+            payload['refresh'] = request.COOKIES.get(settings.AUTH_COOKIE_REFRESH_NAME, '')
+        serializer = self.get_serializer(data=payload)
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.validated_data, status=status.HTTP_200_OK)
+
+
+class LogoutView(APIView):
+    """Blacklist the browser refresh token and clear both auth cookies."""
+
+    permission_classes = [AllowAny]
+    throttle_scope = 'auth'
+
+    def post(self, request):
+        if request.headers.get('X-Sclero-Client') != 'storefront':
+            return Response({'detail': 'Invalid browser request.'}, status=status.HTTP_400_BAD_REQUEST)
+        raw_refresh = request.COOKIES.get(settings.AUTH_COOKIE_REFRESH_NAME, '')
+        if raw_refresh:
+            try:
+                RefreshToken(raw_refresh).blacklist()
+            except TokenError:
+                pass
+        return Response({'detail': 'Signed out.'}, status=status.HTTP_200_OK)
+
+
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     permission_classes = [AllowAny]
@@ -235,9 +275,10 @@ class RegisterView(generics.CreateAPIView):
                          target_id=user.pk, summary=f'New account registered: {user.email}')
             try:
                 from apps.orders.email_service import send_account_email
-                send_account_email('welcome', user)
+                if not send_account_email('welcome', user):
+                    logger.warning('Welcome email for user %s was queued for retry.', user.pk)
             except Exception:
-                pass
+                logger.exception('Welcome email scheduling failed for user %s.', user.pk)
             return Response({
                 "user": UserSerializer(user).data,
                 "tokens": tokens
@@ -305,7 +346,6 @@ class DataExportView(APIView):
         import json
         from django.http import HttpResponse
         from django.utils import timezone
-        from django.forms.models import model_to_dict
         from apps.orders.models import Order
         from apps.products.models import ProductReview
         from apps.enquiries.models import BulkEnquiry
@@ -449,7 +489,6 @@ class AccountDeleteView(APIView):
 
     def delete(self, request):
         from django.db import transaction
-        from django.utils.crypto import get_random_string
         from apps.orders.models import Order
         from apps.products.models import ProductReview
         from apps.enquiries.models import BulkEnquiry
@@ -598,6 +637,7 @@ class SendOTPView(APIView):
         try:
             _send_email_otp(identifier, otp_code)
         except Exception:
+            logger.exception('OTP email delivery failed for user %s.', user.pk)
             user.otp_secret = ''
             user.save(update_fields=['otp_secret'])
             return Response(
@@ -719,20 +759,22 @@ class MagicLinkRequestView(APIView):
                 audit_target_type='User', audit_target_id=str(user.id),
             )
         except Exception:
+            logger.exception('Templated magic-link email failed for user %s.', user.pk)
             sent = False
         if not sent:
             # No template configured / send failed — fall back to a plain email.
             try:
                 from django.core.mail import send_mail
                 from django.conf import settings
-                send_mail(
+                sent_count = send_mail(
                     'Your Sclero Proteins sign-in link',
                     f'Click to sign in (valid 15 minutes):\n\n{link}\n\nIf you didn\'t request this, ignore this email.',
-                    getattr(settings, 'DEFAULT_FROM_EMAIL', 'support@scleroproteins.co.uk'),
-                    [email], fail_silently=True,
+                    getattr(settings, 'DEFAULT_FROM_EMAIL', ''),
+                    [email], fail_silently=False,
                 )
+                sent = bool(sent_count)
             except Exception:
-                pass
+                logger.exception('Fallback magic-link email failed for user %s.', user.pk)
         if settings.DEBUG:
             print(f"--> [MAGIC LINK SANDBOX] {email}: {link}")
 
@@ -774,7 +816,7 @@ class MagicLinkVerifyView(APIView):
             from apps.audit.recorder import record_audit
             record_audit('login.success', actor=user, summary=f'Magic-link login: {user.email}')
         except Exception:
-            pass
+            logger.exception('Could not record magic-link login audit for user %s.', user.pk)
 
         return Response({
             "user": UserSerializer(user).data,
@@ -796,15 +838,26 @@ class RoleViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def permission_catalog(self, request):
-        """All assignable permission keys + labels — for building the role editor UI."""
-        return Response([{'key': k, 'label': v} for k, v in PERMISSIONS.items()])
+        """Permissions the role editor should offer, grouped and in plain English.
+
+        Only permissions the code actually enforces are returned. The wider
+        PERMISSIONS dict still holds legacy keys that nothing checks; offering
+        those would let an owner "revoke" an ability the person still has.
+        """
+        return Response([
+            {
+                'group': group,
+                'permissions': [{'key': key, 'label': label} for key, label in items],
+            }
+            for group, items in ENFORCED_PERMISSION_GROUPS
+        ])
 
 
 class StaffUserViewSet(viewsets.ModelViewSet):
-    """List staff/role-holding users and assign their roles. Gated by 'rbac.manage'."""
+    """List, create, update, and manage staff users. Gated by 'rbac.manage'."""
     serializer_class = StaffUserSerializer
     permission_classes = [require_permission('rbac.manage')]
-    http_method_names = ['get', 'patch', 'head', 'options']
+    http_method_names = ['get', 'post', 'patch', 'delete', 'head', 'options']
 
     def get_queryset(self):
         return (
@@ -961,9 +1014,6 @@ class GoogleLoginView(APIView):
         })
 
 
-from django.db.models import Sum
-from apps.orders.models import Order
-
 class AdminDashboardPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = 'page_size'
@@ -1108,7 +1158,6 @@ class PasswordResetRequestView(APIView):
     throttle_scope = 'password_reset'
 
     def post(self, request):
-        import uuid
         from datetime import timedelta
         from django.utils import timezone as dj_tz
         from django.conf import settings
@@ -1128,7 +1177,7 @@ class PasswordResetRequestView(APIView):
                 from apps.orders.email_service import send_templated_email
                 site_url = (getattr(settings, 'SITE_URL', '') or '').rstrip('/')
                 reset_url = f"{site_url}/account/reset?token={token}"
-                send_templated_email(
+                sent = send_templated_email(
                     'password_reset', None, user.email,
                     {
                         'customer_name': user.first_name or user.email,
@@ -1137,8 +1186,10 @@ class PasswordResetRequestView(APIView):
                     },
                     audit_target_type='User', audit_target_id=user.id,
                 )
+                if not sent:
+                    logger.warning('Password reset email for user %s was queued for retry.', user.pk)
             except Exception:
-                pass
+                logger.exception('Password reset email scheduling failed for user %s.', user.pk)
 
             try:
                 from apps.audit.recorder import record_audit
@@ -1146,7 +1197,7 @@ class PasswordResetRequestView(APIView):
                              target_type='User', target_id=user.id,
                              summary=f'Password reset requested for {user.email}')
             except Exception:
-                pass
+                logger.exception('Could not record password reset request for user %s.', user.pk)
 
         # Always 200 — don't leak account existence.
         return Response({"message": "If that email exists, a reset link has been sent."})
@@ -1194,6 +1245,6 @@ class PasswordResetConfirmView(APIView):
                          target_type='User', target_id=user.id,
                          summary=f'Password reset completed for {user.email}')
         except Exception:
-            pass
+            logger.exception('Could not record password reset completion for user %s.', user.pk)
 
         return Response({"message": "Your password has been reset. You can now sign in."})

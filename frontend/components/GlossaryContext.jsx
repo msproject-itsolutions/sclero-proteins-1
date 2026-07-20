@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
+import { getApiUrl } from '../lib/api';
 
 const GlossaryContext = createContext(null);
 
@@ -21,8 +22,7 @@ export default function GlossaryProvider({ children }) {
 
   // Fetch glossary terms from the backend public endpoint
   useEffect(() => {
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
-    fetch(`${apiBase}/api/glossary/`)
+    fetch(getApiUrl('/api/glossary/'))
       .then((res) => {
         if (!res.ok) throw new Error("Failed to load glossary");
         return res.json();
@@ -37,7 +37,9 @@ export default function GlossaryProvider({ children }) {
         });
         termsMapRef.current = map;
       })
-      .catch((err) => console.error("Glossary fetch error:", err));
+      .catch(() => {
+        // Glossary is non-critical — fail silently if the API is unreachable
+      });
   }, []);
 
   // Scanning function to traverse text nodes

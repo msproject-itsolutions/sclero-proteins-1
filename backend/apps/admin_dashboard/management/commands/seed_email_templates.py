@@ -20,6 +20,37 @@ SIGNOFF = "— The Sclero Proteins team"
 # ---------------------------------------------------------------- Global templates
 GLOBAL_TEMPLATES = [
     {
+        # Sent by the send_abandoned_cart_reminders job, 24h after a cart goes quiet.
+        'event': 'abandoned_cart',
+        'subject': 'You left something behind, {customer_name}',
+        'body': (
+            "Hi {customer_name},\n\n"
+            "You left {item_count} item(s) in your basket at Sclero Proteins:\n\n"
+            "{items}\n\n"
+            "They are still saved — pick up where you left off:\n"
+            "{cart_url}\n\n"
+            "If you have a question about any of it, just reply to this email "
+            "and a human will answer.\n\n"
+            + SIGNOFF
+        ),
+    },
+    {
+        # Sent by the send_review_requests job, ~30 days after delivery.
+        'event': 'review_request',
+        'subject': 'How are you getting on with {product_name}?',
+        'body': (
+            "Hi {customer_name},\n\n"
+            "It has been about a month since order #{order_number} arrived, so you "
+            "have had a proper chance to try {product_name}.\n\n"
+            "If you have a minute, we would love to hear how you are getting on. "
+            "Your review helps other people choose with more confidence:\n"
+            "{review_url}\n\n"
+            "And if something has not lived up to expectations, reply to this "
+            "email — we would rather hear it from you directly.\n\n"
+            + SIGNOFF
+        ),
+    },
+    {
         'event': 'order_confirmation',
         'subject': 'Order #{order_number} confirmed — thank you, {customer_name}',
         'body': (

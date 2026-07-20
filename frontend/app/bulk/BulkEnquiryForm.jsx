@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react';
 import { Check, Send, Package, Factory, Handshake, Store } from 'lucide-react';
-import { getApiUrl } from '../../lib/api';
+import { postJson } from '../../lib/api';
+import { firstApiError, validateEnquiry } from '../../lib/formValidation';
 
 const ENQUIRY_TYPES = [
   { value: 'BULK', label: 'Bulk ingredient supply', icon: Package },
@@ -34,22 +35,28 @@ export default function BulkEnquiryForm() {
 
   const upd = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
-    setSubmitting(true);
     setError('');
-    fetch(getApiUrl('/api/enquiries/'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
-    })
-      .then((res) => res.json().then((d) => ({ ok: res.ok, d })))
-      .then(({ ok, d }) => {
-        if (!ok) throw new Error(d.detail || 'Submission failed');
-        setDone(true);
-      })
-      .catch((err) => setError(err.message))
-      .finally(() => setSubmitting(false));
+    const { cleaned, error: validationError } = validateEnquiry(form, {
+      requirePhone: true,
+      requireCountry: true,
+    });
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    setForm(cleaned);
+    setSubmitting(true);
+    try {
+      const { response, data } = await postJson('/api/enquiries/', cleaned);
+      if (!response.ok) throw new Error(firstApiError(data, 'Submission failed. Please try again.'));
+      setDone(true);
+    } catch (err) {
+      setError(err.message || 'Submission failed. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -98,6 +105,7 @@ export default function BulkEnquiryForm() {
                 <input
                   id="bulk-name"
                   required
+                  minLength={2}
                   autoComplete="name"
                   placeholder="Your name"
                   value={form.name}
@@ -135,6 +143,8 @@ export default function BulkEnquiryForm() {
                 <label htmlFor="bulk-phone" className="sr-only">Phone</label>
                 <input
                   id="bulk-phone"
+                  type="tel"
+                  required
                   autoComplete="tel"
                   placeholder="Phone"
                   value={form.phone}
@@ -159,6 +169,7 @@ export default function BulkEnquiryForm() {
                 <label htmlFor="bulk-country" className="sr-only">Country</label>
                 <input
                   id="bulk-country"
+                  required
                   autoComplete="country-name"
                   placeholder="Country"
                   value={form.country}
@@ -181,6 +192,8 @@ export default function BulkEnquiryForm() {
               <label htmlFor="bulk-message" className="sr-only">Requirement description</label>
               <textarea
                 id="bulk-message"
+                required
+                minLength={10}
                 rows={4}
                 placeholder="Tell us about your requirement…"
                 value={form.message}

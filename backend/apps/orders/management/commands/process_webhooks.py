@@ -1,5 +1,5 @@
-import time
 from datetime import timedelta
+from decimal import Decimal, InvalidOperation
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 from django.db import transaction
@@ -42,34 +42,52 @@ class Command(BaseCommand):
             self.process_event(event)
 
     def process_event(self, event):
-        event.attempts += 1
-        event.last_attempt_at = timezone.now()
-        self.stdout.write(f"Processing event {event.id} ({event.gateway} - {event.event_type}), Attempt #{event.attempts}")
+        # Claim and process one event under a row lock. The scheduler lease is
+        # the normal single-worker guard; this lock also protects against a
+        # manual command overlapping a scheduled run.
+        with transaction.atomic():
+            event = WebhookEvent.objects.select_for_update().get(pk=event.pk)
+            now = timezone.now()
+            if event.status not in ('PENDING', 'FAILED'):
+                return
+            if event.next_attempt_at and event.next_attempt_at > now:
+                return
 
-        try:
-            with transaction.atomic():
-                self.execute_business_logic(event)
-            event.status = 'PROCESSED'
-            event.error_log = ''
-            event.next_attempt_at = None
-            event.save()
-            self.stdout.write(self.style.SUCCESS(f"Event {event.id} processed successfully."))
-        except Exception as e:
-            import traceback
-            error_msg = f"{str(e)}\n\n{traceback.format_exc()}"
-            event.error_log = error_msg
-            
-            if event.attempts >= 7:
-                event.status = 'DLQ'
-                event.next_attempt_at = None
-                self.stdout.write(self.style.ERROR(f"Event {event.id} failed persistently. Routed to Dead Letter Queue (DLQ)."))
+            event.attempts += 1
+            event.last_attempt_at = now
+            self.stdout.write(f"Processing event {event.id} ({event.gateway} - {event.event_type}), Attempt #{event.attempts}")
+
+            try:
+                # A nested savepoint rolls back partial order/log changes while
+                # allowing the failure state and retry schedule to be recorded.
+                with transaction.atomic():
+                    self.execute_business_logic(event)
+            except Exception as e:
+                import traceback
+                error_msg = str(e)[:2000]
+                event.error_message = error_msg
+                event.error_log = f"{error_msg}\n\n{traceback.format_exc()}"[:10000]
+
+                if event.attempts >= 7:
+                    event.status = 'DLQ'
+                    event.next_attempt_at = None
+                    self.stdout.write(self.style.ERROR(f"Event {event.id} failed persistently. Routed to Dead Letter Queue (DLQ)."))
+                else:
+                    event.status = 'FAILED'
+                    delay = BACKOFFS[event.attempts - 1]
+                    event.next_attempt_at = timezone.now() + delay
+                    self.stdout.write(self.style.WARNING(f"Event {event.id} failed. Scheduled next attempt in {delay} (at {event.next_attempt_at})"))
             else:
-                event.status = 'FAILED'
-                delay = BACKOFFS[event.attempts - 1]
-                event.next_attempt_at = timezone.now() + delay
-                self.stdout.write(self.style.WARNING(f"Event {event.id} failed. Scheduled next attempt in {delay} (at {event.next_attempt_at})"))
-            
-            event.save()
+                event.status = 'PROCESSED'
+                event.error_log = ''
+                event.error_message = ''
+                event.next_attempt_at = None
+                self.stdout.write(self.style.SUCCESS(f"Event {event.id} processed successfully."))
+
+            event.save(update_fields=[
+                'attempts', 'last_attempt_at', 'status', 'error_log',
+                'error_message', 'next_attempt_at',
+            ])
 
     def execute_business_logic(self, event):
         payload = event.payload
@@ -95,20 +113,36 @@ class Command(BaseCommand):
         # Find matching order by payment_id
         order = None
         if payment_id:
-            order = Order.objects.filter(payment_id=payment_id).first()
+            order = Order.objects.select_for_update().filter(payment_id=payment_id).first()
         if not order and parsed_event.get('order_id'):
-            order = Order.objects.filter(id=parsed_event.get('order_id')).first()
+            order = Order.objects.select_for_update().filter(id=parsed_event.get('order_id')).first()
         if not order:
             # Maybe look by order ID stored in metadata (Stripe client_reference_id or Razorpay notes)
             order_id = self.extract_order_id_from_metadata(event, payload)
             if order_id:
-                order = Order.objects.filter(id=order_id).first()
+                order = Order.objects.select_for_update().filter(id=order_id).first()
         
         if not order:
             raise Exception(f"No matching order found for transaction ID '{payment_id}'. Queued for retry.")
 
-        # If order is already paid, we're done
-        if order.payment_status == 'PAID':
+        if event_type == 'payment.succeeded':
+            try:
+                paid_amount = Decimal(str(parsed_event.get('amount') or '0'))
+            except InvalidOperation as exc:
+                raise ValueError('Webhook contained an invalid payment amount.') from exc
+            paid_currency = str(parsed_event.get('currency') or '').upper()
+            if paid_amount and paid_amount != order.total:
+                raise ValueError(
+                    f'Webhook amount {paid_amount} does not match order total {order.total}.'
+                )
+            if paid_currency and paid_currency != order.currency_code.upper():
+                raise ValueError(
+                    f'Webhook currency {paid_currency} does not match order currency {order.currency_code}.'
+                )
+
+        # A duplicate success is a no-op; other event types (notably refunds)
+        # must still be applied to an already-paid order.
+        if event_type == 'payment.succeeded' and order.payment_status == 'PAID':
             self.stdout.write(f"Order #{order.id} is already marked as PAID.")
             return
 
@@ -119,13 +153,15 @@ class Command(BaseCommand):
             order.save(update_fields=['payment_status', 'status', 'updated_at'])
 
             # Create Payment Log
-            PaymentLog.objects.create(
+            PaymentLog.objects.get_or_create(
                 order=order,
                 transaction_id=payment_id,
-                gateway=gateway_code,
-                amount=order.total,
-                status='PAID',
-                raw_response=payload
+                defaults={
+                    'gateway': gateway_code,
+                    'amount': order.total,
+                    'status': 'PAID',
+                    'raw_response': payload,
+                },
             )
 
             # Generate Invoice PDF
@@ -144,6 +180,10 @@ class Command(BaseCommand):
         elif event_type == 'payment.failed':
             order.payment_status = 'FAILED'
             order.save(update_fields=['payment_status', 'updated_at'])
+        elif event_type == 'refund.processed':
+            order.payment_status = 'REFUNDED'
+            order.status = 'REFUNDED'
+            order.save(update_fields=['payment_status', 'status', 'updated_at'])
 
     def extract_order_id_from_metadata(self, event, payload):
         gateway = event.gateway

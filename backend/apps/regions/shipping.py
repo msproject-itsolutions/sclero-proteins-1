@@ -1,19 +1,21 @@
-"""
-Shipping-fee calculation.
-
-Uses admin-defined ShippingZones/ShippingRates when configured for the
-destination, and falls back to a sensible regional default otherwise (so the
-store keeps working before any zones are set up).
-
-A zone matches a destination when its country list contains the destination
-country (or the list is empty = all countries) AND, if the zone declares
-`states`, the destination state is in that list. State-specific zones take
-precedence over generic country zones, so owners can add e.g. a remote-area
-surcharge without affecting the rest of the country.
-"""
-from decimal import Decimal, InvalidOperation
+"""Admin-configurable shipping zones, methods, and price calculation."""
+import re
+import unicodedata
+from decimal import Decimal, InvalidOperation, ROUND_CEILING
 
 from .models import ShippingZone
+
+
+MONEY = Decimal('0.01')
+
+
+def _fold(value):
+    text = unicodedata.normalize('NFKD', str(value or ''))
+    return ''.join(ch for ch in text if not unicodedata.combining(ch)).strip().lower()
+
+
+def _postcode(value):
+    return re.sub(r'[^A-Z0-9]', '', str(value or '').upper())
 
 
 def _dec(value, default='0'):
@@ -23,56 +25,159 @@ def _dec(value, default='0'):
         return Decimal(default)
 
 
-def _default_cost(region, subtotal):
-    if region and getattr(region, 'code', '') == 'IN':
-        return Decimal('0.00') if subtotal >= Decimal('3000') else Decimal('150.00')
-    return Decimal('0.00') if subtotal >= Decimal('50') else Decimal('5.00')
-
-
-def _applicable_rate(zones, subtotal):
-    """Lowest applicable rate price across the given zones, or None."""
-    best = None
-    for z in zones:
-        for r in z.rates.all():
-            lo = r.min_value or Decimal('0')
-            hi = r.max_value
-            if subtotal < lo:
+def _postcode_matches(postcode, rules):
+    """Match exact codes, prefixes (``AB12*``), or inclusive ranges."""
+    code = _postcode(postcode)
+    if not code:
+        return False
+    for rule in rules or []:
+        if isinstance(rule, dict):
+            start = _postcode(rule.get('start'))
+            end = _postcode(rule.get('end') or rule.get('start'))
+            if not start:
                 continue
-            if hi is not None and subtotal > hi:
-                continue
-            price = Decimal('0.00') if r.rate_type == 'FREE' else _dec(r.price)
-            if best is None or price < best:
-                best = price
-    return best
+            if start == end and code.startswith(start):
+                return True
+            if len(start) == len(end) and start <= code[:len(start)] <= end:
+                return True
+        else:
+            raw = str(rule or '').strip().upper()
+            prefix = raw.endswith('*')
+            token = _postcode(raw[:-1] if prefix else raw)
+            if token and (code.startswith(token) if prefix else code == token):
+                return True
+    return False
 
 
-def calculate_shipping(region, country='', state='', postcode='', subtotal=0):
-    """Return a Decimal shipping cost for the destination."""
+def _zone_matches(zone, country, state, city, postcode):
+    countries = {str(c).strip().upper() for c in (zone.countries or []) if str(c).strip()}
+    if countries and country not in countries:
+        return None
+
+    score = 0
+    states = {_fold(s) for s in (zone.states or []) if _fold(s)}
+    if states:
+        if not state or state not in states:
+            return None
+        score += 1
+
+    cities = {_fold(c) for c in (getattr(zone, 'cities', None) or []) if _fold(c)}
+    if cities:
+        if not city or city not in cities:
+            return None
+        score += 1
+
+    postal_ranges = getattr(zone, 'postal_ranges', None) or []
+    if postal_ranges:
+        if not _postcode_matches(postcode, postal_ranges):
+            return None
+        score += 1
+
+    if countries:
+        score += 1
+    return score
+
+
+def _metric_for(rate, subtotal, weight_kg, quantity):
+    if rate.rate_type == 'WEIGHT':
+        return weight_kg
+    if rate.rate_type == 'QTY':
+        return quantity
+    return subtotal
+
+
+def _rate_option(rate, subtotal, weight_kg, quantity, postcode):
+    metric = _metric_for(rate, subtotal, weight_kg, quantity)
+    lo = _dec(rate.min_value)
+    hi = _dec(rate.max_value) if rate.max_value is not None else None
+    if metric < lo or (hi is not None and metric > hi):
+        return None
+
+    if rate.rate_type == 'FREE':
+        cost = Decimal('0')
+    elif rate.free_above is not None and subtotal >= _dec(rate.free_above):
+        cost = Decimal('0')
+    else:
+        cost = _dec(rate.price) + _dec(getattr(rate, 'handling_fee', 0))
+        per_unit = _dec(getattr(rate, 'per_unit_price', 0))
+        if per_unit and rate.rate_type in ('WEIGHT', 'QTY'):
+            units = max(metric - lo, Decimal('0')).to_integral_value(rounding=ROUND_CEILING)
+            cost += units * per_unit
+
+        surcharge_rules = [x.strip() for x in str(rate.surcharge_postcodes or '').split(',') if x.strip()]
+        if surcharge_rules and _postcode_matches(postcode, surcharge_rules):
+            cost += _dec(getattr(rate, 'surcharge_amount', 0))
+
+    cost = max(cost, Decimal('0')).quantize(MONEY)
+    return {
+        'rate_id': rate.id,
+        'name': rate.name,
+        'method': rate.method or rate.name,
+        'description': rate.description or '',
+        'estimated_days': rate.estimated_days or '',
+        'cost': cost,
+        'free': cost == Decimal('0.00'),
+        'rate_type': rate.rate_type,
+        'priority': rate.priority,
+    }
+
+
+def calculate_shipping_options(region, country='', state='', city='', postcode='', subtotal=0,
+                               weight_g=0, quantity=0):
+    """Return all applicable delivery methods for the best matching zone."""
     subtotal = _dec(subtotal)
-    country = (country or '').upper().strip()
-    state = (state or '').strip().lower()
+    weight_kg = _dec(weight_g) / Decimal('1000')
+    quantity = _dec(quantity)
+    country = str(country or '').strip().upper()
+    state, city = _fold(state), _fold(city)
 
-    zones = list(
-        ShippingZone.objects.filter(region=region, is_active=True).prefetch_related('rates')
+    zones = list(ShippingZone.objects.filter(region=region, is_active=True).prefetch_related('rates'))
+    matched = []
+    for zone in zones:
+        specificity = _zone_matches(zone, country, state, city, postcode)
+        if specificity is not None:
+            matched.append((getattr(zone, 'priority', 0), specificity, zone))
+
+    if not matched:
+        # Shipping fails closed until an administrator configures a matching
+        # zone and rate; checkout must never invent a delivery charge.
+        return []
+
+    # A destination belongs to the highest-priority, most-specific matching
+    # zone. Tied zones are combined, allowing several methods in one location.
+    best_key = max((priority, specificity) for priority, specificity, _zone in matched)
+    selected_zones = [zone for priority, specificity, zone in matched if (priority, specificity) == best_key]
+    options = []
+    for zone in selected_zones:
+        for rate in zone.rates.all():
+            if not rate.is_active:
+                continue
+            option = _rate_option(rate, subtotal, weight_kg, quantity, postcode)
+            if option:
+                options.append(option)
+
+    if not options:
+        return []
+    return sorted(options, key=lambda item: (item['priority'], item['cost'], item['method'].lower()))
+
+
+def calculate_shipping(region, country='', state='', city='', postcode='', subtotal=0,
+                       weight_g=0, quantity=0, rate_id=None, return_option=False):
+    """Return the selected/cheapest shipping cost, or its full option payload."""
+    options = calculate_shipping_options(
+        region, country=country, state=state, city=city, postcode=postcode,
+        subtotal=subtotal, weight_g=weight_g, quantity=quantity,
     )
-
-    generic, state_specific = [], []
-    for z in zones:
-        countries = [c.upper() for c in (z.countries or [])]
-        if countries and country and country not in countries:
-            continue
-        states = [s.strip().lower() for s in (z.states or [])]
-        if states:
-            if state and state in states:
-                state_specific.append(z)
-            # zone declares states but none match -> not applicable
-            continue
-        generic.append(z)
-
-    # State-specific zones win; otherwise fall back to generic country zones.
-    for bucket in (state_specific, generic):
-        price = _applicable_rate(bucket, subtotal)
-        if price is not None:
-            return price
-
-    return _default_cost(region, subtotal)
+    if not options:
+        raise ValueError('Shipping is not available for this destination and order.')
+    if rate_id not in (None, ''):
+        try:
+            wanted = int(rate_id)
+        except (TypeError, ValueError):
+            raise ValueError('Invalid shipping method.')
+        option = next((item for item in options if item['rate_id'] == wanted), None)
+        if option is None:
+            raise ValueError('The selected shipping method is no longer available for this order.')
+    else:
+        option = min(options, key=lambda item: item['cost'])
+    return option if return_option else option['cost']

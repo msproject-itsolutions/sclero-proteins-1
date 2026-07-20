@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { useSelector, useDispatch } from 'react-redux';
 import Link from 'next/link';
@@ -11,7 +11,8 @@ import {
 } from 'lucide-react';
 import StoreShell from '../../components/StoreShell';
 import ProductCatalog from '../../components/ProductCatalog';
-import { getApiUrl } from '../../lib/api';
+import { postJson } from '../../lib/api';
+import { firstApiError, validateEnquiry } from '../../lib/formValidation';
 
 export default function CategoryPage() {
   const params = useParams();
@@ -48,8 +49,8 @@ export default function CategoryPage() {
         };
       case 'about':
         return {
-          title: 'About Us & Global Operations | Sclero Proteins',
-          desc: 'Learn about our UK-India operations, state-of-the-art manufacturing facilities, organic purity standards, and certifications.'
+          title: 'Our Story & Global Operations | Sclero Proteins',
+          desc: 'Learn about the Sclero story, our UK-India operations, and our focus on clear, trustworthy wellness support.'
         };
       default:
         return {
@@ -63,27 +64,37 @@ export default function CategoryPage() {
   const [inquiryEmail, setInquiryEmail] = useState('');
   const [inquiryMessage, setInquiryMessage] = useState('');
   const [inquirySent, setInquirySent] = useState(false);
+  const [inquiryError, setInquiryError] = useState('');
+  const [inquirySubmitting, setInquirySubmitting] = useState(false);
 
-  const handleInquirySubmit = (e) => {
+  const handleInquirySubmit = async (e) => {
     e.preventDefault();
-    if (!(inquiryName && inquiryEmail && inquiryMessage)) return;
-    fetch(getApiUrl('/api/enquiries/'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: inquiryName,
-        email: inquiryEmail,
-        message: inquiryMessage,
+    setInquiryError('');
+    const { cleaned, error } = validateEnquiry({
+      name: inquiryName,
+      email: inquiryEmail,
+      message: inquiryMessage,
+    });
+    if (error) {
+      setInquiryError(error);
+      return;
+    }
+    setInquirySubmitting(true);
+    try {
+      const { response, data } = await postJson('/api/enquiries/', {
+        ...cleaned,
         enquiry_type: 'DISTRIBUTOR',
-      }),
-    })
-      .catch(() => {})
-      .finally(() => {
-        setInquirySent(true);
-        setInquiryName('');
-        setInquiryEmail('');
-        setInquiryMessage('');
       });
+      if (!response.ok) throw new Error(firstApiError(data, 'Could not submit your request.'));
+      setInquirySent(true);
+      setInquiryName('');
+      setInquiryEmail('');
+      setInquiryMessage('');
+    } catch (error) {
+      setInquiryError(error.message || 'Could not submit your request.');
+    } finally {
+      setInquirySubmitting(false);
+    }
   };
 
   // Render Page Content based on Category slug
@@ -362,10 +373,11 @@ export default function CategoryPage() {
                     <input type="email" placeholder="Business email" value={inquiryEmail} onChange={(e) => setInquiryEmail(e.target.value)} className="w-full rounded border border-edge p-2.5 text-xs text-ink-primary focus:outline-none" required />
                   </div>
                   <div>
-                    <textarea placeholder="Describe details..." value={inquiryMessage} onChange={(e) => setInquiryMessage(e.target.value)} rows={3} className="w-full rounded border border-edge p-2.5 text-xs text-ink-primary focus:outline-none" required />
+                    <textarea placeholder="Describe details..." value={inquiryMessage} onChange={(e) => setInquiryMessage(e.target.value)} rows={3} className="w-full rounded border border-edge p-2.5 text-xs text-ink-primary focus:outline-none" required minLength={10} />
                   </div>
-                  <button type="submit" className="w-full btn-primary py-2.5 text-xs font-semibold">
-                    Submit OEM Request
+                  {inquiryError && <p className="rounded border border-ink-danger/20 bg-surface-muted p-2.5 text-xs font-semibold text-ink-danger">{inquiryError}</p>}
+                  <button type="submit" disabled={inquirySubmitting} className="w-full btn-primary py-2.5 text-xs font-semibold disabled:opacity-60">
+                    {inquirySubmitting ? 'Submitting…' : 'Submit OEM Request'}
                   </button>
                 </form>
               )}

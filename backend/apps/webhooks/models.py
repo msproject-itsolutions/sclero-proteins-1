@@ -1,7 +1,6 @@
 import uuid
 import secrets
 from django.db import models
-from django.utils import timezone
 
 class WebhookSubscription(models.Model):
     name = models.CharField(max_length=100)

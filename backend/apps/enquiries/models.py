@@ -11,6 +11,7 @@ class BulkEnquiry(models.Model):
         ('CLOSED', 'Closed'),
     ]
     ENQUIRY_TYPES = [
+        ('GENERAL', 'General support'),
         ('BULK', 'Bulk ingredient supply'),
         ('OEM', 'OEM / private label'),
         ('DISTRIBUTOR', 'Distributor partnership'),

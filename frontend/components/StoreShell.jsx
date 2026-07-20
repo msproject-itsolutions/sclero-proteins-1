@@ -4,19 +4,19 @@ import React, { useEffect, useState } from 'react';
 import Navbar from './Navbar';
 import Footer from './Footer';
 import CartDrawer from './CartDrawer';
-import CheckoutModal from './CheckoutModal';
 import CookieConsent from './CookieConsent';
 import PromoBanner from './PromoBanner';
 import useStoreBootstrap from '../hooks/useStoreBootstrap';
 import usePageView from '../hooks/usePageView';
 import { trackEvent } from '../utils/analytics';
 import { useSelector } from 'react-redux';
+import { useRouter } from 'next/navigation';
 
 export default function StoreShell({ children, showFooter = true, cartOpenSignal, checkoutOpenSignal }) {
+  const router = useRouter();
   const { currentRegion } = useStoreBootstrap();
   usePageView();
   const [cartOpen, setCartOpen] = useState(false);
-  const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
 
   // Scroll-reveal: elements with .reveal fade/rise in as they enter the
@@ -52,9 +52,9 @@ export default function StoreShell({ children, showFooter = true, cartOpenSignal
 
   useEffect(() => {
     if (checkoutOpenSignal) {
-      setCheckoutOpen(true);
+      router.push('/checkout');
     }
-  }, [checkoutOpenSignal]);
+  }, [checkoutOpenSignal, router]);
 
   return (
     <div className="flex min-h-screen flex-col bg-brand-bg text-brand-text">
@@ -72,15 +72,13 @@ export default function StoreShell({ children, showFooter = true, cartOpenSignal
         <CartDrawer
           onClose={() => setCartOpen(false)}
           onOpenCheckout={() => {
-            setCheckoutOpen(true);
+            router.push('/checkout');
             trackEvent('InitiateCheckout', {
               currency: currentRegion === 'IN' ? 'INR' : 'GBP',
             });
           }}
         />
       )}
-
-      {checkoutOpen && <CheckoutModal onClose={() => setCheckoutOpen(false)} />}
 
 
 
@@ -90,8 +88,8 @@ export default function StoreShell({ children, showFooter = true, cartOpenSignal
 }
 
 export function useStoreModals() {
+  const router = useRouter();
   const [cartOpen, setCartOpen] = useState(false);
-  const [checkoutOpen, setCheckoutOpen] = useState(false);
   const currentRegion = useSelector((state) => state.region.currentRegion);
 
   const modals = (
@@ -100,22 +98,21 @@ export function useStoreModals() {
         <CartDrawer
           onClose={() => setCartOpen(false)}
           onOpenCheckout={() => {
-            setCheckoutOpen(true);
+            router.push('/checkout');
             trackEvent('InitiateCheckout', {
               currency: currentRegion === 'IN' ? 'INR' : 'GBP',
             });
           }}
         />
       )}
-      {checkoutOpen && <CheckoutModal onClose={() => setCheckoutOpen(false)} />}
     </>
   );
 
   return {
     cartOpen,
     setCartOpen,
-    checkoutOpen,
-    setCheckoutOpen,
+    checkoutOpen: false,
+    setCheckoutOpen: () => { router.push('/checkout'); },
     adminOpen: false,
     setAdminOpen: () => { window.location.href = '/admin?section=audit'; },
     modals,

@@ -17,12 +17,17 @@ const initialState = {
   branding: {
     logoUrl: '',
     logoWordmarkUrl: '',
-    whatsappNumberIN: '918047100000',
-    whatsappNumberUK: '442045740000',
-    emailIN: 'support@scleroproteins.in',
-    emailUK: 'support@scleroproteins.co.uk',
-    phoneIN: '+91 80 4710 0000',
-    phoneUK: '+44 (0)20 4574 0000',
+    whatsappNumberIN: '',
+    whatsappNumberUK: '',
+    emailIN: '',
+    emailUK: '',
+    phoneIN: '',
+    phoneUK: '',
+    companyInfo: {},
+    socialLinks: {},
+    announcementEnabled: false,
+    announcementIN: '',
+    announcementUK: '',
   }
 };
 

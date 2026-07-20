@@ -5,19 +5,31 @@ import { useSelector, useDispatch } from 'react-redux';
 import Link from 'next/link';
 import {
   LayoutDashboard, Package, Layers, ShoppingCart, Truck, Plus, Pencil, Archive, X, Save,
-  ShieldAlert, ShieldCheck, CreditCard, Mail, ShoppingBag, Image as ImageIcon, Film, Download, Printer,
+  ShieldAlert, ShieldCheck, CreditCard, ShoppingBag, Image as ImageIcon, Film, Download, Printer,
   Home, ChevronRight, TrendingUp, Users as UsersIcon, Search,
   Banknote, ReceiptText, MessageSquare, Activity, CheckCircle2, UserRound,
-  Globe, FileText, BarChart3, HelpCircle, RefreshCw, Sliders, UserPlus, Eye, Settings, Trash2, Tag,
-  Star, Palette, Cookie, Megaphone, Menu as MenuIcon, Upload, Undo, Link as LinkIcon, Loader2, AlertCircle, ToggleLeft, ToggleRight, BookOpen
+  FileText, BarChart3, HelpCircle, RefreshCw, Sliders, UserPlus, Eye, Settings, Trash2,
+  Star, Palette, Cookie, Menu as MenuIcon, Upload, Undo, Link as LinkIcon, Loader2, AlertCircle, ToggleLeft, ToggleRight, BookOpen, Bell
 } from 'lucide-react';
 import StoreShell from '../../components/StoreShell';
 import { fetchProfile } from '../../store/authSlice';
 import { getApiUrl } from '../../lib/api';
 import { authenticatedFetch } from '../../lib/authFetch';
+import { DEFAULT_HOMEPAGE_SETTINGS, normalizeHomepageSettings } from '../../lib/homepageContent';
 import ProductEditorPanel from '../../components/admin/ProductEditorPanel';
 import CreateOrderPanel from '../../components/admin/CreateOrderPanel';
 import ShippingZonePanel from '../../components/admin/ShippingZonePanel';
+import MarketsPanel from '../../components/admin/MarketsPanel';
+import PasswordInput from '../../components/PasswordInput';
+
+// Hero banner upload sizes. These mirror the <picture> breakpoints and section
+// heights in components/HeroSection.jsx (640px / 1024px; 420/480/540px tall),
+// doubled for retina. If that component's breakpoints change, change these too.
+const BANNER_SPECS = [
+  { slot: 'Desktop', size: '2560 × 1080', when: 'above 1024 px' },
+  { slot: 'Tablet', size: '2048 × 960', when: '641 – 1024 px' },
+  { slot: 'Mobile', size: '1280 × 840', when: 'up to 640 px' },
+];
 
 const ORDER_STATUSES = ['PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'REFUNDED'];
 const STATUS_COLOR = {
@@ -82,11 +94,9 @@ async function uploadAdminMedia(authFetch, file) {
 }
 
 function useAuthFetch() {
-  const access = useSelector((s) => s.auth.access);
   return useCallback(
     (path, opts = {}) => {
       const headers = {
-        ...(access ? { Authorization: `Bearer ${access}` } : {}),
         ...(opts.headers || {}),
       };
       if (!(opts.body instanceof FormData) && !headers['Content-Type']) {
@@ -95,9 +105,9 @@ function useAuthFetch() {
       return authenticatedFetch(path, {
         ...opts,
         headers,
-      }, access);
+      });
     },
-    [access]
+    []
   );
 }
 
@@ -131,7 +141,7 @@ function StatCard({ icon: Icon, label, value, sub, accent, onClick }) {
       </div>
       <p className="font-display text-[28px] font-medium leading-none text-ink-primary">{value}</p>
       <p className="kicker mt-2">{label}</p>
-      {sub && <p className="mt-0.5 text-[11px] text-ink-subtle">{sub}</p>}
+      {sub && <p className="mt-0.5 text-[13px] text-ink-subtle">{sub}</p>}
     </button>
   );
 }
@@ -144,7 +154,7 @@ function RevenueTrendCard({ authFetch }) {
     authFetch('/api/admin/reports/revenue-trend/?days=90')
       .then((r) => r.json()).then(setData).catch(() => setErr(true));
   }, [authFetch]);
-  if (err) return <div className="rounded-lg border border-edge bg-white shadow-card p-5 text-xs text-brand-muted">Revenue trend unavailable.</div>;
+  if (err) return <div className="rounded-lg border border-edge bg-white shadow-card p-5 text-sm text-brand-muted">Revenue trend unavailable.</div>;
   if (!data) return <div className="rounded-lg border border-edge bg-white shadow-card p-5"><div className="h-6 w-40 mb-3 rounded bg-surface-muted animate-pulse" /><div className="h-28 rounded bg-surface-muted animate-pulse" /></div>;
   // bucket by currency
   const byCcy = {};
@@ -163,7 +173,7 @@ function RevenueTrendCard({ authFetch }) {
     <div className="rounded-lg border border-edge bg-white shadow-card p-5 lg:col-span-2">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-ink-primary">Revenue trend</h3>
-        <span className="text-[11px] font-medium text-brand-muted">Last 90 days</span>
+        <span className="text-[13px] font-medium text-brand-muted">Last 90 days</span>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         {currencies.map((ccy) => {
@@ -172,8 +182,8 @@ function RevenueTrendCard({ authFetch }) {
           return (
             <div key={ccy}>
               <div className="mb-1 flex items-center justify-between">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-brand-muted">{ccy}</span>
-                <span className="text-xs font-semibold text-ink-primary">{ccy} {total.toFixed(0)}</span>
+                <span className="text-[13px] font-semibold uppercase tracking-wider text-brand-muted">{ccy}</span>
+                <span className="text-sm font-semibold text-ink-primary">{ccy} {total.toFixed(0)}</span>
               </div>
               <MiniBars series={series} />
             </div>
@@ -201,7 +211,7 @@ function FunnelCard({ authFetch }) {
   return (
     <div className="rounded-lg border border-edge bg-white shadow-card p-5">
       <h3 className="mb-3 text-sm font-semibold text-ink-primary">Conversion funnel</h3>
-      {(!data.pageviews && !data.orders) ? <p className="text-xs text-brand-muted">No traffic recorded yet (last 30 days).</p> : (
+      {(!data.pageviews && !data.orders) ? <p className="text-sm text-brand-muted">No traffic recorded yet (last 30 days).</p> : (
         <div className="space-y-2">
           {stages.map((s, idx) => {
             const v = Number(data[s.k] || 0);
@@ -210,7 +220,7 @@ function FunnelCard({ authFetch }) {
             const pct = idx > 0 && prev > 0 ? Math.round((v / prev) * 100) : null;
             return (
               <div key={s.k}>
-                <div className="flex items-center justify-between text-[11px] font-medium text-brand-muted">
+                <div className="flex items-center justify-between text-[13px] font-medium text-brand-muted">
                   <span>{s.label}{pct != null && <span className="ml-1 text-ink-subtle">({pct}%)</span>}</span>
                   <span className="text-ink-primary">{v}</span>
                 </div>
@@ -235,10 +245,10 @@ function TopCustomersCard({ authFetch }) {
   return (
     <div className="rounded-lg border border-edge bg-white shadow-card p-5">
       <h3 className="mb-3 text-sm font-semibold text-ink-primary">Top customers (CLV)</h3>
-      {rows.length === 0 ? <p className="text-xs text-brand-muted">No paid orders yet.</p> : (
+      {rows.length === 0 ? <p className="text-sm text-brand-muted">No paid orders yet.</p> : (
         <div className="space-y-1.5">
           {rows.map((r) => (
-            <div key={r.email + r.currency} className="flex items-center justify-between text-xs">
+            <div key={r.email + r.currency} className="flex items-center justify-between text-sm">
               <span className="truncate font-medium text-ink-primary" title={r.email}>{r.email.length > 24 ? r.email.slice(0, 22) + '…' : r.email}</span>
               <span className="flex items-center gap-2">
                 <span className="text-brand-muted">{r.orders}x</span>
@@ -261,10 +271,10 @@ function TopProductsCard({ authFetch }) {
   return (
     <div className="rounded-lg border border-edge bg-white shadow-card p-5">
       <h3 className="mb-3 text-sm font-semibold text-ink-primary">Top products (revenue)</h3>
-      {rows.length === 0 ? <p className="text-xs text-brand-muted">No sales recorded.</p> : (
+      {rows.length === 0 ? <p className="text-sm text-brand-muted">No sales recorded.</p> : (
         <div className="space-y-1.5">
           {rows.map((r) => (
-            <div key={`${r.product_id}-${r.currency}`} className="flex items-center justify-between text-xs">
+            <div key={`${r.product_id}-${r.currency}`} className="flex items-center justify-between text-sm">
               <span className="truncate font-medium text-ink-primary" title={r.name}>{(r.name || r.sku || '').slice(0, 28)}</span>
               <span className="flex items-center gap-2">
                 <span className="text-brand-muted">{r.units_sold}u</span>
@@ -278,114 +288,6 @@ function TopProductsCard({ authFetch }) {
   );
 }
 
-/* ----------------------------------------------- Phase C: Reports tab */
-const COUNTRY_COORDS = {
-  GB: { x: 49, y: 30, name: 'United Kingdom' },
-  IE: { x: 47, y: 31, name: 'Ireland' },
-  FR: { x: 49, y: 35, name: 'France' },
-  DE: { x: 52, y: 32, name: 'Germany' },
-  ES: { x: 47, y: 38, name: 'Spain' },
-  IT: { x: 52, y: 37, name: 'Italy' },
-  NL: { x: 51, y: 31, name: 'Netherlands' },
-  BE: { x: 50, y: 32, name: 'Belgium' },
-  IN: { x: 70, y: 47, name: 'India' },
-  AE: { x: 63, y: 45, name: 'UAE' },
-  US: { x: 22, y: 38, name: 'United States' },
-  CA: { x: 22, y: 28, name: 'Canada' },
-  AU: { x: 86, y: 70, name: 'Australia' },
-  SG: { x: 78, y: 56, name: 'Singapore' },
-};
-
-function GeographicMap({ rows }) {
-  // Simple equirectangular illustration. NOT a topo-accurate map -
-  // countries shown as circles at hard-coded centroids, sized by revenue.
-  const maxRev = Math.max(1, ...rows.map((r) => Number(r.revenue || 0)));
-  return (
-    <div className="rounded-lg border border-edge bg-white shadow-card p-5">
-      <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-ink-primary">Geographic sales map</h3>
-        <span className="text-[10px] text-ink-subtle">Illustrative — circles sized by revenue</span>
-      </div>
-      <svg viewBox="0 0 100 60" className="w-full" style={{ background: '#f8fafc', borderRadius: 8 }}>
-        <rect x="0" y="0" width="100" height="60" fill="#f1f5f9" />
-        {/* hint at landmasses with subtle blocks */}
-        <rect x="15" y="20" width="20" height="22" fill="#e2e8f0" />
-        <rect x="40" y="22" width="22" height="22" fill="#e2e8f0" />
-        <rect x="62" y="28" width="22" height="22" fill="#e2e8f0" />
-        <rect x="80" y="60" width="0" height="0" />
-        <rect x="82" y="55" width="10" height="10" fill="#e2e8f0" />
-        {rows.map((r) => {
-          const c = COUNTRY_COORDS[r.country];
-          if (!c) return null;
-          const radius = 1 + (Number(r.revenue || 0) / maxRev) * 5;
-          return (
-            <g key={r.country + r.currency}>
-              <circle cx={c.x} cy={c.y} r={radius} fill="#7c3aed" fillOpacity="0.65" stroke="#5b21b6" strokeWidth="0.2" />
-              <text x={c.x} y={c.y - radius - 0.5} fontSize="2" textAnchor="middle" fill="#1e293b">{r.country}</text>
-            </g>
-          );
-        })}
-      </svg>
-    </div>
-  );
-}
-
-// Geographic sales view: fetches sales-by-country and renders the map + a ranked
-// country table (the data the report already exposes).
-function GeoMapView({ authFetch }) {
-  const [rows, setRows] = useState(null);
-
-  useEffect(() => {
-    authFetch('/api/admin/reports/sales-by-country/?days=365')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        const list = Array.isArray(d) ? d : (d && Array.isArray(d.results) ? d.results : (d && Array.isArray(d.rows) ? d.rows : []));
-        setRows(list);
-      })
-      .catch(() => setRows([]));
-  }, [authFetch]);
-
-  if (rows === null) return <p className="text-sm text-brand-muted">Loading geographic sales…</p>;
-  if (rows.length === 0) {
-    return (
-      <div className="rounded-lg border border-edge bg-white shadow-card p-8 text-center">
-        <p className="text-sm font-semibold text-ink-primary">No country sales yet</p>
-        <p className="mt-1 text-xs text-brand-muted">Once orders come in, revenue by country will appear here.</p>
-      </div>
-    );
-  }
-
-  const sorted = [...rows].sort((a, b) => Number(b.revenue || 0) - Number(a.revenue || 0));
-  return (
-    <div className="space-y-4">
-      <GeographicMap rows={rows} />
-      <div className="overflow-hidden rounded-lg border border-edge bg-white">
-        <table className="w-full text-xs">
-          <thead className="bg-surface-muted text-left text-[10px] font-medium uppercase tracking-wide text-ink-muted border-b border-edge">
-            <tr>
-              <th className="px-3 py-2">Country</th>
-              <th className="px-3 py-2">Orders</th>
-              <th className="px-3 py-2 text-right">Revenue</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-edge-subtle">
-            {sorted.map((r, i) => (
-              <tr key={(r.country || '') + (r.currency || '') + i}>
-                <td className="px-3 py-2 font-semibold text-ink-primary">
-                  {(COUNTRY_COORDS[r.country]?.name) || r.country || '—'}
-                </td>
-                <td className="px-3 py-2 text-brand-muted">{r.orders ?? r.order_count ?? '—'}</td>
-                <td className="px-3 py-2 text-right font-semibold text-ink-primary">
-                  {r.currency ? `${r.currency} ` : ''}{Number(r.revenue || 0).toLocaleString()}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
 
 function ReportsTab({ authFetch, initialTab }) {
   const [tab, setTab] = useState(initialTab || 'sales');
@@ -419,16 +321,26 @@ function ReportsTab({ authFetch, initialTab }) {
     authFetch(`${endpointFor(tab)}${qs}`).then((r) => r.json()).then(setData).catch(() => setData(null)).finally(() => setLoading(false));
   }, [tab, days, region, authFetch]);
 
-  const downloadCsv = () => {
-    // open in new window with token-less endpoint - use authFetch to get blob
-    authFetch(`${endpointFor(tab)}${qs}&format=csv`).then((r) => r.blob()).then((blob) => {
-      const url = URL.createObjectURL(blob);
+  const downloadCsv = async () => {
+    try {
+      const res = await authFetch(`${endpointFor(tab)}${qs}&export=csv`);
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        alert(errJson.detail || 'Failed to download CSV report.');
+        return;
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = `sclero-${csvNameFor(tab)}-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(url);
-    });
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      alert('Could not export CSV file.');
+    }
   };
 
   const TABS = [
@@ -441,7 +353,7 @@ function ReportsTab({ authFetch, initialTab }) {
 
   const renderTable = () => {
     if (loading) return <div className="h-40 rounded bg-surface-muted animate-pulse" />;
-    if (!data) return <p className="text-xs text-brand-muted">No data.</p>;
+    if (!data) return <p className="text-sm text-brand-muted">No data.</p>;
 
     if (tab === 'repeat') {
       return (
@@ -477,7 +389,7 @@ function ReportsTab({ authFetch, initialTab }) {
     }
 
     const rows = Array.isArray(data) ? data : [];
-    if (rows.length === 0) return <p className="text-xs text-brand-muted">No rows for this window.</p>;
+    if (rows.length === 0) return <p className="text-sm text-brand-muted">No rows for this window.</p>;
 
     const headers = tab === 'sales'
       ? ['Country', 'Currency', 'Orders', 'Revenue']
@@ -487,8 +399,8 @@ function ReportsTab({ authFetch, initialTab }) {
 
     return (
       <div className="overflow-x-auto rounded-md border border-edge">
-        <table className="w-full text-xs">
-          <thead className="bg-surface-muted text-[10px] font-medium uppercase tracking-wide text-ink-muted border-b border-edge">
+        <table className="w-full text-sm">
+          <thead className="bg-surface-muted text-[12px] font-medium uppercase tracking-wide text-ink-muted border-b border-edge">
             <tr>{headers.map((h) => <th key={h} className="px-3 py-2 text-left">{h}</th>)}</tr>
           </thead>
           <tbody>
@@ -528,24 +440,23 @@ function ReportsTab({ authFetch, initialTab }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <label className="text-[11px] font-semibold text-brand-muted">Region</label>
-        <select value={region} onChange={(e) => setRegion(e.target.value)} className="rounded-sm border border-edge px-2 py-1 text-xs">
+        <label className="text-[13px] font-semibold text-brand-muted">Region</label>
+        <select value={region} onChange={(e) => setRegion(e.target.value)} className="rounded-sm border border-edge px-2 py-1 text-sm">
           <option value="all">All</option>
           <option value="UK">UK</option>
           <option value="IN">IN</option>
         </select>
-        <label className="text-[11px] font-semibold text-brand-muted ml-2">Days</label>
-        <select value={days} onChange={(e) => setDays(Number(e.target.value))} className="rounded-sm border border-edge px-2 py-1 text-xs">
+        <label className="text-[13px] font-semibold text-brand-muted ml-2">Days</label>
+        <select value={days} onChange={(e) => setDays(Number(e.target.value))} className="rounded-sm border border-edge px-2 py-1 text-sm">
           {[7, 30, 90, 180, 365].map((n) => <option key={n} value={n}>{n}</option>)}
         </select>
         {canDownload && (
-          <button onClick={downloadCsv} className="ml-auto inline-flex items-center gap-1.5 rounded-sm border border-edge bg-white px-3 py-1.5 text-xs font-semibold text-ink-primary hover:border-edge-strong">
+          <button onClick={downloadCsv} className="ml-auto inline-flex items-center gap-1.5 rounded-sm border border-edge bg-white px-3 py-1.5 text-sm font-semibold text-ink-primary hover:border-edge-strong">
             <Download className="h-3.5 w-3.5" /> Download CSV
           </button>
         )}
       </div>
       <div className="rounded-lg border border-edge bg-white shadow-card p-5">{renderTable()}</div>
-      {tab === 'sales' && Array.isArray(data) && data.length > 0 && <GeographicMap rows={data} />}
     </div>
   );
 }
@@ -610,16 +521,16 @@ function HomeTab({ authFetch, go }) {
           <h3 className="mb-3 text-sm font-semibold text-ink-primary">Needs attention</h3>
           <div className="space-y-2">
             <button onClick={() => go('orders')} className="flex w-full items-center justify-between rounded-md border border-edge-subtle bg-surface-muted px-3 py-2.5 text-left hover:border-edge-strong">
-              <span className="text-xs font-medium text-ink-primary">Pending orders</span>
-              <span className={`rounded-xs px-2 py-0.5 text-[10px] font-semibold ${pending ? 'bg-amber-50 text-ink-accent' : 'bg-edge text-ink-muted'}`}>{pending}</span>
+              <span className="text-sm font-medium text-ink-primary">Pending orders</span>
+              <span className={`rounded-xs px-2 py-0.5 text-[12px] font-semibold ${pending ? 'bg-amber-50 text-ink-accent' : 'bg-edge text-ink-muted'}`}>{pending}</span>
             </button>
             <button onClick={() => go('abandoned')} className="flex w-full items-center justify-between rounded-md border border-edge-subtle bg-surface-muted px-3 py-2.5 text-left hover:border-edge-strong">
-              <span className="text-xs font-medium text-ink-primary">Abandoned checkouts</span>
-              <span className={`rounded-xs px-2 py-0.5 text-[10px] font-semibold ${abandoned ? 'bg-amber-50 text-ink-accent' : 'bg-edge text-ink-muted'}`}>{abandoned}</span>
+              <span className="text-sm font-medium text-ink-primary">Abandoned checkouts</span>
+              <span className={`rounded-xs px-2 py-0.5 text-[12px] font-semibold ${abandoned ? 'bg-amber-50 text-ink-accent' : 'bg-edge text-ink-muted'}`}>{abandoned}</span>
             </button>
             <button onClick={() => go('products')} className="flex w-full items-center justify-between rounded-md border border-edge-subtle bg-surface-muted px-3 py-2.5 text-left hover:border-edge-strong">
-              <span className="text-xs font-medium text-ink-primary">Low-stock products</span>
-              <span className={`rounded-xs px-2 py-0.5 text-[10px] font-semibold ${lowStock.length ? 'bg-red-50 text-ink-danger' : 'bg-edge text-ink-muted'}`}>{lowStock.length}</span>
+              <span className="text-sm font-medium text-ink-primary">Low-stock products</span>
+              <span className={`rounded-xs px-2 py-0.5 text-[12px] font-semibold ${lowStock.length ? 'bg-red-50 text-ink-danger' : 'bg-edge text-ink-muted'}`}>{lowStock.length}</span>
             </button>
           </div>
         </div>
@@ -629,15 +540,15 @@ function HomeTab({ authFetch, go }) {
         <div className="min-w-0 rounded-lg border border-edge bg-white shadow-card p-5">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-ink-primary">Recent orders</h3>
-            <button onClick={() => go('orders')} className="text-[11px] font-semibold text-ink-accent">View all</button>
+            <button onClick={() => go('orders')} className="text-[13px] font-semibold text-ink-accent">View all</button>
           </div>
-          {recent.length === 0 ? <p className="text-xs text-brand-muted">No orders yet.</p> : (
+          {recent.length === 0 ? <p className="text-sm text-brand-muted">No orders yet.</p> : (
             <div className="space-y-1.5">
               {recent.map((o) => (
                 <button key={o.id} onClick={() => go('orders')} className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-surface-muted">
-                  <span className="min-w-0 truncate text-xs font-semibold text-ink-primary">#{o.id} <span className="font-normal text-brand-muted">{o.email}</span></span>
-                  <span className="flex shrink-0 items-center gap-2"><span className="text-xs text-ink-primary">{o.currency_code} {o.total}</span>
-                    <span className={`rounded-xs px-1.5 py-0.5 text-[9px] font-semibold ${STATUS_COLOR[o.status]}`}>{o.status}</span></span>
+                  <span className="min-w-0 truncate text-sm font-semibold text-ink-primary">#{o.id} <span className="font-normal text-brand-muted">{o.email}</span></span>
+                  <span className="flex shrink-0 items-center gap-2"><span className="text-sm text-ink-primary">{o.currency_code} {o.total}</span>
+                    <span className={`rounded-xs px-1.5 py-0.5 text-[13px] font-semibold ${STATUS_COLOR[o.status]}`}>{o.status}</span></span>
                 </button>
               ))}
             </div>
@@ -646,12 +557,12 @@ function HomeTab({ authFetch, go }) {
 
         <div className="min-w-0 rounded-lg border border-edge bg-white shadow-card p-5">
           <h3 className="mb-3 text-sm font-semibold text-ink-primary">Inventory to restock</h3>
-          {lowStock.length === 0 ? <p className="text-xs text-brand-muted">All products well stocked.</p> : (
+          {lowStock.length === 0 ? <p className="text-sm text-brand-muted">All products well stocked.</p> : (
             <div className="space-y-1.5">
               {lowStock.slice(0, 6).map((p) => (
                 <div key={p.sku} className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5">
-                  <span className="min-w-0 truncate text-xs font-medium text-ink-primary">{toDisplayText(p.name) || 'Untitled product'}</span>
-                  <span className="shrink-0 text-[10px] font-semibold text-ink-accent">{p.regions}</span>
+                  <span className="min-w-0 truncate text-sm font-medium text-ink-primary">{toDisplayText(p.name) || 'Untitled product'}</span>
+                  <span className="shrink-0 text-[12px] font-semibold text-ink-accent">{p.regions}</span>
                 </div>
               ))}
             </div>
@@ -682,6 +593,7 @@ function ProductsTab({ authFetch, regions, categories }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [totalCount, setTotalCount] = useState(0);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -720,6 +632,7 @@ function ProductsTab({ authFetch, regions, categories }) {
   const blankMedia = () => ({ media_type: 'IMAGE', file_url: '' });
   const startNew = () => setEditing({
     sku: '', name: '', description: '', benefits: '', ingredients: '', is_active: true, is_archived: false,
+    short_benefit: '', hsn_code: '', dietary_tags: [], base_price: null,
     product_type: 'Simple', faq: [],
     _regional: regions.map((r) => ({ region: r.id, code: r.code, price: '', promotional_price: '', is_visible: true, available: '' })),
     _categories: [], _media: [],
@@ -744,9 +657,27 @@ function ProductsTab({ authFetch, regions, categories }) {
     }),
     _categories: (p.categories || []).map((c) => c.id),
     _media: (p.media && p.media.length ? p.media.map((m) => ({ media_type: m.media_type, file_url: m.file_url })) : []),
-    _variantOptions: p.nutrition_facts?._variantOptions || [],
-    _variants: p.nutrition_facts?._variants || [],
-    _specs: p.nutrition_facts?._specs || [],
+    _variantOptions: p.nutrition_facts?._variantOptions || (p.variants?.length ? [{ name: p.variants[0]?.option_name || 'Size', values: Array.from(new Set(p.variants.map(v => v.option_value || v.name))) }] : []),
+    _variants: (p.variants && p.variants.length > 0)
+      ? p.variants.map((v) => ({
+          id: v.id,
+          sku: v.sku,
+          name: v.name,
+          option_name: v.option_name,
+          option_value: v.option_value,
+          price: v.price_gbp || v.price_inr || '',
+          price_gbp: v.price_gbp || '',
+          price_inr: v.price_inr || '',
+          compare_price: '',
+          stock: v.stock_qty != null ? v.stock_qty : 100,
+          stock_qty: v.stock_qty != null ? v.stock_qty : 100,
+          is_active: v.is_active,
+          combination: [v.name || v.option_value],
+        }))
+      : (p.nutrition_facts?._variants || []),
+    _specs: Object.entries(p.nutrition_facts || {})
+      .filter(([k, v]) => !k.startsWith('_') && (typeof v === 'string' || typeof v === 'number'))
+      .map(([key, value]) => ({ key, value: String(value) })),
     _meta: p.nutrition_facts?._meta || [],
     _seo: toSeoMeta(p.nutrition_facts?._seo),
     _shipping: p.nutrition_facts?._shipping || { weight_g: '', length_cm: '', width_cm: '', height_cm: '', fragile: false },
@@ -755,17 +686,24 @@ function ProductsTab({ authFetch, regions, categories }) {
   const save = () => {
     setSaving(true); setErr('');
     const extendedNutrition = {
-      ...(editing.nutrition_facts || {}),
+      ...Object.fromEntries(
+        (editing._specs || [])
+          .filter((s) => (s.key || '').trim())
+          .map((s) => [s.key.trim(), s.value])
+      ),
       _product_type: editing.product_type,
       _variantOptions: editing._variantOptions || [],
       _variants: editing._variants || [],
-      _specs: editing._specs || [],
       _meta: editing._meta || [],
       _seo: editing._seo || {},
       _shipping: editing._shipping || {},
     };
     const payload = {
       sku: editing.sku, name: editing.name, description: editing.description,
+      short_benefit: editing.short_benefit || '',
+      hsn_code: editing.hsn_code || '',
+      dietary_tags: editing.dietary_tags || [],
+      base_price: editing.base_price === '' || editing.base_price == null ? null : editing.base_price,
       benefits: editing.benefits, ingredients: editing.ingredients,
       nutrition_facts: extendedNutrition, faq: editing.faq || [],
       is_active: editing.is_active, is_archived: editing.is_archived,
@@ -773,6 +711,17 @@ function ProductsTab({ authFetch, regions, categories }) {
       regional_configs: editing._regional.filter((r) => r.price !== '' && r.price != null)
         .map((r) => ({ region: r.region, price: r.price, promotional_price: r.promotional_price === '' ? null : r.promotional_price, is_visible: r.is_visible })),
       regional_stock: editing._regional.map((r) => ({ region: r.region, available: r.available === '' || r.available == null ? 0 : Number(r.available) })),
+      variants: (editing._variants || []).map((v, idx) => ({
+        id: v.id,
+        sku: v.sku || `${editing.sku}-V${idx + 1}`,
+        name: v.name || (v.combination ? v.combination.join(' / ') : `Variant ${idx + 1}`),
+        option_name: v.option_name || 'Size',
+        option_value: v.option_value || v.name || (v.combination ? v.combination.join(' / ') : `Variant ${idx + 1}`),
+        price_gbp: v.price_gbp !== '' && v.price_gbp != null ? Number(v.price_gbp) : (v.price ? Number(v.price) : null),
+        price_inr: v.price_inr !== '' && v.price_inr != null ? Number(v.price_inr) : (v.price ? Number(v.price) : null),
+        stock_qty: v.stock_qty != null ? Number(v.stock_qty) : (v.stock != null ? Number(v.stock) : 100),
+        is_active: v.is_active !== false,
+      })),
       media_files: (editing._media || [])
         .filter((m) => m.file_url && m.file_url.trim())
         .map((m, i) => ({ file_url: m.file_url.trim(), media_type: m.media_type, display_order: i + 1 })),
@@ -788,6 +737,15 @@ function ProductsTab({ authFetch, regions, categories }) {
   const archive = (p, e) => {
     e.stopPropagation();
     authFetch(`/api/admin/products/${p.sku}/`, { method: 'PATCH', body: JSON.stringify({ is_archived: !p.is_archived }) }).then(load);
+  };
+
+  const deleteProduct = (p, e) => {
+    e.stopPropagation();
+    if (confirm(`Permanently delete product "${p.name}" (${p.sku})? This action cannot be undone.`)) {
+      authFetch(`/api/admin/products/${p.sku}/`, { method: 'DELETE' })
+        .then(() => load())
+        .catch((err) => alert(err.message || 'Could not delete product.'));
+    }
   };
 
   const handleExport = () => {
@@ -842,15 +800,15 @@ function ProductsTab({ authFetch, regions, categories }) {
         </select>
         <p className="text-sm text-brand-muted ml-auto font-medium">{totalCount} products</p>
         <div className="flex gap-2">
-          <button onClick={handleExport} className="inline-flex items-center gap-1.5 px-3 py-2 text-xs uppercase border border-edge bg-white rounded-sm hover:bg-surface-muted transition"><Download className="h-3.5 w-3.5" /> Export</button>
-          <button onClick={startNew} className="inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase bg-ink-primary text-white rounded-sm font-semibold hover:bg-ink-primary/90 transition"><Plus className="h-4 w-4" /> Add product</button>
+          <button onClick={handleExport} className="inline-flex items-center gap-1.5 px-3 py-2 text-sm uppercase border border-edge bg-white rounded-sm hover:bg-surface-muted transition"><Download className="h-3.5 w-3.5" /> Export</button>
+          <button onClick={startNew} className="inline-flex items-center gap-1.5 px-4 py-2 text-sm uppercase bg-ink-primary text-white rounded-sm font-semibold hover:bg-ink-primary/90 transition"><Plus className="h-4 w-4" /> Add product</button>
         </div>
       </div>
 
       {/* Table */}
       <div className="overflow-x-auto rounded-lg border border-edge bg-white shadow-card">
-        <table className="w-full text-left text-xs">
-          <thead className="bg-surface-muted text-[10px] font-medium uppercase tracking-wide text-ink-muted border-b border-edge">
+        <table className="w-full text-left text-sm">
+          <thead className="bg-surface-muted text-[12px] font-medium uppercase tracking-wide text-ink-muted border-b border-edge">
             <tr>
               <th className="px-3 py-3 font-medium">Product</th>
               <th className="px-3 py-3 font-medium">Categories</th>
@@ -863,9 +821,14 @@ function ProductsTab({ authFetch, regions, categories }) {
           <tbody>
             {products.map((p) => {
               const thumb = p.media?.[0]?.file_url;
-              const variantCount = (p.nutrition_facts?._variants || []).length;
+              const variantList = (p.variants && p.variants.length > 0)
+                ? p.variants
+                : (p.nutrition_facts?._variants || []);
+              const variantCount = variantList.length;
               const firstConfig = p.regional_configs?.[0];
               const firstStock = p.regional_stock?.find(s => s.region_id === firstConfig?.region);
+              const isVariable = variantCount > 0 || p.nutrition_facts?._product_type === 'Variable';
+
               return (
                 <tr key={p.id} className="border-t border-edge-subtle align-middle hover:bg-surface-muted cursor-pointer transition" onClick={() => startEdit(p)}>
                   <td className="px-3 py-3">
@@ -875,7 +838,7 @@ function ProductsTab({ authFetch, regions, categories }) {
                       </div>
                       <div>
                         <p className="font-semibold text-ink-primary">{toDisplayText(p.name) || 'Untitled product'}</p>
-                        <p className="font-mono text-[10px] text-brand-muted">{p.sku} · <span className="rounded bg-surface-muted text-ink-accent px-1 text-[8px] font-semibold uppercase">{toDisplayText(p.nutrition_facts?._product_type) || 'Simple'}</span></p>
+                        <p className="font-mono text-[12px] text-brand-muted">{p.sku} · <span className="rounded bg-surface-muted text-ink-accent px-1 text-[8px] font-semibold uppercase">{isVariable ? 'Variable' : (toDisplayText(p.nutrition_facts?._product_type) || 'Simple')}</span></p>
                       </div>
                     </div>
                   </td>
@@ -884,19 +847,33 @@ function ProductsTab({ authFetch, regions, categories }) {
                     {firstConfig ? <><span className="font-semibold text-ink-primary">{firstConfig.promotional_price || firstConfig.price}</span> · {firstStock ? firstStock.available : 0} units</> : '—'}
                   </td>
                   <td className="px-3 py-3">
-                    {variantCount > 0
-                      ? <span className="inline-flex items-center gap-1 rounded-full bg-surface-muted px-2 py-0.5 text-[10px] font-semibold text-ink-accent"><Layers className="h-3 w-3" />{variantCount} variants</span>
-                      : <span className="text-ink-subtle">—</span>}
+                    {variantCount > 0 ? (
+                      <div className="space-y-1">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-surface-muted px-2 py-0.5 text-[12px] font-semibold text-ink-accent">
+                          <Layers className="h-3 w-3" />{variantCount} variants
+                        </span>
+                        <div className="flex flex-wrap gap-1 max-w-[200px]">
+                          {variantList.map((v, idx) => (
+                            <span key={v.id || idx} className="inline-block bg-brand-bg border border-edge rounded px-1.5 py-0.5 text-[10px] font-mono text-ink-secondary">
+                              {v.name || v.option_value || `Variant #${idx + 1}`}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-ink-subtle">—</span>
+                    )}
                   </td>
                   <td className="px-3 py-3">
                     {p.is_archived
-                      ? <span className="rounded bg-surface-muted px-1.5 py-0.5 text-[10px] font-semibold text-ink-secondary">ARCHIVED</span>
-                      : <span className="rounded bg-brand-success/10 px-1.5 py-0.5 text-[10px] font-semibold text-ink-success">ACTIVE</span>}
+                      ? <span className="rounded bg-surface-muted px-1.5 py-0.5 text-[12px] font-semibold text-ink-secondary">ARCHIVED</span>
+                      : <span className="rounded bg-brand-success/10 px-1.5 py-0.5 text-[12px] font-semibold text-ink-success">ACTIVE</span>}
                   </td>
                   <td className="px-3 py-3">
                     <div className="flex justify-end gap-2">
-                      <button onClick={(e) => { e.stopPropagation(); startEdit(p); }} className="text-ink-accent hover:opacity-70"><Pencil className="h-4 w-4" /></button>
-                      <button onClick={(e) => archive(p, e)} className="text-brand-muted hover:text-brand-danger"><Archive className="h-4 w-4" /></button>
+                      <button onClick={(e) => { e.stopPropagation(); startEdit(p); }} className="text-ink-accent hover:opacity-70" title="Edit product"><Pencil className="h-4 w-4" /></button>
+                      <button onClick={(e) => archive(p, e)} className="text-brand-muted hover:text-brand-danger" title={p.is_archived ? "Unarchive product" : "Archive product"}><Archive className="h-4 w-4" /></button>
+                      <button onClick={(e) => deleteProduct(p, e)} className="text-brand-muted hover:text-brand-danger" title="Delete product permanently"><Trash2 className="h-4 w-4" /></button>
                     </div>
                   </td>
                 </tr>
@@ -1036,7 +1013,7 @@ function CollectionsTab({ authFetch }) {
     <div>
       <div className="mb-4 flex items-center justify-between">
         <p className="text-sm text-brand-muted">{cats.length} collections</p>
-        <button onClick={startNew} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase">
+        <button onClick={startNew} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-sm uppercase">
           <Plus className="h-4 w-4" /> New collection
         </button>
       </div>
@@ -1056,14 +1033,14 @@ function CollectionsTab({ authFetch }) {
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-ink-primary">
-                    {toDisplayText(c.name)} <span className="font-mono text-[10px] text-brand-muted">/{toDisplayText(c.slug)}</span>
+                    {toDisplayText(c.name)} <span className="font-mono text-[12px] text-brand-muted">/{toDisplayText(c.slug)}</span>
                     {meta.type === 'automated' ? (
-                      <span className="ml-2 rounded-xs bg-surface-muted text-ink-accent px-1.5 py-0.5 text-[9px] font-semibold">AUTOMATED</span>
+                      <span className="ml-2 rounded-xs bg-surface-muted text-ink-accent px-1.5 py-0.5 text-[13px] font-semibold">AUTOMATED</span>
                     ) : (
-                      <span className="ml-2 rounded-xs bg-surface-muted text-ink-muted px-1.5 py-0.5 text-[9px] font-semibold">MANUAL</span>
+                      <span className="ml-2 rounded-xs bg-surface-muted text-ink-muted px-1.5 py-0.5 text-[13px] font-semibold">MANUAL</span>
                     )}
                   </p>
-                  {c.product_count != null && <p className="text-[11px] text-brand-muted">{c.product_count} products</p>}
+                  {c.product_count != null && <p className="text-[13px] text-brand-muted">{c.product_count} products</p>}
                 </div>
               </div>
               <div className="flex gap-2">
@@ -1090,10 +1067,10 @@ function CollectionsTab({ authFetch }) {
               <textarea placeholder="Description" rows={2} value={form.description || ''} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
               
               <div className="space-y-1">
-                <label className="block text-[10px] font-semibold text-brand-muted uppercase">Collection Image URL</label>
+                <label className="block text-[12px] font-semibold text-brand-muted uppercase">Collection Image URL</label>
                 <div className="flex gap-3">
-                  <input placeholder="https://example.com/collection-image.jpg" value={form.image_url || ''} onChange={(e) => setForm({ ...form, image_url: e.target.value })} className="flex-1 rounded-sm border border-edge p-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-edge-focus/40" />
-                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-edge px-3 py-2.5 text-xs font-semibold text-ink-primary hover:border-ink-primary">
+                  <input placeholder="https://example.com/collection-image.jpg" value={form.image_url || ''} onChange={(e) => setForm({ ...form, image_url: e.target.value })} className="flex-1 rounded-sm border border-edge p-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-edge-focus/40" />
+                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-edge px-3 py-2.5 text-sm font-semibold text-ink-primary hover:border-ink-primary">
                     <Upload className="h-3.5 w-3.5" />
                     {uploadingImage ? 'Uploading' : 'Upload'}
                     <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" disabled={uploadingImage} />
@@ -1107,13 +1084,13 @@ function CollectionsTab({ authFetch }) {
               </div>
 
               <div className="border-t border-edge-subtle pt-3">
-                <label className="block text-xs font-semibold text-ink-primary mb-2 uppercase">Collection Type</label>
+                <label className="block text-sm font-semibold text-ink-primary mb-2 uppercase">Collection Type</label>
                 <div className="flex gap-4">
-                  <label className="flex items-center gap-2 text-xs text-ink-primary font-semibold cursor-pointer">
+                  <label className="flex items-center gap-2 text-sm text-ink-primary font-semibold cursor-pointer">
                     <input type="radio" checked={form.type === 'manual'} onChange={() => setForm({ ...form, type: 'manual' })} />
                     Manual (Manually add products)
                   </label>
-                  <label className="flex items-center gap-2 text-xs text-ink-primary font-semibold cursor-pointer">
+                  <label className="flex items-center gap-2 text-sm text-ink-primary font-semibold cursor-pointer">
                     <input type="radio" checked={form.type === 'automated'} onChange={() => setForm({ ...form, type: 'automated', rules: form.rules?.length ? form.rules : [{ column: 'category', relation: 'equals', value: '' }] })} />
                     Automated (Match product criteria)
                   </label>
@@ -1123,8 +1100,8 @@ function CollectionsTab({ authFetch }) {
               {form.type === 'automated' && (
                 <div className="bg-surface-muted p-4 rounded-lg border border-edge space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-ink-primary uppercase">Conditions match:</span>
-                    <select value={form.match} onChange={(e) => setForm({ ...form, match: e.target.value })} className="text-xs border rounded p-1 bg-white">
+                    <span className="text-sm font-semibold text-ink-primary uppercase">Conditions match:</span>
+                    <select value={form.match} onChange={(e) => setForm({ ...form, match: e.target.value })} className="text-sm border rounded p-1 bg-white">
                       <option value="all">All Conditions (AND)</option>
                       <option value="any">Any Condition (OR)</option>
                     </select>
@@ -1133,30 +1110,30 @@ function CollectionsTab({ authFetch }) {
                   <div className="space-y-2">
                     {(form.rules || []).map((rule, idx) => (
                       <div key={idx} className="flex gap-2 items-center">
-                        <select value={rule.column} onChange={(e) => updateRule(idx, { column: e.target.value })} className="text-xs border rounded p-1 bg-white flex-1">
+                        <select value={rule.column} onChange={(e) => updateRule(idx, { column: e.target.value })} className="text-sm border rounded p-1 bg-white flex-1">
                           <option value="category">Category</option>
                           <option value="ingredients">Ingredients</option>
                           <option value="price">Price</option>
                           <option value="type">Product Type</option>
                         </select>
-                        <select value={rule.relation} onChange={(e) => updateRule(idx, { relation: e.target.value })} className="text-xs border rounded p-1 bg-white flex-1">
+                        <select value={rule.relation} onChange={(e) => updateRule(idx, { relation: e.target.value })} className="text-sm border rounded p-1 bg-white flex-1">
                           <option value="equals">Equals</option>
                           <option value="contains">Contains</option>
                           <option value="greater_than">Greater than</option>
                           <option value="less_than">Less than</option>
                         </select>
-                        <input value={rule.value} onChange={(e) => updateRule(idx, { value: e.target.value })} placeholder="Value" className="text-xs border rounded p-1 bg-white flex-[1.5]" />
+                        <input value={rule.value} onChange={(e) => updateRule(idx, { value: e.target.value })} placeholder="Value" className="text-sm border rounded p-1 bg-white flex-[1.5]" />
                         <button onClick={() => removeRule(idx)} className="text-brand-danger hover:opacity-75 p-1"><X className="h-4 w-4" /></button>
                       </div>
                     ))}
-                    <button onClick={addRule} className="text-xs font-semibold text-ink-accent hover:underline">+ Add condition</button>
+                    <button onClick={addRule} className="text-sm font-semibold text-ink-accent hover:underline">+ Add condition</button>
                   </div>
                 </div>
               )}
 
               <div className="flex gap-2 pt-2">
-                <button onClick={save} className="btn-primary flex-1 py-2.5 text-xs uppercase">Save Collection</button>
-                <button onClick={() => setForm(null)} className="flex-1 rounded-sm border border-edge py-2.5 text-xs font-semibold uppercase">Cancel</button>
+                <button onClick={save} className="btn-primary flex-1 py-2.5 text-sm uppercase">Save Collection</button>
+                <button onClick={() => setForm(null)} className="flex-1 rounded-sm border border-edge py-2.5 text-sm font-semibold uppercase">Cancel</button>
               </div>
             </div>
           </div>
@@ -1195,90 +1172,161 @@ function OrderDetail({ authFetch, order, onClose, onChanged }) {
     authFetch(`/api/admin/orders/${order.id}/timeline/`).then((r) => r.json()).then((d) => setTimeline(Array.isArray(d) ? d : [])).catch(() => setTimeline([]));
   }, [authFetch, order.id]);
 
-  const printPackingSlip = () => {
+  const [downloadingInvoice, setDownloadingInvoice] = useState(false);
+
+  const downloadOrderInvoice = async () => {
+    setDownloadingInvoice(true);
+    try {
+      const res = await authFetch(`/api/admin/orders/${order.id}/invoice/`);
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status}: ${text || 'Download failed'}`);
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Invoice_Order_${order.id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(`Could not download invoice PDF: ${err.message}`);
+    } finally {
+      setDownloadingInvoice(false);
+    }
+  };
+
+  const printPackingSlip = async () => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
       alert("Please allow popups to print the packing slip.");
       return;
     }
 
-    const itemsHtml = order.items.map(it => `
+    const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;',
+    })[character]);
+    let company = {};
+    try {
+      const response = await authFetch('/api/admin/settings/COMPANY_INFO/');
+      const data = response.ok ? await response.json() : {};
+      company = data?.value && typeof data.value === 'object' ? data.value : {};
+    } catch {
+      company = {};
+    }
+    const companyName = escapeHtml(company.name || 'Online store');
+    const companyContact = escapeHtml(company.support || company.email || '');
+    const currencyCode = escapeHtml(order.currency_code || '');
+
+    const items = order.items || [];
+    const itemsHtml = items.map(it => {
+      const name = escapeHtml(it.product_name || it.product?.name || it.name || 'Product');
+      const sku = escapeHtml(it.product_sku || it.product?.sku || it.sku || 'N/A');
+      const hsn = escapeHtml(it.hsn_code || it.product?.hsn_code || 'N/A');
+      const qty = it.quantity || 1;
+      const price = parseFloat(it.price || 0).toFixed(2);
+      const total = (parseFloat(it.price || 0) * qty).toFixed(2);
+      return `
       <tr>
-        <td style="padding: 10px; border-bottom: 1px solid #ddd;">
-          <strong>${it.product.name}</strong><br/>
-          <span style="font-size: 11px; color: #666;">SKU: ${it.product.sku}</span>
+        <td style="padding: 10px; border-bottom: 1px solid #e2e8f0;">
+          <strong style="color: #0f172a; font-size: 13px;">${name}</strong><br/>
+          <span style="font-size: 11px; font-family: monospace; color: #64748b;">SKU: ${sku}</span>
         </td>
-        <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: center;">${it.product.hsn_code || 'N/A'}</td>
-        <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: center;"><strong>${it.quantity}</strong></td>
+        <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; text-align: center; font-size: 12px; color: #475569;">${hsn}</td>
+        <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; text-align: center; font-size: 13px; font-weight: 700; color: #0f172a;">${qty}</td>
+        <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; text-align: right; font-size: 12px; color: #475569;">${currencyCode} ${price}</td>
+        <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; text-align: right; font-size: 12px; font-weight: 600; color: #0f172a;">${currencyCode} ${total}</td>
       </tr>
-    `).join('');
+    `;
+    }).join('');
 
     const printContent = `
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Packing Slip - Order #${order.id}</title>
+        <title>Shipping & Packing Slip - Order #${order.id}</title>
         <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #333; margin: 40px; }
-          .header { display: flex; justify-content: space-between; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; }
-          .logo { font-size: 24px; font-weight: 800; }
-          .logo span { color: #6d28d9; }
-          .title { font-size: 20px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
-          .details { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-bottom: 40px; font-size: 13px; }
-          .details h3 { margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 5px; text-transform: uppercase; font-size: 11px; color: #666; }
-          table { width: 100%; border-collapse: collapse; margin-bottom: 40px; font-size: 13px; }
-          th { background: #f5f5f5; padding: 10px; text-align: left; font-weight: 600; border-bottom: 1px solid #ddd; }
-          .footer { text-align: center; font-size: 11px; color: #999; border-top: 1px solid #eee; padding-top: 20px; }
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #1e293b; margin: 30px; line-height: 1.5; }
+          .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #0f172a; padding-bottom: 15px; margin-bottom: 25px; }
+          .brand { font-size: 24px; font-weight: 800; color: #0f172a; letter-spacing: -0.5px; }
+          .brand span { color: #16a34a; }
+          .doc-title { font-size: 18px; font-weight: 700; text-transform: uppercase; color: #0f172a; letter-spacing: 1px; }
+          .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 30px; }
+          .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; font-size: 13px; }
+          .card-title { margin-top: 0; margin-bottom: 10px; border-bottom: 1px solid #cbd5e1; padding-bottom: 5px; text-transform: uppercase; font-size: 11px; font-weight: 700; color: #64748b; letter-spacing: 0.5px; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 25px; }
+          th { background: #f1f5f9; padding: 10px; text-align: left; font-size: 11px; text-transform: uppercase; font-weight: 700; color: #475569; border-bottom: 2px solid #cbd5e1; }
+          .summary-table { width: 280px; margin-left: auto; font-size: 13px; margin-bottom: 30px; }
+          .summary-table td { padding: 5px 0; }
+          .summary-table .total-row { font-weight: 800; font-size: 15px; border-top: 2px solid #0f172a; padding-top: 8px; }
+          .footer { text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 15px; margin-top: 40px; }
         </style>
       </head>
       <body>
         <div class="header">
-          <div class="logo">Sclero<span>Proteins</span></div>
-          <div class="title">Packing Slip</div>
+          <div class="brand">${companyName}</div>
+          <div class="doc-title">Shipping & Packing Slip</div>
         </div>
         
-        <div class="details">
-          <div>
-            <h3>Order Details</h3>
-            <strong>Order Number:</strong> #${order.id}<br/>
-            <strong>Date:</strong> ${new Date(order.created_at).toLocaleDateString()}<br/>
-            <strong>Payment Status:</strong> ${order.payment_status}<br/>
-            <strong>Fulfillment Status:</strong> ${order.status}
+        <div class="grid">
+          <div class="card">
+            <div class="card-title">Order Information</div>
+            <strong>Order ID:</strong> #${order.id}<br/>
+            <strong>Date:</strong> ${new Date(order.created_at).toLocaleDateString()} ${new Date(order.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}<br/>
+            <strong>Payment Method:</strong> ${escapeHtml(order.payment_method || 'Standard')}<br/>
+            <strong>Payment Status:</strong> <span style="font-weight: 700;">${escapeHtml(order.payment_status)}</span><br/>
+            <strong>Fulfillment Status:</strong> <span style="font-weight: 700;">${escapeHtml(order.status)}</span>
           </div>
-          <div>
-            <h3>Ship To</h3>
-            <strong>${order.shipping_name || 'Customer'}</strong><br/>
-            ${order.shipping_address_line1}${order.shipping_address_line2 ? ', ' + order.shipping_address_line2 : ''}<br/>
-            ${order.shipping_city}, ${order.shipping_state} ${order.shipping_postal_code}<br/>
-            ${order.shipping_country}<br/>
-            <strong>Phone:</strong> ${order.shipping_phone || 'N/A'}<br/>
-            <strong>Email:</strong> ${order.email}
+          <div class="card">
+            <div class="card-title">Ship To Address</div>
+            <strong style="font-size: 14px; color: #0f172a;">${escapeHtml(order.shipping_name || 'Customer')}</strong><br/>
+            ${escapeHtml(order.shipping_address_line1)}${order.shipping_address_line2 ? `, ${escapeHtml(order.shipping_address_line2)}` : ''}<br/>
+            ${escapeHtml(order.shipping_city)}, ${escapeHtml(order.shipping_state)} ${escapeHtml(order.shipping_postal_code)}<br/>
+            <strong>Country:</strong> ${escapeHtml(order.shipping_country || order.region_code)}<br/>
+            <strong>Phone:</strong> ${escapeHtml(order.shipping_phone || 'N/A')}<br/>
+            <strong>Email:</strong> ${escapeHtml(order.email)}
           </div>
         </div>
-        
+
         <table>
           <thead>
             <tr>
-              <th style="width: 50%;">Item Description</th>
-              <th style="width: 25%; text-align: center;">HSN Code</th>
-              <th style="width: 25%; text-align: center;">Quantity to Pack</th>
+              <th style="width: 40%;">Item Description</th>
+              <th style="width: 15%; text-align: center;">HSN Code</th>
+              <th style="width: 15%; text-align: center;">Qty</th>
+              <th style="width: 15%; text-align: right;">Unit Price</th>
+              <th style="width: 15%; text-align: right;">Subtotal</th>
             </tr>
           </thead>
           <tbody>
             ${itemsHtml}
           </tbody>
         </table>
-        
+
+        <table class="summary-table">
+          <tr>
+            <td>Subtotal:</td>
+            <td style="text-align: right;">${currencyCode} ${parseFloat(order.subtotal || 0).toFixed(2)}</td>
+          </tr>
+          <tr>
+            <td>Tax (${order.tax_rate || 0}%):</td>
+            <td style="text-align: right;">${currencyCode} ${parseFloat(order.tax_amount || 0).toFixed(2)}</td>
+          </tr>
+          <tr>
+            <td>Shipping:</td>
+            <td style="text-align: right;">${currencyCode} ${parseFloat(order.shipping_cost || 0).toFixed(2)}</td>
+          </tr>
+          <tr class="total-row">
+            <td>Grand Total:</td>
+            <td style="text-align: right;">${currencyCode} ${parseFloat(order.total || 0).toFixed(2)}</td>
+          </tr>
+        </table>
+
         <div class="footer">
-          Sclero Proteins Ltd · support@scleroproteins.co.uk · Thank you for your business!
+          ${companyName}${companyContact ? ` · ${companyContact}` : ''} · Computer-generated packing slip for warehouse dispatch.
         </div>
-        
-        <script>
-          window.onload = function() {
-            window.print();
-            setTimeout(function() { window.close(); }, 500);
-          };
-        </script>
       </body>
       </html>
     `;
@@ -1286,6 +1334,7 @@ function OrderDetail({ authFetch, order, onClose, onChanged }) {
     printWindow.document.open();
     printWindow.document.write(printContent);
     printWindow.document.close();
+    window.setTimeout(() => printWindow.print(), 250);
   };
 
   const setStatus = (status) => {
@@ -1449,14 +1498,41 @@ function OrderDetail({ authFetch, order, onClose, onChanged }) {
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-lg font-bold text-ink-primary">Order #{order.id}</h3>
-                <span className={`rounded-sm px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${STATUS_COLOR[order.status]}`}>{order.status}</span>
-                <span className={`rounded-sm px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${PAYMENT_STATUS_COLOR[order.payment_status] || 'bg-surface-muted text-ink-secondary'}`}>{order.payment_status || 'PAID'}</span>
+                <span className={`rounded-sm px-2 py-0.5 text-[12px] font-bold uppercase tracking-wider ${STATUS_COLOR[order.status]}`}>{order.status}</span>
+                <span className={`rounded-sm px-2 py-0.5 text-[12px] font-bold uppercase tracking-wider ${PAYMENT_STATUS_COLOR[order.payment_status] || 'bg-surface-muted text-ink-secondary'}`}>{order.payment_status || 'PAID'}</span>
               </div>
-              <p className="text-xs text-ink-subtle mt-0.5">Placed on {formatDateTime(order.created_at)}</p>
+              <p className="text-sm text-ink-subtle mt-0.5">Placed on {formatDateTime(order.created_at)}</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <button onClick={onClose} className="rounded-sm border border-edge p-2 text-ink-secondary hover:bg-surface-muted transition" aria-label="Close order detail"><X className="h-4.5 w-4.5" /></button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={downloadOrderInvoice}
+              disabled={downloadingInvoice}
+              className="inline-flex items-center gap-1.5 rounded-md bg-ink-primary px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-ink-primary/90 transition shadow-sm disabled:opacity-50 cursor-pointer"
+            >
+              <Download className="h-3.5 w-3.5" />
+              {downloadingInvoice ? 'Generating Invoice…' : 'Download Invoice (PDF)'}
+            </button>
+            <button
+              onClick={printPackingSlip}
+              className="inline-flex items-center gap-1.5 rounded-md border border-edge bg-white px-3.5 py-1.5 text-xs font-semibold text-ink-primary hover:bg-surface-muted transition shadow-sm cursor-pointer"
+            >
+              <Printer className="h-3.5 w-3.5 text-ink-secondary" /> Print Packing Slip
+            </button>
+            <button
+              onClick={() => {
+                if (confirm(`Permanently delete Order #${order.id}? This action cannot be undone.`)) {
+                  authFetch(`/api/admin/orders/${order.id}/`, { method: 'DELETE' })
+                    .then(() => { onClose(); onChanged(null); })
+                    .catch((err) => alert(err.message || 'Could not delete order.'));
+                }
+              }}
+              className="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 transition cursor-pointer"
+              title="Delete order permanently"
+            >
+              <Trash2 className="h-3.5 w-3.5" /> Delete
+            </button>
+            <button onClick={onClose} className="rounded-md border border-edge p-2 text-ink-secondary hover:bg-surface-muted transition cursor-pointer" aria-label="Close order detail"><X className="h-4.5 w-4.5" /></button>
           </div>
         </div>
 
@@ -1471,8 +1547,8 @@ function OrderDetail({ authFetch, order, onClose, onChanged }) {
               <div className="flex items-center justify-between border-b border-edge-subtle pb-3">
                 <p className="text-sm font-bold text-ink-primary uppercase tracking-wider">Line Items</p>
                 <div className="flex items-center gap-2">
-                  <label className="text-[11px] font-semibold text-ink-secondary">Status:</label>
-                  <select value={order.status} onChange={(e) => setStatus(e.target.value)} className="rounded border border-edge px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-edge-focus">
+                  <label className="text-[13px] font-semibold text-ink-secondary">Status:</label>
+                  <select value={order.status} onChange={(e) => setStatus(e.target.value)} className="rounded border border-edge px-2.5 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-edge-focus">
                     {ORDER_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
@@ -1482,7 +1558,7 @@ function OrderDetail({ authFetch, order, onClose, onChanged }) {
                   <div key={it.id} className="flex items-center justify-between gap-4 py-3.5 text-sm">
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-ink-primary truncate">{toDisplayText(it.product_name) || 'Unknown item'}</p>
-                      <p className="font-mono text-[10px] text-ink-muted mt-0.5">SKU: {it.product_sku} · Qty: {it.quantity} · {formatMoney(order.currency_code, it.price)} each</p>
+                      <p className="font-mono text-[12px] text-ink-muted mt-0.5">SKU: {it.product_sku} · Qty: {it.quantity} · {formatMoney(order.currency_code, it.price)} each</p>
                     </div>
                     <p className="font-semibold text-ink-primary text-right">{formatMoney(order.currency_code, Number(it.price) * Number(it.quantity))}</p>
                   </div>
@@ -1490,10 +1566,10 @@ function OrderDetail({ authFetch, order, onClose, onChanged }) {
               </div>
               
               {/* Financial Breakdowns */}
-              <div className="mt-4 space-y-2 border-t border-edge-subtle pt-4 text-xs">
+              <div className="mt-4 space-y-2 border-t border-edge-subtle pt-4 text-sm">
                 <div className="flex justify-between text-ink-secondary"><span>Subtotal</span><span className="font-medium">{formatMoney(order.currency_code, order.subtotal)}</span></div>
                 <div className="flex justify-between text-ink-secondary"><span>Tax ({order.tax_rate}%)</span><span className="font-medium">{formatMoney(order.currency_code, order.tax_amount)}</span></div>
-                <div className="flex justify-between text-ink-secondary"><span>Shipping</span><span className="font-medium">{formatMoney(order.currency_code, order.shipping_cost)}</span></div>
+                <div className="flex justify-between text-ink-secondary"><span>Shipping{order.shipping_method ? ` · ${order.shipping_method}` : ''}</span><span className="font-medium">{formatMoney(order.currency_code, order.shipping_cost)}</span></div>
                 <div className="flex justify-between pt-2.5 text-sm font-bold text-ink-primary border-t border-edge-subtle"><span>Total</span><span>{formatMoney(order.currency_code, order.total)}</span></div>
               </div>
             </div>
@@ -1504,18 +1580,18 @@ function OrderDetail({ authFetch, order, onClose, onChanged }) {
                 <Banknote className="h-4.5 w-4.5 text-brand-accent" />
                 <p className="text-sm font-bold text-ink-primary uppercase tracking-wider">Payment &amp; Transactions</p>
               </div>
-              <div className="grid gap-4 text-xs sm:grid-cols-3">
+              <div className="grid gap-4 text-sm sm:grid-cols-3">
                 <div className="bg-surface-subtle p-3 rounded border border-edge-subtle">
-                  <p className="text-[10px] text-ink-muted font-bold uppercase tracking-wider mb-1">Gateway Method</p>
-                  <p className="text-xs font-bold text-ink-primary">{order.payment_method || 'N/A'}</p>
+                  <p className="text-[12px] text-ink-muted font-bold uppercase tracking-wider mb-1">Gateway Method</p>
+                  <p className="text-sm font-bold text-ink-primary">{order.payment_method || 'N/A'}</p>
                 </div>
                 <div className="bg-surface-subtle p-3 rounded border border-edge-subtle">
-                  <p className="text-[10px] text-ink-muted font-bold uppercase tracking-wider mb-1">Authorized</p>
-                  <p className="text-xs font-bold text-ink-primary">{formatMoney(order.currency_code, authorized)}</p>
+                  <p className="text-[12px] text-ink-muted font-bold uppercase tracking-wider mb-1">Authorized</p>
+                  <p className="text-sm font-bold text-ink-primary">{formatMoney(order.currency_code, authorized)}</p>
                 </div>
                 <div className="bg-surface-subtle p-3 rounded border border-edge-subtle">
-                  <p className="text-[10px] text-ink-muted font-bold uppercase tracking-wider mb-1">Captured</p>
-                  <p className="text-xs font-bold text-ink-primary">{formatMoney(order.currency_code, captured)}</p>
+                  <p className="text-[12px] text-ink-muted font-bold uppercase tracking-wider mb-1">Captured</p>
+                  <p className="text-sm font-bold text-ink-primary">{formatMoney(order.currency_code, captured)}</p>
                 </div>
               </div>
 
@@ -1523,29 +1599,29 @@ function OrderDetail({ authFetch, order, onClose, onChanged }) {
               {captureRemaining > 0 && (
                 <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50/50 p-4 space-y-3">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-bold text-ink-accent">Uncaptured Authorization</p>
-                    <span className="rounded bg-amber-100 text-amber-800 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide">{order.payment_capture_mode || 'MANUAL'} mode</span>
+                    <p className="text-sm font-bold text-ink-accent">Uncaptured Authorization</p>
+                    <span className="rounded bg-amber-100 text-amber-800 px-2 py-0.5 text-[13px] font-bold uppercase tracking-wide">{order.payment_capture_mode || 'MANUAL'} mode</span>
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row">
-                    <button onClick={authorizePayment} disabled={saving} className="rounded border border-edge bg-white px-3 py-2 text-xs font-semibold text-ink-primary hover:bg-surface-muted transition disabled:opacity-50">Re-Authorize</button>
+                    <button onClick={authorizePayment} disabled={saving} className="rounded border border-edge bg-white px-3 py-2 text-sm font-semibold text-ink-primary hover:bg-surface-muted transition disabled:opacity-50">Re-Authorize</button>
                     <input value={captureAmount} onChange={(e) => setCaptureAmount(e.target.value)} placeholder={`Remaining ${captureRemaining.toFixed(2)}`} className="min-w-0 flex-1 rounded border border-edge px-3 py-2 text-sm focus:outline-none" />
-                    <button onClick={capturePayment} disabled={saving || captureRemaining <= 0} className="btn-primary px-4 py-2 text-xs uppercase disabled:opacity-50 font-semibold shadow-sm">Capture Funds</button>
+                    <button onClick={capturePayment} disabled={saving || captureRemaining <= 0} className="btn-primary px-4 py-2 text-sm uppercase disabled:opacity-50 font-semibold shadow-sm">Capture Funds</button>
                   </div>
-                  {err && <p className="mt-2 rounded bg-brand-danger/10 p-2 text-xs text-brand-danger font-medium">{err}</p>}
+                  {err && <p className="mt-2 rounded bg-brand-danger/10 p-2 text-sm text-brand-danger font-medium">{err}</p>}
                 </div>
               )}
 
               {/* Transaction Logs */}
               <div className="mt-4 pt-3 border-t border-edge-subtle space-y-2">
-                <p className="text-xs font-bold text-ink-secondary">Transaction Logs</p>
+                <p className="text-sm font-bold text-ink-secondary">Transaction Logs</p>
                 <div className="divide-y divide-edge-subtle">
                   {paymentLogs.map((log, i) => (
-                    <div key={`${log.transaction_id}-${i}`} className="flex items-center justify-between gap-3 py-2 text-[11px]">
+                    <div key={`${log.transaction_id}-${i}`} className="flex items-center justify-between gap-3 py-2 text-[13px]">
                       <span className="font-semibold text-ink-primary uppercase">{log.status} | {log.gateway}</span>
                       <span className="text-ink-muted font-mono">{formatMoney(order.currency_code, log.amount)} · {formatDateTime(log.created_at)}</span>
                     </div>
                   ))}
-                  {!paymentLogs.length && <p className="text-xs text-ink-muted">No transaction logs available.</p>}
+                  {!paymentLogs.length && <p className="text-sm text-ink-muted">No transaction logs available.</p>}
                 </div>
               </div>
             </div>
@@ -1560,22 +1636,22 @@ function OrderDetail({ authFetch, order, onClose, onChanged }) {
                 {timeline.map((e, i) => (
                   <li key={i} className="relative">
                     <span className="absolute -left-[23px] top-1 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-brand-accent ring-4 ring-white" />
-                    <p className="text-xs font-bold text-ink-primary">{e.label}</p>
-                    {e.detail && <p className="text-xs text-ink-secondary mt-0.5">{e.detail}</p>}
-                    <p className="text-[10px] text-ink-subtle mt-0.5">{formatDateTime(e.ts)}</p>
+                    <p className="text-sm font-bold text-ink-primary">{e.label}</p>
+                    {e.detail && <p className="text-sm text-ink-secondary mt-0.5">{e.detail}</p>}
+                    <p className="text-[12px] text-ink-subtle mt-0.5">{formatDateTime(e.ts)}</p>
                   </li>
                 ))}
-                {timeline.length === 0 && <li className="text-xs text-ink-muted">No timeline events logged yet.</li>}
+                {timeline.length === 0 && <li className="text-sm text-ink-muted">No timeline events logged yet.</li>}
               </ol>
               
               {/* Add Note form */}
               <div className="mt-6 pt-4 border-t border-edge-subtle grid gap-2 sm:grid-cols-[160px_1fr_auto]">
-                <select value={noteKind} onChange={(e) => setNoteKind(e.target.value)} className="rounded border border-edge px-3 py-2 text-xs focus:outline-none">
+                <select value={noteKind} onChange={(e) => setNoteKind(e.target.value)} className="rounded border border-edge px-3 py-2 text-sm focus:outline-none">
                   <option value="NOTE">Staff Note</option>
                   <option value="CUSTOMER_COMMUNICATION">Customer Update</option>
                 </select>
-                <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Type order note description..." className="rounded border border-edge px-3 py-2 text-xs focus:outline-none" />
-                <button onClick={addTimelineEvent} disabled={saving || !note.trim()} className="rounded border border-edge px-4 py-2 text-xs font-semibold text-ink-primary hover:bg-surface-muted disabled:opacity-50 transition">Add Note</button>
+                <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Type order note description..." className="rounded border border-edge px-3 py-2 text-sm focus:outline-none" />
+                <button onClick={addTimelineEvent} disabled={saving || !note.trim()} className="rounded border border-edge px-4 py-2 text-sm font-semibold text-ink-primary hover:bg-surface-muted disabled:opacity-50 transition">Add Note</button>
               </div>
             </div>
           </div>
@@ -1589,14 +1665,14 @@ function OrderDetail({ authFetch, order, onClose, onChanged }) {
               
               {order.status !== 'SHIPPED' && order.status !== 'DELIVERED' && order.status !== 'CANCELLED' && order.status !== 'REFUNDED' && (
                 <div className="space-y-2">
-                  <button onClick={() => setShowFulfillForm(!showFulfillForm)} className="w-full btn-primary text-xs font-semibold uppercase py-2.5 shadow-sm inline-flex items-center justify-center">
+                  <button onClick={() => setShowFulfillForm(!showFulfillForm)} className="w-full btn-primary text-sm font-semibold uppercase py-2.5 shadow-sm inline-flex items-center justify-center">
                     Fulfill Items
                   </button>
                   {showFulfillForm && (
                     <div className="mt-3 space-y-3 bg-surface-subtle p-4 rounded border border-edge">
                       <div>
-                        <label className="text-[10px] text-ink-muted font-bold uppercase tracking-wider mb-1 block">Carrier Service</label>
-                        <select value={carrier} onChange={(e) => setCarrier(e.target.value)} className="w-full text-xs rounded border border-edge p-2 bg-white focus:outline-none">
+                        <label className="text-[12px] text-ink-muted font-bold uppercase tracking-wider mb-1 block">Carrier Service</label>
+                        <select value={carrier} onChange={(e) => setCarrier(e.target.value)} className="w-full text-sm rounded border border-edge p-2 bg-white focus:outline-none">
                           <option value="Delhivery">Delhivery</option>
                           <option value="Blue Dart">Blue Dart</option>
                           <option value="DTDC">DTDC</option>
@@ -1606,10 +1682,10 @@ function OrderDetail({ authFetch, order, onClose, onChanged }) {
                         </select>
                       </div>
                       <div>
-                        <label className="text-[10px] text-ink-muted font-bold uppercase tracking-wider mb-1 block">Tracking Reference</label>
-                        <input placeholder="Tracking Number" value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)} className="w-full text-xs rounded border border-edge p-2 bg-white focus:outline-none" />
+                        <label className="text-[12px] text-ink-muted font-bold uppercase tracking-wider mb-1 block">Tracking Reference</label>
+                        <input placeholder="Tracking Number" value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)} className="w-full text-sm rounded border border-edge p-2 bg-white focus:outline-none" />
                       </div>
-                      <button onClick={handleFulfill} disabled={!trackingNumber || saving} className="w-full bg-ink-primary text-white text-xs uppercase font-bold py-2 rounded disabled:opacity-50 hover:bg-ink-primary/95 transition">
+                      <button onClick={handleFulfill} disabled={!trackingNumber || saving} className="w-full bg-ink-primary text-white text-sm uppercase font-bold py-2 rounded disabled:opacity-50 hover:bg-ink-primary/95 transition">
                         Confirm Shipment
                       </button>
                     </div>
@@ -1619,20 +1695,20 @@ function OrderDetail({ authFetch, order, onClose, onChanged }) {
 
               {order.status !== 'CANCELLED' && order.status !== 'REFUNDED' && (
                 <div className="space-y-2">
-                  <button onClick={() => setShowRefundForm(!showRefundForm)} className="w-full border border-edge text-xs font-bold uppercase py-2.5 text-ink-secondary rounded hover:bg-surface-muted transition">
+                  <button onClick={() => setShowRefundForm(!showRefundForm)} className="w-full border border-edge text-sm font-bold uppercase py-2.5 text-ink-secondary rounded hover:bg-surface-muted transition">
                     Refund Transactions
                   </button>
                   {showRefundForm && (
                     <div className="mt-3 space-y-3 bg-surface-subtle p-4 rounded border border-edge">
                       <div>
-                        <label className="text-[10px] text-ink-muted font-bold block uppercase tracking-wider mb-1">Refund Amount ({order.currency_code})</label>
-                        <input type="number" step="0.01" value={refundAmount} onChange={(e) => setRefundAmount(e.target.value)} className="w-full text-xs rounded border border-edge p-2 bg-white focus:outline-none" />
+                        <label className="text-[12px] text-ink-muted font-bold block uppercase tracking-wider mb-1">Refund Amount ({order.currency_code})</label>
+                        <input type="number" step="0.01" value={refundAmount} onChange={(e) => setRefundAmount(e.target.value)} className="w-full text-sm rounded border border-edge p-2 bg-white focus:outline-none" />
                       </div>
                       <div>
-                        <label className="text-[10px] text-ink-muted font-bold block uppercase tracking-wider mb-1">Refund Justification</label>
-                        <input placeholder="Reason for return" value={refundReason} onChange={(e) => setRefundReason(e.target.value)} className="w-full text-xs rounded border border-edge p-2 bg-white focus:outline-none" />
+                        <label className="text-[12px] text-ink-muted font-bold block uppercase tracking-wider mb-1">Refund Justification</label>
+                        <input placeholder="Reason for return" value={refundReason} onChange={(e) => setRefundReason(e.target.value)} className="w-full text-sm rounded border border-edge p-2 bg-white focus:outline-none" />
                       </div>
-                      <button onClick={handleRefund} disabled={!refundAmount || Number(refundAmount) <= 0 || saving} className="w-full bg-brand-danger hover:bg-brand-danger/90 text-white text-xs uppercase font-bold py-2 rounded disabled:opacity-50 transition">
+                      <button onClick={handleRefund} disabled={!refundAmount || Number(refundAmount) <= 0 || saving} className="w-full bg-brand-danger hover:bg-brand-danger/90 text-white text-sm uppercase font-bold py-2 rounded disabled:opacity-50 transition">
                         Process Refund
                       </button>
                     </div>
@@ -1642,7 +1718,7 @@ function OrderDetail({ authFetch, order, onClose, onChanged }) {
 
               {order.status !== 'CANCELLED' && order.status !== 'SHIPPED' && order.status !== 'DELIVERED' && order.status !== 'REFUNDED' && (
                 <div>
-                  <button onClick={handleCancel} disabled={saving} className="w-full border border-brand-danger/30 text-brand-danger text-xs font-bold uppercase py-2.5 rounded hover:bg-brand-danger/5 transition">
+                  <button onClick={handleCancel} disabled={saving} className="w-full border border-brand-danger/30 text-brand-danger text-sm font-bold uppercase py-2.5 rounded hover:bg-brand-danger/5 transition">
                     Cancel Order
                   </button>
                 </div>
@@ -1656,22 +1732,23 @@ function OrderDetail({ authFetch, order, onClose, onChanged }) {
                 <p className="text-sm font-bold text-ink-primary uppercase tracking-wider">Customer Details</p>
               </div>
               <p className="font-bold text-ink-primary text-sm">{order.shipping_name}</p>
-              <div className="text-xs space-y-1.5 text-ink-secondary">
+              <div className="text-sm space-y-1.5 text-ink-secondary">
                 <p className="truncate"><span className="font-semibold text-ink-primary">Email:</span> {order.email}</p>
                 <p><span className="font-semibold text-ink-primary">Phone:</span> {order.shipping_phone || 'N/A'}</p>
               </div>
-              <div className="mt-3 rounded-lg border border-edge bg-surface-subtle p-3.5 text-xs text-ink-secondary leading-relaxed">
-                <p className="font-bold text-ink-primary mb-1 uppercase tracking-wider text-[9px] text-ink-muted">Shipping Address</p>
+              <div className="mt-3 rounded-lg border border-edge bg-surface-subtle p-3.5 text-sm text-ink-secondary leading-relaxed">
+                <p className="font-bold text-ink-primary mb-1 uppercase tracking-wider text-[13px] text-ink-muted">Shipping Address</p>
                 {order.shipping_address_line1}{order.shipping_address_line2 ? `, ${order.shipping_address_line2}` : ''}<br />
                 {order.shipping_city}, {order.shipping_state} {order.shipping_postal_code}<br />
                 {order.shipping_country}
+                {order.shipping_method && <><br /><span className="font-semibold text-ink-primary">Method:</span> {order.shipping_method}{order.shipping_estimated_days ? ` · ${order.shipping_estimated_days}` : ''}</>}
               </div>
             </div>
 
             {/* Metadata Summary Card */}
             <div className="rounded-lg border border-edge bg-white p-6 shadow-card space-y-3">
               <p className="text-sm font-bold text-ink-primary border-b border-edge-subtle pb-3 uppercase tracking-wider">Checkout Summary</p>
-              <div className="space-y-2 text-xs">
+              <div className="space-y-2 text-sm">
                 <div className="flex justify-between"><span className="text-ink-secondary font-medium">Sales Region</span><span className="font-bold text-ink-primary uppercase">{order.region_code || order.region}</span></div>
                 <div className="flex justify-between"><span className="text-ink-secondary font-medium">Order Date</span><span className="font-semibold text-ink-primary">{formatDateTime(order.created_at)}</span></div>
                 <div className="flex justify-between"><span className="text-ink-secondary font-medium">Updated Date</span><span className="font-semibold text-ink-primary">{formatDateTime(order.updated_at)}</span></div>
@@ -1681,18 +1758,19 @@ function OrderDetail({ authFetch, order, onClose, onChanged }) {
 
             {/* Invoice & Packing Slip actions */}
             <div className="flex flex-col gap-2.5 w-full">
-              {order.invoice?.pdf_url ? (
-                <a href={getApiUrl(order.invoice.pdf_url)} target="_blank" rel="noreferrer" className="flex w-full items-center justify-center gap-2 rounded-lg border border-edge bg-white px-4 py-3.5 text-xs font-bold text-ink-primary hover:bg-surface-muted transition shadow-sm">
-                  <Download className="h-4 w-4 text-brand-accent" /> Download Invoice / Summary
-                </a>
-              ) : (
-                <div className="text-center text-xs text-brand-muted p-3 border border-dashed border-edge rounded bg-surface-muted">
-                  Invoice PDF not generated yet
-                </div>
-              )}
               <button
+                type="button"
+                onClick={downloadOrderInvoice}
+                disabled={downloadingInvoice}
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-edge bg-ink-primary text-white px-4 py-3.5 text-sm font-bold hover:bg-ink-primary/90 transition shadow-sm cursor-pointer disabled:opacity-50"
+              >
+                <Download className="h-4 w-4" />
+                {downloadingInvoice ? 'Generating Invoice PDF…' : 'Download Invoice (PDF)'}
+              </button>
+              <button
+                type="button"
                 onClick={printPackingSlip}
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-edge bg-white px-4 py-3.5 text-xs font-bold text-ink-primary hover:bg-surface-muted transition shadow-sm"
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-edge bg-white px-4 py-3.5 text-sm font-bold text-ink-primary hover:bg-surface-muted transition shadow-sm cursor-pointer"
               >
                 <Printer className="h-4 w-4 text-ink-secondary" /> Print Packing Slip
               </button>
@@ -1723,7 +1801,7 @@ function PaginationControls({ page, pageSize, totalCount, onChangePage, onChange
 
   return (
     <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-edge-subtle pt-4 mt-4">
-      <div className="text-xs text-brand-muted">
+      <div className="text-sm text-brand-muted">
         Showing <span className="font-semibold text-ink-primary">{totalCount > 0 ? startRange : 0}</span> to{' '}
         <span className="font-semibold text-ink-primary">{endRange}</span> of{' '}
         <span className="font-semibold text-ink-primary">{totalCount}</span> results
@@ -1735,7 +1813,7 @@ function PaginationControls({ page, pageSize, totalCount, onChangePage, onChange
             onChangePageSize(Number(e.target.value));
             onChangePage(1);
           }}
-          className="rounded-lg border border-edge bg-white px-2.5 py-1.5 text-xs text-ink-primary"
+          className="rounded-lg border border-edge bg-white px-2.5 py-1.5 text-sm text-ink-primary"
         >
           {[10, 25, 50, 100].map((size) => (
             <option key={size} value={size}>
@@ -1747,7 +1825,7 @@ function PaginationControls({ page, pageSize, totalCount, onChangePage, onChange
           <button
             onClick={() => onChangePage(Math.max(1, page - 1))}
             disabled={page === 1}
-            className="px-3 py-1.5 text-xs font-semibold text-ink-primary hover:bg-surface-muted disabled:opacity-40 transition-colors border-r border-edge"
+            className="px-3 py-1.5 text-sm font-semibold text-ink-primary hover:bg-surface-muted disabled:opacity-40 transition-colors border-r border-edge"
           >
             Prev
           </button>
@@ -1755,7 +1833,7 @@ function PaginationControls({ page, pageSize, totalCount, onChangePage, onChange
             <button
               key={p}
               onClick={() => onChangePage(p)}
-              className={`px-3 py-1.5 text-xs font-semibold border-r border-edge last:border-0 transition-colors ${
+              className={`px-3 py-1.5 text-sm font-semibold border-r border-edge last:border-0 transition-colors ${
                 page === p
                   ? 'bg-surface-muted text-ink-accent'
                   : 'text-ink-primary hover:bg-surface-muted'
@@ -1767,7 +1845,7 @@ function PaginationControls({ page, pageSize, totalCount, onChangePage, onChange
           <button
             onClick={() => onChangePage(Math.min(totalPages, page + 1))}
             disabled={page === totalPages}
-            className="px-3 py-1.5 text-xs font-semibold text-ink-primary hover:bg-surface-muted disabled:opacity-40 transition-colors"
+            className="px-3 py-1.5 text-sm font-semibold text-ink-primary hover:bg-surface-muted disabled:opacity-40 transition-colors"
           >
             Next
           </button>
@@ -1843,6 +1921,18 @@ function OrdersTab({ authFetch, initialStatus = 'ALL', title = 'orders' }) {
     return stats[key] !== undefined ? ` (${stats[key]})` : '';
   };
 
+  const deleteOrder = (o, e) => {
+    e.stopPropagation();
+    if (confirm(`Permanently delete Order #${o.id}? This action cannot be undone.`)) {
+      authFetch(`/api/admin/orders/${o.id}/`, { method: 'DELETE' })
+        .then(() => {
+          if (detail?.id === o.id) setDetail(null);
+          load();
+        })
+        .catch((err) => alert(err.message || 'Could not delete order.'));
+    }
+  };
+
   if (loading && orders.length === 0) return <p className="text-sm text-brand-muted font-medium">Loading orders…</p>;
 
   return (
@@ -1876,8 +1966,8 @@ function OrdersTab({ authFetch, initialStatus = 'ALL', title = 'orders' }) {
       </div>
 
       <div className="overflow-x-auto rounded-md border border-edge bg-white shadow-card">
-        <table className="w-full text-left text-xs">
-          <thead className="bg-surface-muted text-[10px] font-medium uppercase tracking-wide text-ink-muted border-b border-edge">
+        <table className="w-full text-left text-sm">
+          <thead className="bg-surface-muted text-[12px] font-medium uppercase tracking-wide text-ink-muted border-b border-edge">
             <tr>
               <th className="px-3 py-3 font-medium">Order</th>
               <th className="px-3 py-3 font-medium">Customer</th>
@@ -1885,24 +1975,70 @@ function OrdersTab({ authFetch, initialStatus = 'ALL', title = 'orders' }) {
               <th className="px-3 py-3 font-medium">Total</th>
               <th className="px-3 py-3 font-medium">Date</th>
               <th className="px-3 py-3 font-medium">Status</th>
+              <th className="px-3 py-3 font-medium text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             {orders.map((o) => (
               <tr key={o.id} className="cursor-pointer border-t border-edge-subtle hover:bg-surface-muted transition-colors" onClick={() => { setShowCreate(false); setDetail(o); }}>
-                <td className="px-3 py-3"><p className="font-semibold text-ink-primary">#{o.id}</p><p className="text-[10px] text-brand-muted">{o.region_code || o.region}</p></td>
+                <td className="px-3 py-3"><p className="font-semibold text-ink-primary">#{o.id}</p><p className="text-[12px] text-brand-muted">{o.region_code || o.region}</p></td>
                 <td className="px-3 py-3"><p className="font-semibold text-ink-primary">{o.shipping_name || 'Customer'}</p><p className="text-brand-muted">{o.email}</p></td>
                 <td className="px-3 py-3">
-                  <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${PAYMENT_STATUS_COLOR[o.payment_status] || 'bg-surface-muted text-ink-secondary'}`}>{o.payment_status || 'PAID'}</span>
-                  <p className="mt-0.5 font-mono text-[9px] text-ink-subtle">{o.payment_method}</p>
+                  <span className={`rounded px-1.5 py-0.5 text-[12px] font-semibold ${PAYMENT_STATUS_COLOR[o.payment_status] || 'bg-surface-muted text-ink-secondary'}`}>{o.payment_status || 'PAID'}</span>
+                  <p className="mt-0.5 font-mono text-[13px] text-ink-subtle">{o.payment_method}</p>
                 </td>
                 <td className="px-3 py-3 font-semibold text-ink-primary">{o.currency_code} {o.total}</td>
                 <td className="px-3 py-3 text-brand-muted">{formatDateTime(o.created_at)}</td>
-                <td className="px-3 py-3"><span className={`rounded-xs px-2 py-0.5 text-[9px] font-semibold ${STATUS_COLOR[o.status]}`}>{o.status}</span></td>
+                <td className="px-3 py-3"><span className={`rounded-xs px-2 py-0.5 text-[13px] font-semibold ${STATUS_COLOR[o.status]}`}>{o.status}</span></td>
+                <td className="px-3 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex justify-end items-center gap-1.5">
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        try {
+                          const res = await authFetch(`/api/admin/orders/${o.id}/invoice/`);
+                          if (!res.ok) {
+                            const text = await res.text().catch(() => '');
+                            throw new Error(`HTTP ${res.status}: ${text || 'Download failed'}`);
+                          }
+                          const blob = await res.blob();
+                          const url = window.URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `Invoice_Order_${o.id}.pdf`;
+                          document.body.appendChild(a);
+                          a.click();
+                          a.remove();
+                          window.URL.revokeObjectURL(url);
+                        } catch (err) {
+                          alert(`Could not download invoice PDF: ${err.message}`);
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 rounded bg-surface-muted border border-edge px-2 py-1 text-[11px] font-semibold text-ink-primary hover:bg-surface-subtle transition cursor-pointer"
+                      title="Download Invoice PDF"
+                    >
+                      <Download className="h-3 w-3 text-brand-accent" /> Invoice
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowCreate(false);
+                        setDetail(o);
+                      }}
+                      className="inline-flex items-center gap-1 rounded bg-surface-muted border border-edge px-2 py-1 text-[11px] font-semibold text-ink-primary hover:bg-surface-subtle transition cursor-pointer"
+                      title="View Order / Print Packing Slip"
+                    >
+                      <Printer className="h-3 w-3 text-ink-secondary" /> Details & Slip
+                    </button>
+                    <button onClick={(e) => deleteOrder(o, e)} className="text-brand-muted hover:text-brand-danger ml-0.5" title="Delete order permanently">
+                      <Trash2 className="h-4 w-4 inline-block" />
+                    </button>
+                  </div>
+                </td>
               </tr>
             ))}
             {!orders.length && (
-              <tr><td colSpan={6} className="px-3 py-10 text-center text-sm text-brand-muted">
+              <tr><td colSpan={7} className="px-3 py-10 text-center text-sm text-brand-muted">
                 {query || status !== 'ALL' || paymentStatus !== 'ALL'
                   ? 'No orders match these filters.'
                   : <span>No orders yet. <button onClick={() => setShowCreate(true)} className="text-ink-accent font-semibold hover:underline">Create your first order →</button></span>}
@@ -1995,21 +2131,21 @@ function AbandonedTab({ authFetch }) {
         <div key={c.id || c.session_id} className="rounded-md border border-edge bg-white shadow-card p-4">
           <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
             <div>
-              <p className="text-sm font-semibold text-ink-primary">{c.email || 'Guest'} <span className="ml-1 rounded bg-surface-muted px-1.5 py-0.5 text-[10px] font-semibold text-ink-secondary">{c.region}</span></p>
-              <p className="text-[11px] text-brand-muted">{c.item_count} item(s) · {(c.items || []).map((i) => `${i.qty || i.quantity}× ${i.name}`).join(', ')}</p>
-              <p className="mt-1 font-mono text-[10px] text-ink-subtle">{c.session_id}</p>
+              <p className="text-sm font-semibold text-ink-primary">{c.email || 'Guest'} <span className="ml-1 rounded bg-surface-muted px-1.5 py-0.5 text-[12px] font-semibold text-ink-secondary">{c.region}</span></p>
+              <p className="text-[13px] text-brand-muted">{c.item_count} item(s) · {(c.items || []).map((i) => `${i.qty || i.quantity}× ${i.name}`).join(', ')}</p>
+              <p className="mt-1 font-mono text-[12px] text-ink-subtle">{c.session_id}</p>
             </div>
             <div className="text-left sm:text-right">
               <p className="text-sm font-semibold text-ink-primary">{c.currency || 'GBP'} {c.value}</p>
-              <p className="text-[10px] text-ink-subtle">Active {formatDateTime(c.updated_at)}</p>
-              <p className="mt-1 text-[10px] text-brand-muted">{c.recovery_attempts || 0} recovery attempt(s)</p>
+              <p className="text-[12px] text-ink-subtle">Active {formatDateTime(c.updated_at)}</p>
+              <p className="mt-1 text-[12px] text-brand-muted">{c.recovery_attempts || 0} recovery attempt(s)</p>
             </div>
           </div>
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-edge-subtle pt-3">
-            <span className={`rounded-xs px-2 py-0.5 text-[10px] font-semibold ${RECOVERY_STATUS_COLOR[c.recovery_status] || RECOVERY_STATUS_COLOR.NOT_CONTACTED}`}>{(c.recovery_status || 'NOT_CONTACTED').replace('_', ' ')}</span>
+            <span className={`rounded-xs px-2 py-0.5 text-[12px] font-semibold ${RECOVERY_STATUS_COLOR[c.recovery_status] || RECOVERY_STATUS_COLOR.NOT_CONTACTED}`}>{(c.recovery_status || 'NOT_CONTACTED').replace('_', ' ')}</span>
             <div className="flex flex-wrap gap-2">
-              <button onClick={() => updateRecovery(c, 'CONTACTED')} className="rounded-sm border border-edge px-3 py-1.5 text-xs font-semibold text-ink-primary hover:border-ink-primary"><MessageSquare className="mr-1 inline h-3.5 w-3.5" />Mark contacted</button>
-              <button onClick={() => updateRecovery(c, 'RECOVERED')} className="rounded-sm border border-edge px-3 py-1.5 text-xs font-semibold text-ink-primary hover:border-brand-success"><CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />Recovered</button>
+              <button onClick={() => updateRecovery(c, 'CONTACTED')} className="rounded-sm border border-edge px-3 py-1.5 text-sm font-semibold text-ink-primary hover:border-ink-primary"><MessageSquare className="mr-1 inline h-3.5 w-3.5" />Mark contacted</button>
+              <button onClick={() => updateRecovery(c, 'RECOVERED')} className="rounded-sm border border-edge px-3 py-1.5 text-sm font-semibold text-ink-primary hover:border-brand-success"><CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />Recovered</button>
             </div>
           </div>
         </div>
@@ -2021,7 +2157,7 @@ function AbandonedTab({ authFetch }) {
 
 /* ----------------------------------------------------------- Payments */
 function PaymentsTab({ authFetch, regions }) {
-  const [activeSubTab, setActiveSubTab] = useState('routing'); // routing | fraud
+  const [activeSubTab, setActiveSubTab] = useState('routing'); // routing | fraud | refunds
   const [gateways, setGateways] = useState([]);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -2032,6 +2168,9 @@ function PaymentsTab({ authFetch, regions }) {
     block_suspicious_emails: true
   });
   const [savingFraud, setSavingFraud] = useState(false);
+  const [roles, setRoles] = useState([]);
+  const [refundLimits, setRefundLimits] = useState({ role_limits: {}, staff_fallback: {} });
+  const [savingRefundLimits, setSavingRefundLimits] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -2040,13 +2179,19 @@ function PaymentsTab({ authFetch, regions }) {
       authFetch('/api/admin/orders/').then((r) => r.json()).catch(() => []),
       authFetch('/api/admin/settings/PAYMENT_FRAUD_RULES/')
         .then((r) => r.ok ? r.json().then(d => d.value) : null)
-        .catch(() => null)
-    ]).then(([g, o, fraudData]) => {
+        .catch(() => null),
+      authFetch('/api/admin/settings/REFUND_LIMITS/')
+        .then((r) => r.ok ? r.json().then(d => d.value) : null)
+        .catch(() => null),
+      authFetch('/api/admin/roles/').then((r) => r.ok ? r.json() : []).catch(() => []),
+    ]).then(([g, o, fraudData, refundData, roleData]) => {
       setGateways(Array.isArray(g) ? g : g.results || []);
       setOrders(Array.isArray(o) ? o : o.results || []);
       if (fraudData) {
         setFraudRules(fraudData);
       }
+      if (refundData) setRefundLimits(refundData);
+      setRoles(Array.isArray(roleData) ? roleData : roleData.results || []);
     }).finally(() => setLoading(false));
   }, [authFetch]);
 
@@ -2064,6 +2209,11 @@ function PaymentsTab({ authFetch, regions }) {
         mode: form.mode,
         publishable_key: form.publishable_key || '',
         secret_key: form.secret_key || '',
+        ...((form.webhook_secret || form.webhook_id) ? {
+          extra_config: form.code === 'PAYPAL'
+            ? { webhook_id: form.webhook_id }
+            : { webhook_secret: form.webhook_secret },
+        } : {}),
         supports_refunds: form.supports_refunds,
         sort_order: Number(form.sort_order || 0)
       })
@@ -2090,6 +2240,29 @@ function PaymentsTab({ authFetch, regions }) {
       })
       .then(() => alert('Fraud prevention rules updated successfully!'))
       .finally(() => setSavingFraud(false));
+  };
+
+  const saveRefundLimits = () => {
+    setSavingRefundLimits(true);
+    authFetch('/api/admin/settings/REFUND_LIMITS/', {
+      method: 'PUT',
+      body: JSON.stringify({
+        key: 'REFUND_LIMITS', value: refundLimits,
+        description: 'Maximum direct refund amount by staff role and region',
+      }),
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error('Unable to save refund limits.');
+        alert('Refund authorization limits updated.');
+      })
+      .catch((error) => alert(error.message))
+      .finally(() => setSavingRefundLimits(false));
+  };
+
+  const setRefundLimit = (roleName, regionCode, value) => {
+    const roleLimits = { ...(refundLimits.role_limits || {}) };
+    roleLimits[roleName] = { ...(roleLimits[roleName] || {}), [regionCode]: value };
+    setRefundLimits({ ...refundLimits, role_limits: roleLimits });
   };
 
   const toggle = (g) => authFetch(`/api/admin/payment-gateways/${g.id}/`, { method: 'PATCH', body: JSON.stringify({ is_enabled: !g.is_enabled }) }).then(load);
@@ -2122,33 +2295,34 @@ function PaymentsTab({ authFetch, regions }) {
     <div className="space-y-4">
       {/* Subtab Navigation */}
       <div className="flex gap-2 border-b border-edge-subtle pb-2">
-        <button onClick={() => setActiveSubTab('routing')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm ${activeSubTab === 'routing' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Gateway Routing &amp; Priority</button>
-        <button onClick={() => setActiveSubTab('fraud')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm ${activeSubTab === 'fraud' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Fraud Prevention Rules</button>
+        <button onClick={() => setActiveSubTab('routing')} className={`px-4 py-1.5 text-sm font-semibold uppercase rounded-sm ${activeSubTab === 'routing' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Gateway Routing &amp; Priority</button>
+        <button onClick={() => setActiveSubTab('fraud')} className={`px-4 py-1.5 text-sm font-semibold uppercase rounded-sm ${activeSubTab === 'fraud' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Fraud Prevention Rules</button>
+        <button onClick={() => setActiveSubTab('refunds')} className={`px-4 py-1.5 text-sm font-semibold uppercase rounded-sm ${activeSubTab === 'refunds' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Refund Limits</button>
       </div>
 
       {activeSubTab === 'routing' ? (
         <div className="space-y-5">
           <div className="grid gap-4 md:grid-cols-3">
-            <div className="rounded-md border border-edge bg-white shadow-card p-4"><p className="text-xs text-brand-muted">Gateways</p><p className="mt-1 text-2xl font-semibold text-ink-primary">{gateways.length}</p></div>
-            <div className="rounded-md border border-edge bg-white shadow-card p-4"><p className="text-xs text-brand-muted">Manual capture queue</p><p className="mt-1 text-2xl font-semibold text-ink-primary">{manualCapture.length}</p></div>
-            <div className="rounded-md border border-edge bg-white shadow-card p-4"><p className="text-xs text-brand-muted">Captured orders</p><p className="mt-1 text-2xl font-semibold text-ink-primary">{orders.filter((o) => (o.payment_status || 'PAID') === 'PAID').length}</p></div>
+            <div className="rounded-md border border-edge bg-white shadow-card p-4"><p className="text-sm text-brand-muted">Gateways</p><p className="mt-1 text-2xl font-semibold text-ink-primary">{gateways.length}</p></div>
+            <div className="rounded-md border border-edge bg-white shadow-card p-4"><p className="text-sm text-brand-muted">Manual capture queue</p><p className="mt-1 text-2xl font-semibold text-ink-primary">{manualCapture.length}</p></div>
+            <div className="rounded-md border border-edge bg-white shadow-card p-4"><p className="text-sm text-brand-muted">Captured orders</p><p className="mt-1 text-2xl font-semibold text-ink-primary">{orders.filter((o) => (o.payment_status || 'PAID') === 'PAID').length}</p></div>
           </div>
-          <div className="flex items-center justify-between"><p className="text-sm text-brand-muted">{gateways.length} gateways · region-routed by priority</p><button onClick={() => setForm({ code: 'RAZORPAY', display_name: '', region: regions[0]?.id, is_enabled: true, mode: 'TEST', publishable_key: '', secret_key: '', supports_refunds: true, sort_order: 0 })} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase"><Plus className="h-4 w-4" /> New gateway</button></div>
+          <div className="flex items-center justify-between"><p className="text-sm text-brand-muted">{gateways.length} gateways · region-routed by priority</p><button onClick={() => setForm({ code: 'RAZORPAY', display_name: '', region: regions[0]?.id, is_enabled: true, mode: 'TEST', publishable_key: '', secret_key: '', webhook_secret: '', webhook_id: '', supports_refunds: true, sort_order: 0 })} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-sm uppercase"><Plus className="h-4 w-4" /> New gateway</button></div>
           
           <div className="space-y-2">
             {sortedGateways.map((g) => (
               <div key={g.id} className="flex items-center justify-between rounded-md border border-edge bg-white p-3">
                 <div>
                   <div className="flex items-center gap-2">
-                    <p className="text-sm font-semibold text-ink-primary">{g.display_name} <span className="font-mono text-[10px] text-brand-muted">{g.code}</span></p>
-                    <span className="rounded bg-surface-muted text-ink-accent px-1.5 py-0.2 text-[9px] font-semibold">Priority #{g.sort_order || 0}</span>
+                    <p className="text-sm font-semibold text-ink-primary">{g.display_name} <span className="font-mono text-[12px] text-brand-muted">{g.code}</span></p>
+                    <span className="rounded bg-surface-muted text-ink-accent px-1.5 py-0.2 text-[13px] font-semibold">Priority #{g.sort_order || 0}</span>
                   </div>
-                  <p className="text-[11px] text-brand-muted">Region {g.region_code || regionCode(g.region)} · {g.mode} · {g.is_configured ? 'configured' : 'keys missing'}</p>
+                  <p className="text-[13px] text-brand-muted">Region {g.region_code || regionCode(g.region)} · {g.mode} · {g.is_configured ? 'configured' : 'keys missing'}</p>
                 </div>
                 <div className="flex items-center gap-3">
-                  <button onClick={() => toggle(g)} className={`rounded-xs px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${g.is_enabled ? 'bg-brand-success/10 text-ink-success' : 'bg-surface-muted text-ink-muted'}`}>{g.is_enabled ? 'ENABLED' : 'DISABLED'}</button>
-                  <button onClick={() => syncStatus(g)} title="Reconcile recent orders against this gateway" className="rounded-sm border border-edge px-2 py-1 text-[10px] font-medium uppercase text-ink-primary hover:bg-surface-muted">Sync recent</button>
-                  <button onClick={() => setForm({ ...g })} className="text-ink-accent hover:opacity-70"><Pencil className="h-4 w-4" /></button>
+                  <button onClick={() => toggle(g)} className={`rounded-xs px-2 py-0.5 text-[12px] font-medium uppercase tracking-wide ${g.is_enabled ? 'bg-brand-success/10 text-ink-success' : 'bg-surface-muted text-ink-muted'}`}>{g.is_enabled ? 'ENABLED' : 'DISABLED'}</button>
+                  <button onClick={() => syncStatus(g)} title="Reconcile recent orders against this gateway" className="rounded-sm border border-edge px-2 py-1 text-[12px] font-medium uppercase text-ink-primary hover:bg-surface-muted">Sync recent</button>
+                  <button onClick={() => setForm({ ...g, webhook_secret: '', webhook_id: '' })} className="text-ink-accent hover:opacity-70"><Pencil className="h-4 w-4" /></button>
                   <button onClick={() => del(g)} className="text-brand-muted hover:text-brand-danger"><X className="h-4 w-4" /></button>
                 </div>
               </div>
@@ -2160,20 +2334,20 @@ function PaymentsTab({ authFetch, regions }) {
             <div className="divide-y divide-edge-subtle">
               {manualCapture.slice(0, 6).map((o) => (
                 <div key={o.id} className="flex flex-col justify-between gap-2 px-4 py-3 text-sm sm:flex-row sm:items-center">
-                  <div><p className="font-semibold text-ink-primary">Order #{o.id} | {o.email}</p><p className="text-xs text-brand-muted">{o.payment_method} | {formatMoney(o.currency_code, o.payment_captured_amount)} captured of {formatMoney(o.currency_code, o.payment_authorized_amount || o.total)}</p></div>
-                  <span className={`w-fit rounded-xs px-2 py-0.5 text-[10px] font-semibold ${PAYMENT_STATUS_COLOR[o.payment_status] || 'bg-surface-muted text-ink-secondary'}`}>{o.payment_status || 'PENDING'}</span>
+                  <div><p className="font-semibold text-ink-primary">Order #{o.id} | {o.email}</p><p className="text-sm text-brand-muted">{o.payment_method} | {formatMoney(o.currency_code, o.payment_captured_amount)} captured of {formatMoney(o.currency_code, o.payment_authorized_amount || o.total)}</p></div>
+                  <span className={`w-fit rounded-xs px-2 py-0.5 text-[12px] font-semibold ${PAYMENT_STATUS_COLOR[o.payment_status] || 'bg-surface-muted text-ink-secondary'}`}>{o.payment_status || 'PENDING'}</span>
                 </div>
               ))}
               {!manualCapture.length && <p className="px-4 py-5 text-sm text-brand-muted">No orders are waiting for manual capture.</p>}
             </div>
           </div>
         </div>
-      ) : (
+      ) : activeSubTab === 'fraud' ? (
         <div className="bg-white rounded-lg border border-edge p-5 space-y-4">
           <h3 className="text-sm font-semibold text-ink-primary">Checkout Fraud Filters</h3>
-          <p className="text-xs text-brand-muted">Configure security threshold metrics to restrict checkout routing for high-risk buyers.</p>
+          <p className="text-sm text-brand-muted">Configure security threshold metrics to restrict checkout routing for high-risk buyers.</p>
 
-          <div className="space-y-3 text-xs max-w-md">
+          <div className="space-y-3 text-sm max-w-md">
             <div>
               <label className="block font-semibold text-ink-primary mb-1">Blocked Countries (Comma separated codes)</label>
               <input type="text" value={fraudRules.block_countries || ''} onChange={(e) => setFraudRules({ ...fraudRules, block_countries: e.target.value })} placeholder="e.g. RU, CN, IR" className="w-full rounded-sm border border-edge p-2.5 font-mono" />
@@ -2182,7 +2356,7 @@ function PaymentsTab({ authFetch, regions }) {
             <div>
               <label className="block font-semibold text-ink-primary mb-1">Minimum COD Order Amount (GBP value equivalent)</label>
               <input type="number" value={fraudRules.min_cod_amount || ''} onChange={(e) => setFraudRules({ ...fraudRules, min_cod_amount: e.target.value })} placeholder="e.g. 20" className="w-full rounded-sm border border-edge p-2.5" />
-              <p className="text-[10px] text-ink-subtle mt-1">Orders below this value will not be allowed to checkout using Cash on Delivery (prevent fake orders).</p>
+              <p className="text-[12px] text-ink-subtle mt-1">Orders below this value will not be allowed to checkout using Cash on Delivery (prevent fake orders).</p>
             </div>
 
             <div>
@@ -2192,10 +2366,42 @@ function PaymentsTab({ authFetch, regions }) {
               </label>
             </div>
 
-            <button onClick={saveFraud} disabled={savingFraud} className="btn-primary py-2.5 px-6 font-semibold uppercase text-xs disabled:opacity-50">
+            <button onClick={saveFraud} disabled={savingFraud} className="btn-primary py-2.5 px-6 font-semibold uppercase text-sm disabled:opacity-50">
               {savingFraud ? 'Saving...' : 'Save Fraud Settings'}
             </button>
           </div>
+        </div>
+      ) : (
+        <div className="rounded-lg border border-edge bg-white p-5 space-y-4">
+          <div>
+            <h3 className="text-sm font-semibold text-ink-primary">Direct Refund Authorization Limits</h3>
+            <p className="mt-1 text-sm text-brand-muted">Set the maximum amount each staff role may refund without approval. Superusers and Admin roles remain unrestricted.</p>
+          </div>
+          <div className="overflow-x-auto rounded-sm border border-edge">
+            <table className="min-w-full text-sm">
+              <thead className="bg-surface-muted text-left text-ink-muted">
+                <tr><th className="px-3 py-2">Role</th>{regions.map((item) => <th key={item.id} className="px-3 py-2">{item.code} ({item.currency_code})</th>)}</tr>
+              </thead>
+              <tbody className="divide-y divide-edge-subtle">
+                {roles.filter((role) => !['Admin', 'Super Admin'].includes(role.name)).map((role) => (
+                  <tr key={role.id}>
+                    <td className="px-3 py-2 font-semibold text-ink-primary">{role.name}</td>
+                    {regions.map((item) => (
+                      <td key={item.id} className="px-3 py-2">
+                        <input type="number" min="0" step="0.01"
+                          value={refundLimits.role_limits?.[role.name]?.[item.code] || ''}
+                          onChange={(event) => setRefundLimit(role.name, item.code, event.target.value)}
+                          className="w-32 rounded-sm border border-edge p-2" placeholder="0.00" />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <button onClick={saveRefundLimits} disabled={savingRefundLimits} className="btn-primary py-2.5 px-6 font-semibold uppercase text-sm disabled:opacity-50">
+            {savingRefundLimits ? 'Saving...' : 'Save Refund Limits'}
+          </button>
         </div>
       )}
 
@@ -2203,7 +2409,7 @@ function PaymentsTab({ authFetch, regions }) {
         <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
           <div className="w-full max-w-md bg-white rounded-lg border border-edge p-6 shadow-card">
             <h3 className="mb-4 text-lg font-semibold text-ink-primary">{form.id ? 'Edit' : 'New'} gateway</h3>
-            <div className="space-y-3 text-xs">
+            <div className="space-y-3 text-sm">
               <div className="grid grid-cols-2 gap-3">
                 <select value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} className="rounded-sm border border-edge p-2.5">
                   {['RAZORPAY', 'STRIPE', 'PAYPAL', 'COD'].map((c) => <option key={c} value={c}>{c}</option>)}
@@ -2221,7 +2427,12 @@ function PaymentsTab({ authFetch, regions }) {
                 <label className="flex items-center gap-2 text-ink-primary font-semibold"><input type="checkbox" checked={form.supports_refunds} onChange={(e) => setForm({ ...form, supports_refunds: e.target.checked })} className="accent-ink-primary" /> Refunds</label>
               </div>
               <input placeholder="Publishable / Key ID" value={form.publishable_key || ''} onChange={(e) => setForm({ ...form, publishable_key: e.target.value })} className="w-full rounded-sm border border-edge p-2.5" />
-              <input placeholder="Secret key" value={form.secret_key || ''} onChange={(e) => setForm({ ...form, secret_key: e.target.value })} className="w-full rounded-sm border border-edge p-2.5" />
+              <PasswordInput autoComplete="new-password" placeholder="Secret key (leave blank to keep current)" value={form.secret_key || ''} onChange={(e) => setForm({ ...form, secret_key: e.target.value })} className="w-full rounded-sm border border-edge p-2.5" />
+              {form.code === 'PAYPAL' ? (
+                <input placeholder="Webhook ID (leave blank to keep current)" value={form.webhook_id || ''} onChange={(e) => setForm({ ...form, webhook_id: e.target.value })} className="w-full rounded-sm border border-edge p-2.5" />
+              ) : form.code !== 'COD' ? (
+                <PasswordInput autoComplete="new-password" placeholder="Webhook signing secret (leave blank to keep current)" value={form.webhook_secret || ''} onChange={(e) => setForm({ ...form, webhook_secret: e.target.value })} className="w-full rounded-sm border border-edge p-2.5" />
+              ) : null}
               
               <div className="grid grid-cols-2 gap-3 items-center">
                 <div>
@@ -2244,12 +2455,27 @@ function PaymentsTab({ authFetch, regions }) {
 }
 
 /* ------------------------------------------------------------- Emails */
-const EMAIL_EVENTS = [['order_confirmation', 'Order confirmation'], ['payment_failed', 'Payment failed'], ['shipment_dispatched', 'Shipment dispatched'], ['refund_processed', 'Refund processed'], ['welcome', 'Welcome']];
+// Every event the backend can send. Keep in step with seed_email_templates.py —
+// an event missing here cannot be edited by the admin at all.
+const EMAIL_EVENTS = [
+  ['order_confirmation', 'Order confirmation'],
+  ['order_shipped', 'Order shipped'],
+  ['shipment_dispatched', 'Shipment dispatched'],
+  ['order_delivered', 'Order delivered'],
+  ['order_cancelled', 'Order cancelled'],
+  ['payment_failed', 'Payment failed'],
+  ['refund_processed', 'Refund processed'],
+  ['abandoned_cart', 'Abandoned cart reminder'],
+  ['review_request', 'Review request'],
+  ['welcome', 'Welcome'],
+  ['password_reset', 'Password reset'],
+  ['contact_received', 'Contact form received'],
+];
 function EmailsTab({ authFetch, regions }) {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(null);
-  const [testEmail, setTestEmail] = useState('admin@scleroproteins.com');
+  const [testEmail, setTestEmail] = useState('');
   const [sendingTest, setSendingTest] = useState(false);
 
   const load = useCallback(() => {
@@ -2316,7 +2542,7 @@ function EmailsTab({ authFetch, regions }) {
     <div>
       <div className="mb-4 flex items-center justify-between">
         <p className="text-sm text-brand-muted">{templates.length} templates · region-specific (GST / VAT)</p>
-        <button onClick={() => setForm({ event: 'order_confirmation', region: '', subject: '', body: '', is_active: true })} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase font-semibold"><Plus className="h-4 w-4" /> New template</button>
+        <button onClick={() => setForm({ event: 'order_confirmation', region: '', subject: '', body: '', is_active: true })} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-sm uppercase font-semibold"><Plus className="h-4 w-4" /> New template</button>
       </div>
 
       <div className="grid gap-3">
@@ -2326,10 +2552,10 @@ function EmailsTab({ authFetch, regions }) {
               <div>
                 <p className="text-sm font-semibold text-ink-primary">
                   {t.event_display || t.event.replace(/_/g, ' ').toUpperCase()} 
-                  <span className="ml-2 rounded bg-surface-muted px-1.5 py-0.5 text-[10px] font-semibold text-ink-secondary uppercase">{t.region_code || 'GLOBAL'}</span>
+                  <span className="ml-2 rounded bg-surface-muted px-1.5 py-0.5 text-[12px] font-semibold text-ink-secondary uppercase">{t.region_code || 'GLOBAL'}</span>
                 </p>
-                <p className="mt-1 text-xs font-semibold text-ink-accent">{t.subject}</p>
-                <p className="mt-1 line-clamp-2 text-xs text-brand-muted font-mono">{t.body}</p>
+                <p className="mt-1 text-sm font-semibold text-ink-accent">{t.subject}</p>
+                <p className="mt-1 line-clamp-2 text-sm text-brand-muted font-mono">{t.body}</p>
               </div>
               <div className="flex gap-2">
                 <button onClick={() => setForm({ ...t, region: t.region || '' })} className="text-ink-accent hover:opacity-70"><Pencil className="h-4 w-4" /></button>
@@ -2350,7 +2576,7 @@ function EmailsTab({ authFetch, regions }) {
 
             <div className="grid gap-6 md:grid-cols-2">
               {/* Form Input fields */}
-              <div className="space-y-3 text-xs">
+              <div className="space-y-3 text-sm">
                 <div className="grid grid-cols-2 gap-3">
                   <select value={form.event} onChange={(e) => setForm({ ...form, event: e.target.value })} className="rounded-sm border border-edge p-2.5">
                     {EMAIL_EVENTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -2363,25 +2589,25 @@ function EmailsTab({ authFetch, regions }) {
 
                 <div>
                   <label className="block font-semibold text-ink-primary mb-1">Email Subject Line</label>
-                  <input placeholder="Subject" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-xs font-semibold text-ink-primary" />
+                  <input placeholder="Subject" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-sm font-semibold text-ink-primary" />
                 </div>
 
                 <div>
                   <div className="flex justify-between items-center mb-1">
                     <label className="block font-semibold text-ink-primary">Email Template Body</label>
-                    <span className="text-[10px] text-ink-accent">Supports variables: {"{customer_name}"}, {"{order_id}"}, {"{total}"}</span>
+                    <span className="text-[12px] text-ink-accent">Supports variables: {"{customer_name}"}, {"{order_id}"}, {"{total}"}</span>
                   </div>
-                  <textarea rows={8} placeholder="Body — Hello {customer_name}, your order {order_id} is processing..." value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 font-mono text-xs" />
+                  <textarea rows={8} placeholder="Body — Hello {customer_name}, your order {order_id} is processing..." value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 font-mono text-sm" />
                 </div>
 
                 <label className="flex items-center gap-2 text-ink-primary font-semibold cursor-pointer"><input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} className="accent-ink-primary" /> Active Template</label>
 
                 {form.id && (
                   <div className="p-3 bg-surface-muted border border-edge rounded-md space-y-2">
-                    <p className="font-semibold text-[10px] text-ink-primary uppercase">Send Test Email Configuration</p>
+                    <p className="font-semibold text-[12px] text-ink-primary uppercase">Send Test Email Configuration</p>
                     <div className="flex gap-2">
-                      <input placeholder="admin@scleroproteins.com" value={testEmail} onChange={(e) => setTestEmail(e.target.value)} className="flex-1 rounded-sm border border-edge p-2 text-xs" />
-                      <button onClick={triggerTestSend} disabled={sendingTest} className="px-3 py-2 bg-brand-accent hover:bg-brand-accent/90 text-white font-semibold rounded-sm text-[10px] uppercase">
+                      <input placeholder="admin@scleroproteins.com" value={testEmail} onChange={(e) => setTestEmail(e.target.value)} className="flex-1 rounded-sm border border-edge p-2 text-sm" />
+                      <button onClick={triggerTestSend} disabled={sendingTest} className="px-3 py-2 bg-brand-accent hover:bg-brand-accent/90 text-white font-semibold rounded-sm text-[12px] uppercase">
                         {sendingTest ? 'Sending...' : 'Send Test'}
                       </button>
                     </div>
@@ -2396,22 +2622,22 @@ function EmailsTab({ authFetch, regions }) {
 
               {/* Live Rendered Visual Preview */}
               <div className="rounded-lg border border-edge bg-surface-muted p-4 flex flex-col justify-start">
-                <p className="text-[10px] font-semibold text-brand-muted uppercase tracking-wider mb-2 border-b border-edge pb-1.5">Live Template Split-Screen Preview</p>
+                <p className="text-[12px] font-semibold text-brand-muted uppercase tracking-wider mb-2 border-b border-edge pb-1.5">Live Template Split-Screen Preview</p>
                 <div className="bg-white rounded-md border border-edge shadow-card p-5 space-y-3 flex-1 flex flex-col justify-between">
                   <div className="space-y-2">
                     <div className="border-b border-edge-subtle pb-2">
-                      <span className="text-[9px] font-semibold text-ink-subtle block uppercase">EMAIL SUBJECT</span>
-                      <span className="text-xs font-semibold text-ink-primary">{form.subject || '(No subject provided)'}</span>
+                      <span className="text-[13px] font-semibold text-ink-subtle block uppercase">EMAIL SUBJECT</span>
+                      <span className="text-sm font-semibold text-ink-primary">{form.subject || '(No subject provided)'}</span>
                     </div>
                     <div>
-                      <span className="text-[9px] font-semibold text-ink-subtle block uppercase">EMAIL BODY</span>
-                      <div className="text-xs text-ink-secondary leading-relaxed font-semibold font-mono whitespace-pre-wrap mt-1">
+                      <span className="text-[13px] font-semibold text-ink-subtle block uppercase">EMAIL BODY</span>
+                      <div className="text-sm text-ink-secondary leading-relaxed font-semibold font-mono whitespace-pre-wrap mt-1">
                         {renderBodyPreview(form.body) || '(Enter body copy on the left to preview)'}
                       </div>
                     </div>
                   </div>
                   <div className="border-t border-edge-subtle pt-3 text-center">
-                    <p className="text-[9px] text-ink-subtle font-semibold uppercase">Sclero Proteins Ltd · Targeted Cellular Recovery</p>
+                    <p className="text-[13px] text-ink-subtle font-semibold uppercase">Sclero Proteins Ltd · Targeted Cellular Recovery</p>
                   </div>
                 </div>
               </div>
@@ -2434,12 +2660,21 @@ function ShippingTab({ authFetch, regions = [] }) {
 
   const load = useCallback(() => {
     setLoading(true);
+    setErr('');
+    const loadList = async (url, label) => {
+      const response = await authFetch(url);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.detail || data.error || `Could not load ${label}.`);
+      return data;
+    };
     Promise.all([
-      authFetch('/api/admin/shipping-zones/').then(r => r.json()).catch(() => []),
-      authFetch('/api/admin/shipping-rates/').then(r => r.json()).catch(() => []),
+      loadList('/api/admin/shipping-zones/', 'shipping zones'),
+      loadList('/api/admin/shipping-rates/', 'shipping rates'),
     ]).then(([z, r]) => {
       setZones(Array.isArray(z) ? z : z.results || []);
       setRates(Array.isArray(r) ? r : r.results || []);
+    }).catch((error) => {
+      setErr(`${error.message} Please confirm the latest database migrations are applied.`);
     }).finally(() => setLoading(false));
   }, [authFetch]);
 
@@ -2452,6 +2687,7 @@ function ShippingTab({ authFetch, regions = [] }) {
     const payload = {
       name: zone.name, region: zone.region, is_active: zone.is_active,
       description: zone.description || '',
+      priority: Number(zone.priority || 0),
       countries: Array.isArray(zone.countries) ? zone.countries : [],
       states: Array.isArray(zone.states) ? zone.states : [],
       cities: Array.isArray(zone.cities) ? zone.cities : [],
@@ -2487,8 +2723,11 @@ function ShippingTab({ authFetch, regions = [] }) {
       zone: rate.zone, name: rate.name, method: rate.method || 'Standard Shipping',
       rate_type: rate.rate_type,
       price: rate.rate_type === 'FREE' ? '0.00' : (rate.price || '0.00'),
-      min_value: rate.min_value || '0.00', max_value: rate.max_value || null,
+      min_value: rate.min_value !== undefined && rate.min_value !== '' ? rate.min_value : null,
+      max_value: rate.max_value !== undefined && rate.max_value !== '' ? rate.max_value : null,
+      per_unit_price: rate.per_unit_price || '0.00', handling_fee: rate.handling_fee || '0.00',
       free_above: rate.free_above || null, surcharge_postcodes: rate.surcharge_postcodes || '',
+      surcharge_amount: rate.surcharge_amount || '0.00', priority: Number(rate.priority || 0),
       estimated_days: rate.estimated_days || '', description: rate.description || '',
       is_active: rate.is_active !== false,
     };
@@ -2553,10 +2792,6 @@ function CustomersTab({ authFetch }) {
   const [totalCount, setTotalCount] = useState(0);
   const [editingCustomer, setEditingCustomer] = useState(null);
 
-  const [metadataMap, setMetadataMap] = useState({});
-  const [creditInput, setCreditInput] = useState('');
-  const [tagsInput, setTagsInput] = useState('');
-
   useEffect(() => {
     const t = setTimeout(() => {
       setDebouncedQuery(searchQuery);
@@ -2585,10 +2820,6 @@ function CustomersTab({ authFetch }) {
       })
       .finally(() => setLoading(false));
 
-    authFetch('/api/admin/settings/USER_CREDITS_AND_TAGS/')
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d && d.value) setMetadataMap(d.value); })
-      .catch(() => {});
   }, [authFetch, page, pageSize, debouncedQuery, sortOrder]);
 
   useEffect(() => { load(); }, [load]);
@@ -2599,9 +2830,6 @@ function CustomersTab({ authFetch }) {
 
   const viewDetails = (customer) => {
     setSelectedCustomer(customer);
-    const meta = metadataMap[customer.id] || { credit: 0, tags: [] };
-    setCreditInput('');
-    setTagsInput(meta.tags ? meta.tags.join(', ') : '');
 
     authFetch(`/api/admin/customers/${customer.id}/details/`)
       .then((r) => r.json())
@@ -2630,34 +2858,6 @@ function CustomersTab({ authFetch }) {
       });
   };
 
-  const handleSaveMetadata = () => {
-    if (!selectedCustomer) return;
-    const currentMeta = metadataMap[selectedCustomer.id] || { credit: 0, tags: [] };
-    const parsedCreditToAdd = parseFloat(creditInput) || 0;
-    const updatedCredit = currentMeta.credit + parsedCreditToAdd;
-    const updatedTags = tagsInput.split(',').map(t => t.trim()).filter(Boolean);
-
-    const nextMetadataMap = {
-      ...metadataMap,
-      [selectedCustomer.id]: { credit: updatedCredit, tags: updatedTags }
-    };
-
-    setMetadataMap(nextMetadataMap);
-    setCreditInput('');
-
-    authFetch('/api/admin/settings/USER_CREDITS_AND_TAGS/', {
-      method: 'PUT',
-      body: JSON.stringify({ key: 'USER_CREDITS_AND_TAGS', value: nextMetadataMap, description: 'Store credits and custom tags for customer profiles' })
-    }).then(r => {
-      if (r.status === 404) {
-        return authFetch('/api/admin/settings/', {
-          method: 'POST',
-          body: JSON.stringify({ key: 'USER_CREDITS_AND_TAGS', value: nextMetadataMap, description: 'Store credits and custom tags for customer profiles' })
-        });
-      }
-    });
-  };
-
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -2673,31 +2873,22 @@ function CustomersTab({ authFetch }) {
             <option value="-email">Email (Z-A)</option>
           </select>
         </div>
-        <button onClick={startNew} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase"><UserPlus className="h-4 w-4" /> Add Customer</button>
+        <button onClick={startNew} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-sm uppercase"><UserPlus className="h-4 w-4" /> Add Customer</button>
       </div>
 
       <div className="overflow-x-auto rounded-md border border-edge bg-white shadow-card">
-        <table className="w-full text-left text-xs">
-          <thead className="bg-surface-muted text-[10px] font-medium uppercase tracking-wide text-ink-muted border-b border-edge">
-            <tr><th className="px-3 py-3 font-medium">Email</th><th className="px-3 py-3 font-medium">Name</th><th className="px-3 py-3 font-medium">Phone</th><th className="px-3 py-3 font-medium">Tags</th><th className="px-3 py-3 font-medium">Staff?</th></tr>
+        <table className="w-full text-left text-sm">
+          <thead className="bg-surface-muted text-[12px] font-medium uppercase tracking-wide text-ink-muted border-b border-edge">
+            <tr><th className="px-3 py-3 font-medium">Email</th><th className="px-3 py-3 font-medium">Name</th><th className="px-3 py-3 font-medium">Phone</th><th className="px-3 py-3 font-medium">Staff?</th></tr>
           </thead>
           <tbody>
             {customers.map((c) => {
-              const meta = metadataMap[c.id] || { credit: 0, tags: [] };
               return (
                 <tr key={c.id} className="cursor-pointer border-t border-edge-subtle hover:bg-surface-muted" onClick={() => viewDetails(c)}>
                   <td className="px-3 py-3 font-semibold text-ink-primary">{c.email}</td>
                   <td className="px-3 py-3 font-semibold">{c.first_name} {c.last_name}</td>
                   <td className="px-3 py-3 text-brand-muted">{c.phone_number || '—'}</td>
-                  <td className="px-3 py-3">
-                    <div className="flex flex-wrap gap-1">
-                      {meta.tags && meta.tags.map((tag) => (
-                        <span key={tag} className="rounded bg-surface-muted text-ink-accent px-1.5 py-0.5 text-[9px] font-semibold">{tag}</span>
-                      ))}
-                      {!meta.tags?.length && <span className="text-[10px] text-ink-subtle italic">None</span>}
-                    </div>
-                  </td>
-                  <td className="px-3 py-3">{c.is_staff ? <span className="rounded bg-surface-muted text-ink-accent px-2 py-0.5 text-[10px] font-semibold">STAFF</span> : <span className="rounded bg-surface-muted text-ink-muted px-2 py-0.5 text-[10px] font-semibold">CUSTOMER</span>}</td>
+                  <td className="px-3 py-3">{c.is_staff ? <span className="rounded bg-surface-muted text-ink-accent px-2 py-0.5 text-[12px] font-semibold">STAFF</span> : <span className="rounded bg-surface-muted text-ink-muted px-2 py-0.5 text-[12px] font-semibold">CUSTOMER</span>}</td>
                 </tr>
               );
             })}
@@ -2723,13 +2914,6 @@ function CustomersTab({ authFetch }) {
               <div>
                 <p className="kicker">Customer CRM Profile</p>
                 <h3 className="text-xl font-semibold text-ink-primary">{selectedCustomer.first_name} {selectedCustomer.last_name}</h3>
-                {metadataMap[selectedCustomer.id]?.tags && (
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {metadataMap[selectedCustomer.id].tags.map(t => (
-                      <span key={t} className="rounded bg-surface-muted text-ink-accent px-1.5 py-0.5 text-[9px] font-semibold uppercase">{t}</span>
-                    ))}
-                  </div>
-                )}
               </div>
               <div className="flex items-center gap-2">
                 <button onClick={() => startEdit(selectedCustomer)} className="rounded-sm border border-edge p-2 text-ink-accent hover:bg-surface-muted"><Pencil className="h-4 w-4" /></button>
@@ -2740,63 +2924,24 @@ function CustomersTab({ authFetch }) {
             {customerDetails ? (
               <div className="space-y-6">
                 {/* Profile detail cards */}
-                <div className="grid gap-4 md:grid-cols-3">
+                <div className="grid gap-4 md:grid-cols-2">
                   <div className="rounded-md border border-edge-subtle bg-surface-muted p-4">
-                    <p className="text-xs text-brand-muted font-semibold">LIFETIME SPENT</p>
+                    <p className="text-sm text-brand-muted font-semibold">LIFETIME SPENT</p>
                     <p className="mt-1 text-xl font-semibold text-ink-primary">GBP {customerDetails.total_spent.toFixed(2)}</p>
                   </div>
                   <div className="rounded-md border border-edge-subtle bg-surface-muted p-4">
-                    <p className="text-xs text-brand-muted font-semibold">TOTAL ORDERS</p>
+                    <p className="text-sm text-brand-muted font-semibold">TOTAL ORDERS</p>
                     <p className="mt-1 text-xl font-semibold text-ink-primary">{customerDetails.orders_count} orders</p>
                   </div>
-                  <div className="rounded-md border border-edge-subtle bg-surface-muted p-4">
-                    <p className="text-xs text-brand-muted font-semibold">STORE CREDIT</p>
-                    <p className="mt-1 text-xl font-semibold text-ink-accent">GBP {(metadataMap[selectedCustomer.id]?.credit || 0).toFixed(2)}</p>
-                  </div>
                 </div>
 
-                {/* Operations UI: tags and store credit */}
-                <div className="rounded-lg border border-edge bg-surface-muted p-4 space-y-4">
-                  <h4 className="text-xs font-semibold uppercase text-ink-primary border-b border-edge pb-2">CRM Actions</h4>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-semibold text-brand-muted uppercase block">Issue / Adjust Store Credit</label>
-                      <div className="flex gap-2">
-                        <input
-                          type="number"
-                          step="0.01"
-                          placeholder="Credit adjustment (e.g. 15.00)"
-                          value={creditInput}
-                          onChange={(e) => setCreditInput(e.target.value)}
-                          className="min-w-0 flex-1 rounded border border-edge px-3 py-1.5 text-xs bg-white"
-                        />
-                        <button onClick={handleSaveMetadata} className="bg-ink-primary text-white text-[10px] font-semibold uppercase px-3 py-1.5 rounded hover:opacity-90 transition-opacity">Issue</button>
-                      </div>
-                      <p className="text-[10px] text-ink-subtle">Enter positive amount to grant, or negative to deduct.</p>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-semibold text-brand-muted uppercase block">Profile Tags</label>
-                      <div className="flex gap-2">
-                        <input
-                          placeholder="e.g. VIP, Bulk-Buyer, Athlete"
-                          value={tagsInput}
-                          onChange={(e) => setTagsInput(e.target.value)}
-                          className="min-w-0 flex-1 rounded border border-edge px-3 py-1.5 text-xs bg-white"
-                        />
-                        <button onClick={handleSaveMetadata} className="bg-ink-primary text-white text-[10px] font-semibold uppercase px-3 py-1.5 rounded hover:opacity-90 transition-opacity">Update</button>
-                      </div>
-                      <p className="text-[10px] text-ink-subtle">Comma-separated lists of descriptive customer groups.</p>
-                    </div>
-                  </div>
-                </div>
 
                 {/* Addresses */}
                 <div>
-                  <h4 className="text-xs font-semibold uppercase text-brand-muted mb-2">Addresses ({customerDetails.addresses.length})</h4>
+                  <h4 className="text-sm font-semibold uppercase text-brand-muted mb-2">Addresses ({customerDetails.addresses.length})</h4>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {customerDetails.addresses.map((addr) => (
-                      <div key={addr.id} className="rounded-md border border-edge p-3 text-xs bg-white">
+                      <div key={addr.id} className="rounded-md border border-edge p-3 text-sm bg-white">
                         <p className="font-semibold text-ink-primary">{addr.full_name}</p>
                         <p>{addr.address_line1}, {addr.city}</p>
                         <p>{addr.state} {addr.postal_code}, {addr.country}</p>
@@ -2807,48 +2952,48 @@ function CustomersTab({ authFetch }) {
 
                 {/* Recent Orders */}
                 <div>
-                  <h4 className="text-xs font-semibold uppercase text-brand-muted mb-2">Recent Orders</h4>
+                  <h4 className="text-sm font-semibold uppercase text-brand-muted mb-2">Recent Orders</h4>
                   <div className="space-y-1.5">
                     {customerDetails.recent_orders.map((o) => (
-                      <div key={o.id} className="flex justify-between items-center rounded-lg border border-edge-subtle p-2 text-xs">
+                      <div key={o.id} className="flex justify-between items-center rounded-lg border border-edge-subtle p-2 text-sm">
                         <span>Order #{o.id} · {formatDate(o.created_at)}</span>
-                        <span className="font-semibold">{o.currency} {o.total} · <span className={`rounded-xs px-2 py-0.5 text-[9px] font-semibold ${STATUS_COLOR[o.status]}`}>{o.status}</span></span>
+                        <span className="font-semibold">{o.currency} {o.total} · <span className={`rounded-xs px-2 py-0.5 text-[13px] font-semibold ${STATUS_COLOR[o.status]}`}>{o.status}</span></span>
                       </div>
                     ))}
-                    {!customerDetails.recent_orders.length && <p className="text-xs text-brand-muted">No orders placed yet.</p>}
+                    {!customerDetails.recent_orders.length && <p className="text-sm text-brand-muted">No orders placed yet.</p>}
                   </div>
                 </div>
 
                 {/* Customer Activities */}
                 <div>
-                  <h4 className="text-xs font-semibold uppercase text-brand-muted mb-2">Activity Timeline</h4>
+                  <h4 className="text-sm font-semibold uppercase text-brand-muted mb-2">Activity Timeline</h4>
                   <div className="border-l border-edge-subtle pl-4 space-y-3">
                     {customerDetails.activities.map((act) => (
-                      <div key={act.id} className="relative text-xs">
+                      <div key={act.id} className="relative text-sm">
                         <span className="absolute -left-[21px] top-1 flex h-2.5 w-2.5 rounded-full bg-ink-primary" />
                         <p className="font-semibold text-ink-primary">{act.activity_type.replace('_', ' ')}</p>
                         <p className="text-ink-subtle">{act.description} · {formatDateTime(act.created_at)}</p>
                       </div>
                     ))}
-                    {!customerDetails.activities.length && <p className="text-xs text-brand-muted">No activity logs recorded.</p>}
+                    {!customerDetails.activities.length && <p className="text-sm text-brand-muted">No activity logs recorded.</p>}
                   </div>
                 </div>
 
                 {/* Support Tickets */}
                 <div>
-                  <h4 className="text-xs font-semibold uppercase text-brand-muted mb-2">Customer Support History</h4>
+                  <h4 className="text-sm font-semibold uppercase text-brand-muted mb-2">Customer Support History</h4>
                   <div className="space-y-1.5">
                     {customerDetails.tickets.map((t) => (
-                      <div key={t.id} className="rounded-lg border border-edge-subtle p-2 text-xs">
+                      <div key={t.id} className="rounded-lg border border-edge-subtle p-2 text-sm">
                         <p className="font-semibold text-ink-primary">{t.subject}</p>
                         <p className="text-ink-subtle">{t.message} · <span className="font-semibold text-ink-accent">{t.status}</span></p>
                       </div>
                     ))}
-                    {!customerDetails.tickets.length && <p className="text-xs text-brand-muted">No support tickets.</p>}
+                    {!customerDetails.tickets.length && <p className="text-sm text-brand-muted">No support tickets.</p>}
                   </div>
                 </div>
               </div>
-            ) : <p className="text-xs text-brand-muted">Loading CRM logs...</p>}
+            ) : <p className="text-sm text-brand-muted">Loading CRM logs...</p>}
           </div>
         </div>
       )}
@@ -2866,8 +3011,8 @@ function CustomersTab({ authFetch }) {
               </div>
               <input placeholder="Phone Number" value={editingCustomer.phone_number || ''} onChange={(e) => setEditingCustomer({ ...editingCustomer, phone_number: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
               <div className="flex gap-2">
-                <button onClick={saveCustomer} className="btn-primary flex-1 py-2.5 text-xs uppercase font-semibold">Save Profile</button>
-                <button onClick={() => setEditingCustomer(null)} className="flex-1 rounded-sm border border-edge py-2.5 text-xs font-semibold uppercase">Cancel</button>
+                <button onClick={saveCustomer} className="btn-primary flex-1 py-2.5 text-sm uppercase font-semibold">Save Profile</button>
+                <button onClick={() => setEditingCustomer(null)} className="flex-1 rounded-sm border border-edge py-2.5 text-sm font-semibold uppercase">Cancel</button>
               </div>
             </div>
           </div>
@@ -2906,7 +3051,7 @@ function SegmentsTab({ authFetch }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-brand-muted">{segments.length} customer segments</p>
-        <button onClick={() => setForm({ name: '', description: '', criteria: {} })} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase"><Plus className="h-4 w-4" /> Create Segment</button>
+        <button onClick={() => setForm({ name: '', description: '', criteria: {} })} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-sm uppercase"><Plus className="h-4 w-4" /> Create Segment</button>
       </div>
 
       <div className="space-y-2">
@@ -2914,11 +3059,11 @@ function SegmentsTab({ authFetch }) {
           <div key={s.id} className="flex items-center justify-between rounded-md border border-edge bg-white shadow-card p-4">
             <div>
               <p className="text-sm font-semibold text-ink-primary">{s.name}</p>
-              <p className="text-xs text-brand-muted">{s.description}</p>
-              <p className="mt-1 text-[10px] text-ink-accent font-mono font-semibold">Rules: {JSON.stringify(s.criteria)}</p>
+              <p className="text-sm text-brand-muted">{s.description}</p>
+              <p className="mt-1 text-[12px] text-ink-accent font-mono font-semibold">Rules: {JSON.stringify(s.criteria)}</p>
             </div>
             <div className="flex items-center gap-3">
-              <span className="rounded bg-surface-muted text-ink-accent px-2 py-0.5 text-xs font-semibold">{s.customer_emails?.length || 0} buyers</span>
+              <span className="rounded bg-surface-muted text-ink-accent px-2 py-0.5 text-sm font-semibold">{s.customer_emails?.length || 0} buyers</span>
               <button onClick={() => setForm({ ...s })} className="text-ink-accent hover:opacity-75"><Pencil className="h-4 w-4" /></button>
             </div>
           </div>
@@ -2932,11 +3077,11 @@ function SegmentsTab({ authFetch }) {
             <div className="space-y-3">
               <input placeholder="Segment Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
               <textarea placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
-              <p className="text-[11px] font-semibold text-ink-subtle uppercase">Segment Criteria Rules (JSON)</p>
-              <textarea placeholder='e.g. {"min_spend": 200}' value={typeof form.criteria === 'string' ? form.criteria : JSON.stringify(form.criteria)} onChange={(e) => setForm({ ...form, criteria: e.target.value })} className="w-full font-mono rounded-sm border border-edge p-2.5 text-xs" rows={3} />
+              <p className="text-[13px] font-semibold text-ink-subtle uppercase">Segment Criteria Rules (JSON)</p>
+              <textarea placeholder='e.g. {"min_spend": 200}' value={typeof form.criteria === 'string' ? form.criteria : JSON.stringify(form.criteria)} onChange={(e) => setForm({ ...form, criteria: e.target.value })} className="w-full font-mono rounded-sm border border-edge p-2.5 text-sm" rows={3} />
               <div className="flex gap-2">
-                <button onClick={save} className="btn-primary flex-1 py-2.5 text-xs uppercase">Save Segment</button>
-                <button onClick={() => setForm(null)} className="flex-1 rounded-sm border border-edge py-2.5 text-xs font-semibold uppercase">Cancel</button>
+                <button onClick={save} className="btn-primary flex-1 py-2.5 text-sm uppercase">Save Segment</button>
+                <button onClick={() => setForm(null)} className="flex-1 rounded-sm border border-edge py-2.5 text-sm font-semibold uppercase">Cancel</button>
               </div>
             </div>
           </div>
@@ -2947,829 +3092,6 @@ function SegmentsTab({ authFetch }) {
 }
 
 /* ------------------------------------------------------------- Support */
-function SupportTab({ authFetch }) {
-  const [tickets, setTickets] = useState([]);
-  const [enquiries, setEnquiries] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedTicket, setSelectedTicket] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-  const [syncMsg, setSyncMsg] = useState('');
-
-  const syncEmails = () => {
-    setSyncing(true);
-    setSyncMsg('');
-    authFetch('/api/admin/support-tickets/sync/', { method: 'POST' })
-      .then((r) => r.json().then((data) => ({ ok: r.ok, data })))
-      .then(({ ok, data }) => {
-        if (!ok) throw new Error(data.error || 'Failed to sync support inbox.');
-        setSyncMsg(data.message);
-        load();
-        setTimeout(() => setSyncMsg(''), 4000);
-      })
-      .catch((e) => {
-        setSyncMsg(`Sync Error: ${e.message}`);
-        setTimeout(() => setSyncMsg(''), 6000);
-      })
-      .finally(() => setSyncing(false));
-  };
-
-  const load = useCallback(() => {
-    setLoading(true);
-    Promise.all([
-      authFetch('/api/admin/support-tickets/').then((r) => r.json()).catch(() => []),
-      authFetch('/api/admin/enquiries/').then((r) => r.json()).catch(() => []),
-    ]).then(([t, e]) => {
-      setTickets(Array.isArray(t) ? t : t.results || []);
-      setEnquiries(Array.isArray(e) ? e : e.results || []);
-    }).finally(() => setLoading(false));
-  }, [authFetch]);
-
-  useEffect(() => { load(); }, [load]);
-
-  const saveTicketStatus = () => {
-    setSaving(true);
-    authFetch(`/api/admin/support-tickets/${selectedTicket.id}/`, {
-      method: 'PUT',
-      body: JSON.stringify(selectedTicket)
-    }).then(() => {
-      setSelectedTicket(null);
-      load();
-    }).finally(() => setSaving(false));
-  };
-
-  if (loading) return <p className="text-sm text-brand-muted">Loading CRM Support dashboard...</p>;
-
-  return (
-    <div className="space-y-6">
-      {/* Support Tickets */}
-      <div>
-        <div className="flex items-center justify-between gap-3 mb-3">
-          <h3 className="text-sm font-semibold text-ink-primary">Customer Support Tickets ({tickets.length})</h3>
-          <button
-            onClick={syncEmails}
-            disabled={syncing}
-            className="btn-primary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold uppercase disabled:opacity-60"
-          >
-            {syncing ? 'Syncing...' : 'Sync Support Inbox'}
-          </button>
-        </div>
-
-        {syncMsg && (
-          <div className={`text-xs p-2.5 rounded border mb-3 font-semibold ${syncMsg.startsWith('Sync Error') ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-brand-success/10 text-ink-success border-brand-success/30'}`}>
-            {syncMsg}
-          </div>
-        )}
-
-        <div className="overflow-x-auto rounded-md border border-edge bg-white shadow-card">
-          <table className="w-full text-left text-xs font-medium">
-            <thead className="bg-surface-muted text-[10px] font-medium uppercase tracking-wide text-ink-muted border-b border-edge">
-              <tr><th className="px-3 py-2 font-semibold">Ticket #</th><th className="px-3 py-2 font-semibold">Email</th><th className="px-3 py-2 font-semibold">Subject</th><th className="px-3 py-2 font-semibold">Priority</th><th className="px-3 py-2 font-semibold">Status</th></tr>
-            </thead>
-            <tbody>
-              {tickets.map((t) => (
-                <tr key={t.id} className="cursor-pointer border-t border-edge-subtle hover:bg-surface-muted" onClick={() => setSelectedTicket({ ...t })}>
-                  <td className="px-3 py-2 font-mono text-[10px] text-brand-muted">#{t.id}</td>
-                  <td className="px-3 py-2">{t.email}</td>
-                  <td className="px-3 py-2 font-semibold text-ink-primary">{t.subject}</td>
-                  <td className="px-3 py-2"><span className="text-[10px] uppercase font-semibold">{t.priority}</span></td>
-                  <td className="px-3 py-2"><span className="rounded bg-surface-muted text-ink-accent px-2 py-0.5 text-[10px] font-semibold">{t.status}</span></td>
-                </tr>
-              ))}
-              {!tickets.length && <tr><td colSpan={5} className="px-3 py-4 text-center text-brand-muted text-xs">No customer support tickets registered.</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Wholesale B2B Enquiries */}
-      <div className="rounded-lg border border-edge bg-white shadow-card p-4 sm:p-5 space-y-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-semibold text-ink-primary uppercase">B2B &amp; Bulk Wholesaler Enquiries</h3>
-            <p className="text-xs text-brand-muted mt-1">Wholesale and distributor leads submitted through the public inquiry form.</p>
-          </div>
-          <span className="rounded-xs border border-edge bg-surface-muted px-3 py-1 text-[10px] font-semibold uppercase text-brand-muted">
-            {enquiries.length} open
-          </span>
-        </div>
-        <div className="overflow-x-auto rounded-md border border-edge">
-          <table className="min-w-full text-left text-xs">
-            <thead className="bg-surface-muted text-[10px] font-medium uppercase tracking-wide text-ink-muted border-b border-edge">
-              <tr>
-                <th className="px-4 py-3 font-semibold">Name / Company</th>
-                <th className="px-4 py-3 font-semibold">Email</th>
-                <th className="px-4 py-3 font-semibold">Interest</th>
-                <th className="px-4 py-3 font-semibold">Type</th>
-                <th className="px-4 py-3 font-semibold">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-edge-subtle bg-white">
-              {enquiries.map((e) => (
-                <tr key={e.id} className="hover:bg-surface-muted">
-                  <td className="px-4 py-3 align-top font-semibold text-ink-primary">
-                    {e.name}
-                    <p className="mt-0.5 text-[10px] text-brand-muted">{e.company || 'Personal'}</p>
-                  </td>
-                  <td className="px-4 py-3 align-top text-ink-secondary">{e.email}</td>
-                  <td className="px-4 py-3 align-top text-ink-secondary">{e.product_interest} · {e.quantity}</td>
-                  <td className="px-4 py-3 align-top text-brand-muted">{e.enquiry_type}</td>
-                  <td className="px-4 py-3 align-top">
-                    <span className="inline-flex rounded-xs bg-surface-muted px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-ink-secondary">
-                      {e.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {!enquiries.length && <tr><td colSpan={5} className="px-4 py-5 text-center text-brand-muted text-xs">No B2B wholesale enquiries submitted.</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Ticket Details Modal */}
-      {selectedTicket && (
-        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-          <div className="w-full max-w-lg bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
-            <div className="flex justify-between items-center pb-2 border-b border-edge-subtle">
-              <h3 className="text-lg font-semibold text-ink-primary">Ticket #{selectedTicket.id} Detail</h3>
-              <button onClick={() => setSelectedTicket(null)}><X className="h-5 w-5 text-brand-muted" /></button>
-            </div>
-            <div className="space-y-3 text-xs">
-              <p><span className="font-semibold uppercase text-brand-muted">Subject:</span> {selectedTicket.subject}</p>
-              <p><span className="font-semibold uppercase text-brand-muted">From:</span> {selectedTicket.email}</p>
-              <div className="p-3 bg-surface-muted rounded-md border border-edge-subtle">
-                <p className="font-semibold text-ink-subtle mb-1">MESSAGE BODY</p>
-                <p className="text-ink-primary leading-normal">{selectedTicket.message}</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <p className="font-semibold text-brand-muted mb-1">STATUS</p>
-                  <select value={selectedTicket.status} onChange={(e) => setSelectedTicket({ ...selectedTicket, status: e.target.value })} className="w-full rounded-sm border border-edge p-2 text-xs">
-                    <option value="OPEN">Open</option>
-                    <option value="PENDING">Pending</option>
-                    <option value="RESOLVED">Resolved</option>
-                    <option value="CLOSED">Closed</option>
-                  </select>
-                </div>
-                <div>
-                  <p className="font-semibold text-brand-muted mb-1">PRIORITY</p>
-                  <select value={selectedTicket.priority} onChange={(e) => setSelectedTicket({ ...selectedTicket, priority: e.target.value })} className="w-full rounded-sm border border-edge p-2 text-xs">
-                    <option value="LOW">Low</option>
-                    <option value="MEDIUM">Medium</option>
-                    <option value="HIGH">High</option>
-                    <option value="CRITICAL">Critical</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <p className="font-semibold text-brand-muted mb-1">ADMIN NOTES</p>
-                <textarea rows={3} value={selectedTicket.admin_notes || ''} onChange={(e) => setSelectedTicket({ ...selectedTicket, admin_notes: e.target.value })} placeholder="Add follow-up notes..." className="w-full rounded-sm border border-edge p-2.5 text-xs" />
-              </div>
-
-              <button onClick={saveTicketStatus} disabled={saving} className="btn-primary w-full py-2.5 text-xs uppercase">{saving ? 'Updating...' : 'Update Ticket'}</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* --------------------------------------------------------- Landing Pages */
-/* ---------------------------------------------------------- Integrations */
-const MARKETING_CHANNELS_CATALOG = [
-  { code: 'GOOGLE_MERCHANT', name: 'Google Merchant Center', desc: 'Sync catalogs and verify product feeds dynamically.', icon: Globe },
-  { code: 'GOOGLE_ADS', name: 'Google Ads', desc: 'Run search and Performance Max campaigns.', icon: TrendingUp },
-  { code: 'GOOGLE_ANALYTICS', name: 'Google Analytics (GA4)', desc: 'Track storefront visitors, conversions, and metrics.', icon: Activity },
-  { code: 'GOOGLE_TAG_MANAGER', name: 'Google Tag Manager', desc: 'Manage website tags, triggers, and tracking pixels from a central container.', icon: Tag },
-  { code: 'FACEBOOK_BUSINESS', name: 'Facebook Business Manager', desc: 'Manage catalog feeds and business assets.', icon: Layers },
-  { code: 'FACEBOOK_ADS', name: 'Facebook & Instagram Ads', desc: 'Target customer audiences on Meta.', icon: TrendingUp },
-  { code: 'META_PIXEL', name: 'Meta Pixels & Conversion API', desc: 'Send server-side commerce events for targeting.', icon: Activity },
-  { code: 'YOUTUBE_ADS', name: 'YouTube Channels & Video Ads', desc: 'Advertise video creatives on YouTube accounts.', icon: Film },
-  { code: 'THIRD_PARTY', name: 'Omnisend / Email tools', desc: 'Send automated newsletters and checkout emails.', icon: Mail }
-];
-
-const AVAILABLE_WEBHOOK_EVENTS = [
-  { code: 'order.created', label: 'Order Created', desc: 'Triggered when a shopper drafts/creates an order.' },
-  { code: 'order.paid', label: 'Order Paid', desc: 'Triggered when order payment is confirmed.' },
-  { code: 'order.cancelled', label: 'Order Cancelled', desc: 'Triggered when an order is cancelled.' },
-  { code: 'order.refunded', label: 'Order Refunded', desc: 'Triggered when a full or partial refund is processed.' },
-  { code: 'product.created', label: 'Product Created', desc: 'Triggered when a product is added.' },
-  { code: 'product.updated', label: 'Product Updated', desc: 'Triggered when product details are changed.' },
-  { code: 'inventory.updated', label: 'Inventory Updated', desc: 'Triggered when a warehouse stock level is adjusted.' },
-];
-
-function IntegrationsTab({ authFetch }) {
-  const [activeSubTab, setActiveSubTab] = useState('marketing'); // marketing | credentials | outbound | inbound
-  const [integrations, setIntegrations] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedChannel, setSelectedChannel] = useState(null);
-  
-  // System connectors credentials registry
-  const [connectors, setConnectors] = useState({
-    delhivery_api_key: '',
-    cloudflare_zone_id: '',
-    klaviyo_private_key: '',
-    ga4_measurement_id: '',
-    razorpay_key_id: '',
-    stripe_webhook_secret: ''
-  });
-
-  // Outbound Webhook Subscriptions
-  const [subscriptions, setSubscriptions] = useState([]);
-  const [deliveries, setDeliveries] = useState([]);
-  const [showSubForm, setShowSubForm] = useState(false);
-  const [editingSub, setEditingSub] = useState(null);
-  const [newSub, setNewSub] = useState({ name: '', url: '', events: [], is_active: true });
-  const [selectedOutboundLog, setSelectedOutboundLog] = useState(null);
-
-  // Incoming Webhook logs from DB
-  const [incomingLogs, setIncomingLogs] = useState([]);
-  const [selectedIncomingLog, setSelectedIncomingLog] = useState(null);
-
-  const loadMarketing = useCallback(() => {
-    authFetch('/api/admin/marketing-integrations/')
-      .then((r) => r.json())
-      .then((d) => setIntegrations(Array.isArray(d) ? d : d.results || []))
-      .catch(() => {});
-  }, [authFetch]);
-
-  const loadCredentials = useCallback(() => {
-    authFetch('/api/admin/settings/SYSTEM_CONNECTORS/')
-      .then((r) => r.ok ? r.json().then(d => d.value) : null)
-      .then((sysData) => {
-        if (sysData && typeof sysData === 'object') {
-          setConnectors((prev) => ({ ...prev, ...sysData }));
-        }
-      })
-      .catch(() => {});
-  }, [authFetch]);
-
-  const loadOutbound = useCallback(() => {
-    Promise.all([
-      authFetch('/api/admin/webhook-subscriptions/').then(r => r.ok ? r.json() : []),
-      authFetch('/api/admin/webhook-deliveries/').then(r => r.ok ? r.json() : [])
-    ]).then(([subs, logs]) => {
-      setSubscriptions(Array.isArray(subs) ? subs : subs.results || []);
-      setDeliveries(Array.isArray(logs) ? logs : logs.results || []);
-    }).catch(() => {});
-  }, [authFetch]);
-
-  const loadInbound = useCallback(() => {
-    authFetch('/api/admin/incoming-webhooks/')
-      .then(r => r.ok ? r.json() : [])
-      .then(logs => setIncomingLogs(Array.isArray(logs) ? logs : logs.results || []))
-      .catch(() => {});
-  }, [authFetch]);
-
-  const loadAll = useCallback(() => {
-    setLoading(true);
-    Promise.all([
-      authFetch('/api/admin/marketing-integrations/').then(r => r.ok ? r.json() : []),
-      authFetch('/api/admin/settings/SYSTEM_CONNECTORS/').then(r => r.ok ? r.json().then(d => d.value) : {}),
-      authFetch('/api/admin/webhook-subscriptions/').then(r => r.ok ? r.json() : []),
-      authFetch('/api/admin/webhook-deliveries/').then(r => r.ok ? r.json() : []),
-      authFetch('/api/admin/incoming-webhooks/').then(r => r.ok ? r.json() : [])
-    ]).then(([mkt, creds, subs, outLogs, inLogs]) => {
-      setIntegrations(Array.isArray(mkt) ? mkt : mkt.results || []);
-      if (creds && typeof creds === 'object') setConnectors(prev => ({ ...prev, ...creds }));
-      setSubscriptions(Array.isArray(subs) ? subs : subs.results || []);
-      setDeliveries(Array.isArray(outLogs) ? outLogs : outLogs.results || []);
-      setIncomingLogs(Array.isArray(inLogs) ? inLogs : inLogs.results || []);
-    }).finally(() => setLoading(false));
-  }, [authFetch]);
-
-  useEffect(() => { loadAll(); }, [loadAll]);
-
-  // Marketing Connectors Actions
-  const toggleConnection = (channelCode) => {
-    const matched = integrations.find(i => i.channel === channelCode);
-    if (matched) {
-      if (confirm(`Disconnect from ${matched.name}? This will stop product feeds sync.`)) {
-        authFetch(`/api/admin/marketing-integrations/${matched.id}/`, { method: 'DELETE' }).then(loadMarketing);
-      }
-    } else {
-      const meta = MARKETING_CHANNELS_CATALOG.find(c => c.code === channelCode);
-      setSelectedChannel({ channel: channelCode, name: meta.name, credentials: {} });
-    }
-  };
-
-  const saveConnection = () => {
-    authFetch('/api/admin/marketing-integrations/', {
-      method: 'POST',
-      body: JSON.stringify({
-        name: selectedChannel.name,
-        channel: selectedChannel.channel,
-        is_connected: true,
-        credentials: selectedChannel.credentials,
-        sync_status: 'CONNECTED'
-      })
-    }).then(() => {
-      setSelectedChannel(null);
-      loadMarketing();
-    });
-  };
-
-  const syncCatalog = (integration) => {
-    if (!integration?.id) return;
-    authFetch(`/api/admin/marketing-integrations/${integration.id}/sync/`, { method: 'POST', body: JSON.stringify({}) })
-      .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
-      .then(({ ok, d }) => { alert(ok ? (d.message || 'Catalog sync completed.') : (d.message || 'Sync failed.')); loadMarketing(); })
-      .catch(() => alert('Sync failed — please try again.'));
-  };
-
-  // API Credentials Actions
-  const saveConnectors = () => {
-    authFetch('/api/admin/settings/SYSTEM_CONNECTORS/', {
-      method: 'PUT',
-      body: JSON.stringify({ key: 'SYSTEM_CONNECTORS', value: connectors, description: 'E-commerce API system connectors key registry' })
-    })
-      .then(r => r.status === 404 ? authFetch('/api/admin/settings/', {
-        method: 'POST',
-        body: JSON.stringify({ key: 'SYSTEM_CONNECTORS', value: connectors, description: 'E-commerce API system connectors key registry' })
-      }) : r)
-      .then(() => alert("System API connector keys saved successfully!"));
-  };
-
-  // Outbound Webhooks Actions
-  const handleToggleEvent = (code) => {
-    setNewSub(prev => {
-      const events = prev.events.includes(code)
-        ? prev.events.filter(e => e !== code)
-        : [...prev.events, code];
-      return { ...prev, events };
-    });
-  };
-
-  const saveSubscription = () => {
-    const isEdit = Boolean(newSub.id);
-    const url = isEdit 
-      ? `/api/admin/webhook-subscriptions/${newSub.id}/` 
-      : '/api/admin/webhook-subscriptions/';
-    const method = isEdit ? 'PUT' : 'POST';
-
-    authFetch(url, {
-      method: method,
-      body: JSON.stringify(newSub)
-    }).then(r => {
-      if (r.ok) {
-        setShowSubForm(false);
-        setNewSub({ name: '', url: '', events: [], is_active: true });
-        loadOutbound();
-      } else {
-        alert("Failed to save webhook subscription.");
-      }
-    });
-  };
-
-  const testSubscription = (sub) => {
-    authFetch(`/api/admin/webhook-subscriptions/${sub.id}/test_delivery/`, { method: 'POST' })
-      .then(r => r.json())
-      .then(d => {
-        alert("Test ping queued. Delivery Log: " + d.delivery_id);
-        loadOutbound();
-      });
-  };
-
-  const deleteSubscription = (sub) => {
-    if (confirm(`Are you sure you want to delete the webhook "${sub.name}"?`)) {
-      authFetch(`/api/admin/webhook-subscriptions/${sub.id}/`, { method: 'DELETE' })
-        .then(() => loadOutbound());
-    }
-  };
-
-  const retryOutboundDelivery = (log) => {
-    authFetch(`/api/admin/webhook-deliveries/${log.id}/retry/`, { method: 'POST' })
-      .then(r => {
-        if (r.ok) {
-          alert("Delivery queued for retry.");
-          setSelectedOutboundLog(null);
-          loadOutbound();
-        } else {
-          alert("Failed to retry delivery.");
-        }
-      });
-  };
-
-  // Incoming Webhook Actions
-  const reprocessIncomingEvent = (log) => {
-    authFetch(`/api/admin/incoming-webhooks/${log.id}/retry/`, { method: 'POST' })
-      .then(r => {
-        if (r.ok) {
-          alert("Reprocessing triggered in background.");
-          setSelectedIncomingLog(null);
-          loadInbound();
-        } else {
-          alert("Failed to trigger reprocessing.");
-        }
-      });
-  };
-
-  if (loading) return <p className="text-sm text-brand-muted">Loading integrations and webhook registries...</p>;
-
-  return (
-    <div className="space-y-4">
-      {/* Subtab Navigation */}
-      <div className="flex gap-2 border-b border-edge-subtle pb-2">
-        <button onClick={() => setActiveSubTab('marketing')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm ${activeSubTab === 'marketing' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Marketing Channels</button>
-        <button onClick={() => setActiveSubTab('credentials')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm ${activeSubTab === 'credentials' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>API Credentials</button>
-        <button onClick={() => setActiveSubTab('outbound')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm ${activeSubTab === 'outbound' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Outbound Webhooks</button>
-        <button onClick={() => setActiveSubTab('inbound')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm ${activeSubTab === 'inbound' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Incoming Webhooks</button>
-      </div>
-
-      {/* MARKETING CHANNELS TAB */}
-      {activeSubTab === 'marketing' && (
-        <div className="grid gap-4 md:grid-cols-2">
-          {MARKETING_CHANNELS_CATALOG.map((chan) => {
-            const active = integrations.find(i => i.channel === chan.code);
-            return (
-              <div key={chan.code} className="rounded-lg border border-edge bg-white shadow-card p-5 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-md bg-surface-muted text-ink-accent">
-                      <chan.icon className="h-5 w-5" />
-                    </span>
-                    <span className={`rounded-xs px-2 py-0.5 text-[9px] font-semibold ${active ? 'bg-brand-success/10 text-ink-success' : 'bg-surface-muted text-ink-subtle'}`}>
-                      {active ? 'CONNECTED' : 'DISCONNECTED'}
-                    </span>
-                  </div>
-                  <h4 className="text-sm font-semibold text-ink-primary">{chan.name}</h4>
-                  <p className="mt-1 text-xs text-brand-muted">{chan.desc}</p>
-                  {active?.last_sync && <p className="mt-2 text-[10px] text-ink-subtle">Last sync feed: {formatDateTime(active.last_sync)}</p>}
-                </div>
-
-                <div className="mt-4 flex gap-2 border-t border-edge-subtle pt-3">
-                  <button onClick={() => toggleConnection(chan.code)} className={`text-xs px-3 py-1.5 rounded-sm border font-semibold uppercase ${active ? 'border-edge text-ink-muted hover:bg-surface-muted' : 'border-ink-primary text-ink-accent hover:bg-surface-muted'}`}>
-                    {active ? 'Disconnect' : 'Connect Account'}
-                  </button>
-                  {active && (
-                    <button onClick={() => syncCatalog(active)} className="text-xs px-3 py-1.5 border border-edge-subtle text-ink-primary font-semibold rounded-sm uppercase flex items-center gap-1"><RefreshCw className="h-3 w-3" /> Sync catalog</button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* SYSTEM API CREDENTIALS TAB */}
-      {activeSubTab === 'credentials' && (
-        <div className="bg-white border border-edge rounded-lg p-5 max-w-2xl space-y-4">
-          <h3 className="text-sm font-semibold text-ink-primary">API Key &amp; Credentials Center</h3>
-          <p className="text-xs text-brand-muted font-medium">Input production credentials below. Secret values are accepted by the server but are never returned to the browser.</p>
-          
-          <div className="space-y-3.5 text-xs">
-            <div className="border-b border-edge-subtle pb-3">
-              <label className="font-semibold text-ink-primary block mb-1">Delhivery Courier API Access Token</label>
-              <input type="password" value={connectors.delhivery_api_key} onChange={(e) => setConnectors({ ...connectors, delhivery_api_key: e.target.value })} className="w-full rounded-sm border border-edge p-2 font-mono" />
-            </div>
-
-            <div className="border-b border-edge-subtle pb-3">
-              <label className="font-semibold text-ink-primary block mb-1">Cloudflare CDN Zone Token &amp; ID</label>
-              <input type="password" value={connectors.cloudflare_zone_id} onChange={(e) => setConnectors({ ...connectors, cloudflare_zone_id: e.target.value })} className="w-full rounded-sm border border-edge p-2 font-mono" />
-            </div>
-
-            <div className="border-b border-edge-subtle pb-3">
-              <label className="font-semibold text-ink-primary block mb-1">Klaviyo Private API Key</label>
-              <input type="password" value={connectors.klaviyo_private_key} onChange={(e) => setConnectors({ ...connectors, klaviyo_private_key: e.target.value })} className="w-full rounded-sm border border-edge p-2 font-mono" />
-            </div>
-
-            <div className="border-b border-edge-subtle pb-3">
-              <label className="font-semibold text-ink-primary block mb-1">Google Analytics GA4 Measurement ID</label>
-              <input value={connectors.ga4_measurement_id} onChange={(e) => setConnectors({ ...connectors, ga4_measurement_id: e.target.value })} className="w-full rounded-sm border border-edge p-2 font-mono" />
-            </div>
-
-            <div className="border-b border-edge-subtle pb-3">
-              <label className="font-semibold text-ink-primary block mb-1">Stripe / Razorpay Endpoint Webhook Secrets</label>
-              <input type="password" value={connectors.stripe_webhook_secret} onChange={(e) => setConnectors({ ...connectors, stripe_webhook_secret: e.target.value })} className="w-full rounded-sm border border-edge p-2 font-mono" />
-            </div>
-
-            <button onClick={saveConnectors} className="btn-primary w-full py-2.5 font-semibold uppercase text-xs">Save Connector Credentials</button>
-          </div>
-        </div>
-      )}
-
-      {/* OUTBOUND WEBHOOKS MANAGER TAB */}
-      {activeSubTab === 'outbound' && (
-        <div className="space-y-6">
-          {/* Subscriptions List */}
-          <div className="bg-white border border-edge rounded-lg p-5 space-y-4">
-            <div className="flex justify-between items-center">
-              <div>
-                <h3 className="text-sm font-semibold text-ink-primary">Outbound Webhooks (Subscriptions)</h3>
-                <p className="text-xs text-brand-muted">Notify external services instantly when orders are paid, products are updated, or stock levels change.</p>
-              </div>
-              <button onClick={() => { setNewSub({ name: '', url: '', events: [], is_active: true }); setShowSubForm(true); }} className="btn-primary px-3 py-1.5 text-xs font-semibold uppercase flex items-center gap-1"><Plus className="h-3.5 w-3.5" /> Add Endpoint</button>
-            </div>
-
-            {subscriptions.length === 0 ? (
-              <div className="text-center py-8 border border-dashed border-edge rounded-md">
-                <Megaphone className="mx-auto h-8 w-8 text-brand-muted mb-2" />
-                <p className="text-xs text-brand-muted">No webhook subscriptions defined yet.</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs divide-y divide-edge">
-                  <thead>
-                    <tr className="text-ink-subtle bg-surface-muted font-semibold">
-                      <th className="p-3">Name</th>
-                      <th className="p-3">Endpoint URL</th>
-                      <th className="p-3">Signing Secret</th>
-                      <th className="p-3">Subscribed Events</th>
-                      <th className="p-3 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-edge">
-                    {subscriptions.map(sub => (
-                      <tr key={sub.id} className="hover:bg-surface-muted/50">
-                        <td className="p-3 font-semibold text-ink-primary">{sub.name}</td>
-                        <td className="p-3 font-mono text-ink-secondary max-w-[200px] truncate">{sub.url}</td>
-                        <td className="p-3 font-mono text-ink-secondary">{sub.secret ? `${sub.secret.slice(0, 8)}...` : 'N/A'}</td>
-                        <td className="p-3 flex flex-wrap gap-1">
-                          {sub.events.map(ev => (
-                            <span key={ev} className="bg-surface-muted border border-edge text-[9px] font-mono px-1 rounded-sm text-ink-muted">{ev}</span>
-                          ))}
-                        </td>
-                        <td className="p-3 text-right space-x-2">
-                          <button onClick={() => testSubscription(sub)} className="text-ink-accent font-semibold hover:underline">Ping test</button>
-                          <button onClick={() => { setNewSub(sub); setShowSubForm(true); }} className="text-ink-primary font-semibold hover:underline">Edit</button>
-                          <button onClick={() => deleteSubscription(sub)} className="text-brand-danger font-semibold hover:underline"><Trash2 className="h-4 w-4 inline-block" /></button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {/* Delivery Logs */}
-          <div className="bg-white border border-edge rounded-lg p-5 space-y-4">
-            <h3 className="text-sm font-semibold text-ink-primary">Outbound Webhook Deliveries (Recent)</h3>
-            
-            {deliveries.length === 0 ? (
-              <p className="text-xs text-brand-muted text-center py-4">No outbound deliveries recorded.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs divide-y divide-edge">
-                  <thead>
-                    <tr className="text-ink-subtle bg-surface-muted font-semibold">
-                      <th className="p-3">Event</th>
-                      <th className="p-3">Receiver</th>
-                      <th className="p-3">Status</th>
-                      <th className="p-3">Attempts</th>
-                      <th className="p-3">Response Code</th>
-                      <th className="p-3">Timestamp</th>
-                      <th className="p-3 text-right">Details</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-edge font-medium">
-                    {deliveries.slice(0, 15).map(log => (
-                      <tr key={log.id} className="hover:bg-surface-muted/50">
-                        <td className="p-3 font-mono font-semibold text-ink-accent">{log.event_type}</td>
-                        <td className="p-3 text-ink-secondary">{log.subscription_name}</td>
-                        <td className="p-3">
-                          <span className={`rounded-xs px-2 py-0.5 text-[10px] font-semibold font-mono ${
-                            log.status === 'SUCCESS' ? 'bg-green-100 text-green-800' :
-                            log.status === 'FAILED' ? 'bg-amber-100 text-amber-800' :
-                            log.status === 'DLQ' ? 'bg-rose-100 text-rose-800' :
-                            'bg-blue-100 text-blue-800'
-                          }`}>
-                            {log.status}
-                          </span>
-                        </td>
-                        <td className="p-3 font-mono">{log.attempts} / 7</td>
-                        <td className="p-3 font-mono font-semibold">{log.response_status || 'Connection Error'}</td>
-                        <td className="p-3 text-ink-subtle font-mono">{formatDateTime(log.created_at)}</td>
-                        <td className="p-3 text-right">
-                          <button onClick={() => setSelectedOutboundLog(log)} className="text-ink-accent font-semibold hover:underline">Inspect</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* INCOMING WEBHOOK EVENTS MONITOR TAB */}
-      {activeSubTab === 'inbound' && (
-        <div className="bg-white border border-edge rounded-lg p-5 space-y-4">
-          <div className="flex justify-between items-center border-b border-edge-subtle pb-3">
-            <div>
-              <h3 className="text-sm font-semibold text-ink-primary font-sans">Incoming Webhook Events (Database)</h3>
-              <p className="text-xs text-brand-muted">Monitor gateway hits (Stripe, Razorpay, PayPal) and manually retry failed event executions.</p>
-            </div>
-            <span className="rounded-xs bg-brand-success/10 text-ink-success px-2 py-0.5 text-[9px] font-semibold font-mono">GATEWAY RECEIVER ONLINE</span>
-          </div>
-
-          {incomingLogs.length === 0 ? (
-            <p className="text-xs text-brand-muted text-center py-8">No incoming webhook events found in database.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs divide-y divide-edge">
-                <thead>
-                  <tr className="text-ink-subtle bg-surface-muted font-semibold">
-                    <th className="p-3">Gateway</th>
-                    <th className="p-3">Event ID</th>
-                    <th className="p-3">Event Type</th>
-                    <th className="p-3">Status</th>
-                    <th className="p-3">Attempts</th>
-                    <th className="p-3">Received At</th>
-                    <th className="p-3 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-edge font-medium">
-                  {incomingLogs.slice(0, 20).map(log => (
-                    <tr key={log.id} className="hover:bg-surface-muted/50">
-                      <td className="p-3 font-semibold text-ink-accent font-mono">{log.gateway}</td>
-                      <td className="p-3 font-mono text-ink-secondary truncate max-w-[120px]">{log.event_id}</td>
-                      <td className="p-3 font-mono text-ink-secondary">{log.event_type}</td>
-                      <td className="p-3">
-                        <span className={`rounded-xs px-2 py-0.5 text-[10px] font-semibold font-mono ${
-                          log.status === 'PROCESSED' ? 'bg-green-100 text-green-800' :
-                          log.status === 'FAILED' ? 'bg-rose-100 text-rose-800' :
-                          log.status === 'DLQ' ? 'bg-purple-100 text-purple-800' :
-                          'bg-amber-100 text-amber-800'
-                        }`}>
-                          {log.status}
-                        </span>
-                      </td>
-                      <td className="p-3 font-mono">{log.attempts}</td>
-                      <td className="p-3 text-ink-subtle font-mono">{formatDateTime(log.created_at)}</td>
-                      <td className="p-3 text-right">
-                        <button onClick={() => setSelectedIncomingLog(log)} className="text-ink-accent font-semibold hover:underline">Details &amp; Retry</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* OUTBOUND SUBSCRIPTION CREATE/EDIT MODAL */}
-      {showSubForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-overlay backdrop-blur-xs p-4">
-          <div className="w-full max-w-lg bg-white rounded-lg border border-edge p-6 shadow-overlay space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center pb-2 border-b border-edge-subtle">
-              <h3 className="text-sm font-semibold text-ink-primary uppercase">{newSub.id ? 'Edit Webhook Endpoint' : 'Create Webhook Endpoint'}</h3>
-              <button onClick={() => setShowSubForm(false)} className="rounded-sm p-1 hover:bg-surface-muted"><X className="h-5 w-5 text-brand-muted" /></button>
-            </div>
-            
-            <div className="space-y-3.5 text-xs">
-              <div>
-                <label className="font-semibold text-ink-primary block mb-1">Friendly Name</label>
-                <input placeholder="e.g. ERP integration" value={newSub.name} onChange={(e) => setNewSub({ ...newSub, name: e.target.value })} className="w-full rounded-sm border border-edge p-2 text-sm" />
-              </div>
-
-              <div>
-                <label className="font-semibold text-ink-primary block mb-1">Target Endpoint URL</label>
-                <input placeholder="e.g. https://api.myserver.com/webhooks" value={newSub.url} onChange={(e) => setNewSub({ ...newSub, url: e.target.value })} className="w-full rounded-sm border border-edge p-2 font-mono text-sm" />
-              </div>
-
-              <div>
-                <label className="font-semibold text-ink-primary block mb-2">Subscribe to Events</label>
-                <div className="space-y-2 border border-edge rounded-md p-3 bg-surface-muted max-h-48 overflow-y-auto">
-                  {AVAILABLE_WEBHOOK_EVENTS.map(ev => (
-                    <label key={ev.code} className="flex items-start gap-2.5 cursor-pointer">
-                      <input type="checkbox" checked={newSub.events.includes(ev.code)} onChange={() => handleToggleEvent(ev.code)} className="mt-0.5" />
-                      <div>
-                        <span className="font-semibold font-mono text-ink-primary block">{ev.code}</span>
-                        <span className="text-[10px] text-brand-muted">{ev.desc}</span>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <input type="checkbox" id="sub_active" checked={newSub.is_active} onChange={(e) => setNewSub({ ...newSub, is_active: e.target.checked })} />
-                <label htmlFor="sub_active" className="font-semibold text-ink-primary cursor-pointer">Active (immediately deliver events)</label>
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <button onClick={saveSubscription} className="btn-primary flex-1 py-2.5 text-xs font-semibold uppercase">Save Webhook</button>
-                <button onClick={() => setShowSubForm(false)} className="flex-1 rounded-sm border border-edge py-2.5 text-xs font-semibold uppercase">Cancel</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* OUTBOUND LOG INSPECT MODAL */}
-      {selectedOutboundLog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-overlay backdrop-blur-xs p-4">
-          <div className="w-full max-w-2xl bg-white rounded-lg border border-edge p-6 shadow-overlay space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center pb-2 border-b border-edge-subtle">
-              <h3 className="text-sm font-semibold text-ink-primary uppercase">Outbound Webhook Log Drawer</h3>
-              <button onClick={() => setSelectedOutboundLog(null)}><X className="h-5 w-5 text-brand-muted" /></button>
-            </div>
-            
-            <div className="space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-4 bg-surface-muted p-3 rounded-md font-medium text-ink-secondary">
-                <p><span className="font-semibold text-ink-subtle">LOG ID:</span> <span className="font-mono text-[10px]">{selectedOutboundLog.id}</span></p>
-                <p><span className="font-semibold text-ink-subtle">EVENT TYPE:</span> <span className="font-mono text-[10px]">{selectedOutboundLog.event_type}</span></p>
-                <p><span className="font-semibold text-ink-subtle">RECEIVER:</span> {selectedOutboundLog.subscription_name}</p>
-                <p><span className="font-semibold text-ink-subtle">STATUS:</span> {selectedOutboundLog.status}</p>
-                <p><span className="font-semibold text-ink-subtle">ATTEMPTS:</span> {selectedOutboundLog.attempts} / 7</p>
-                <p><span className="font-semibold text-ink-subtle">RESPONSE STATUS:</span> {selectedOutboundLog.response_status || 'N/A'}</p>
-              </div>
-
-              <div>
-                <span className="font-semibold text-ink-primary block mb-1.5">JSON Payload Sent:</span>
-                <pre className="p-3 bg-surface-inverse text-green-400 font-mono text-[9px] rounded-sm overflow-x-auto max-h-40">{JSON.stringify(selectedOutboundLog.payload, null, 2)}</pre>
-              </div>
-
-              {selectedOutboundLog.response_body && (
-                <div>
-                  <span className="font-semibold text-ink-primary block mb-1.5">Response Body (Truncated):</span>
-                  <pre className="p-3 bg-surface-inverse text-white/80 font-mono text-[9px] rounded-sm overflow-x-auto max-h-32">{selectedOutboundLog.response_body}</pre>
-                </div>
-              )}
-
-              {selectedOutboundLog.error_message && (
-                <div className="p-3 bg-rose-50 border border-rose-100 rounded-sm">
-                  <span className="font-semibold text-brand-danger block mb-1">Error Message:</span>
-                  <p className="font-mono text-[10px] text-brand-danger whitespace-pre-wrap">{selectedOutboundLog.error_message}</p>
-                </div>
-              )}
-
-              <div className="flex gap-2 border-t border-edge-subtle pt-3">
-                <button onClick={() => retryOutboundDelivery(selectedOutboundLog)} className="btn-primary flex-1 py-2 text-xs font-semibold uppercase">Retry Delivery Now</button>
-                <button onClick={() => setSelectedOutboundLog(null)} className="flex-1 rounded-sm border border-edge py-2 text-xs font-semibold uppercase">Close</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* INCOMING LOG INSPECT MODAL */}
-      {selectedIncomingLog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-overlay backdrop-blur-xs p-4">
-          <div className="w-full max-w-2xl bg-white rounded-lg border border-edge p-6 shadow-overlay space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center pb-2 border-b border-edge-subtle">
-              <h3 className="text-sm font-semibold text-ink-primary uppercase">Incoming Gateway Webhook Event</h3>
-              <button onClick={() => setSelectedIncomingLog(null)}><X className="h-5 w-5 text-brand-muted" /></button>
-            </div>
-            
-            <div className="space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-4 bg-surface-muted p-3 rounded-md font-medium text-ink-secondary">
-                <p><span className="font-semibold text-ink-subtle">ID:</span> <span className="font-mono text-[10px]">{selectedIncomingLog.id}</span></p>
-                <p><span className="font-semibold text-ink-subtle">GATEWAY:</span> <span className="font-mono text-[10px]">{selectedIncomingLog.gateway}</span></p>
-                <p><span className="font-semibold text-ink-subtle">EVENT ID:</span> {selectedIncomingLog.event_id}</p>
-                <p><span className="font-semibold text-ink-subtle">EVENT TYPE:</span> {selectedIncomingLog.event_type}</p>
-                <p><span className="font-semibold text-ink-subtle">STATUS:</span> {selectedIncomingLog.status}</p>
-                <p><span className="font-semibold text-ink-subtle">ATTEMPTS:</span> {selectedIncomingLog.attempts}</p>
-              </div>
-
-              <div>
-                <span className="font-semibold text-ink-primary block mb-1.5">JSON Payload Received:</span>
-                <pre className="p-3 bg-surface-inverse text-green-400 font-mono text-[9px] rounded-sm overflow-x-auto max-h-40">{JSON.stringify(selectedIncomingLog.payload, null, 2)}</pre>
-              </div>
-
-              {selectedIncomingLog.error_log && (
-                <div className="p-3 bg-rose-50 border border-rose-100 rounded-sm">
-                  <span className="font-semibold text-brand-danger block mb-1">Execution Error Stacktrace:</span>
-                  <pre className="font-mono text-[9px] text-brand-danger whitespace-pre-wrap overflow-x-auto max-h-40">{selectedIncomingLog.error_log}</pre>
-                </div>
-              )}
-
-              <div className="flex gap-2 border-t border-edge-subtle pt-3">
-                <button onClick={() => reprocessIncomingEvent(selectedIncomingLog)} className="btn-primary flex-1 py-2 text-xs font-semibold uppercase">Reprocess Event Now</button>
-                <button onClick={() => setSelectedIncomingLog(null)} className="flex-1 rounded-sm border border-edge py-2 text-xs font-semibold uppercase">Close</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MARKETING CHANNEL CONNECT MODAL */}
-      {selectedChannel && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-overlay backdrop-blur-xs p-4">
-          <div className="w-full max-w-md bg-white rounded-lg border border-edge p-6 shadow-overlay space-y-4">
-            <h3 className="text-lg font-semibold text-ink-primary">Connect {selectedChannel.name}</h3>
-            <div className="space-y-3">
-              <input placeholder="Client Customer ID / Merchant ID / Pixel ID" value={selectedChannel.credentials.identifier || ''} onChange={(e) => setSelectedChannel({ ...selectedChannel, credentials: { ...selectedChannel.credentials, identifier: e.target.value } })} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
-              <input placeholder="API Secret Access Token" type="password" value={selectedChannel.credentials.token || ''} onChange={(e) => setSelectedChannel({ ...selectedChannel, credentials: { ...selectedChannel.credentials, token: e.target.value } })} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
-              <div className="flex gap-2">
-                <button onClick={saveConnection} className="btn-primary flex-1 py-2.5 text-xs uppercase font-semibold">Connect Channel</button>
-                <button onClick={() => setSelectedChannel(null)} className="flex-1 rounded-sm border border-edge py-2.5 text-xs font-semibold uppercase">Cancel</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 /* ------------------------------------------------------------- Glossary Tab */
 function GlossaryTab({ authFetch }) {
   const [terms, setTerms] = useState([]);
@@ -3872,12 +3194,12 @@ function GlossaryTab({ authFetch }) {
             placeholder="Search term, definition, or category..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 border border-edge rounded-md text-xs placeholder:text-brand-muted focus:outline-none focus:border-ink-primary bg-white shadow-card"
+            className="w-full pl-9 pr-4 py-2 border border-edge rounded-md text-sm placeholder:text-brand-muted focus:outline-none focus:border-ink-primary bg-white shadow-card"
           />
         </div>
         <button
           onClick={handleCreate}
-          className="btn-primary py-2 px-4 rounded-sm text-xs font-semibold uppercase flex items-center gap-1.5 self-start"
+          className="btn-primary py-2 px-4 rounded-sm text-sm font-semibold uppercase flex items-center gap-1.5 self-start"
         >
           <Plus className="h-4 w-4" /> Add Glossary Term
         </button>
@@ -3892,14 +3214,14 @@ function GlossaryTab({ authFetch }) {
         <div className="bg-white border border-edge rounded-lg p-12 text-center shadow-card">
           <BookOpen className="h-10 w-10 text-brand-muted mx-auto mb-3" />
           <h3 className="text-sm font-semibold text-ink-primary">No glossary terms found</h3>
-          <p className="text-xs text-brand-muted mt-1">Try modifying your search query or add a new term.</p>
+          <p className="text-sm text-brand-muted mt-1">Try modifying your search query or add a new term.</p>
         </div>
       ) : (
         <div className="bg-white border border-edge rounded-lg overflow-hidden shadow-card">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
+            <table className="w-full text-left text-sm border-collapse">
               <thead>
-                <tr className="border-b border-edge bg-surface-muted/50 text-brand-muted font-semibold uppercase text-[10px]">
+                <tr className="border-b border-edge bg-surface-muted/50 text-brand-muted font-semibold uppercase text-[12px]">
                   <th className="px-5 py-3 w-1/4">Term / Word</th>
                   <th className="px-5 py-3 w-1/6">Category</th>
                   <th className="px-5 py-3 w-5/12">Definition</th>
@@ -3913,11 +3235,11 @@ function GlossaryTab({ authFetch }) {
                     <td className="px-5 py-3.5 font-semibold text-ink-primary">{item.term}</td>
                     <td className="px-5 py-3.5">
                       {item.category ? (
-                        <span className="bg-brand-success/10 text-ink-success rounded-xs px-2 py-0.5 font-medium uppercase text-[10px]">
+                        <span className="bg-brand-success/10 text-ink-success rounded-xs px-2 py-0.5 font-medium uppercase text-[12px]">
                           {item.category}
                         </span>
                       ) : (
-                        <span className="text-brand-muted italic text-[10px]">None</span>
+                        <span className="text-brand-muted italic text-[12px]">None</span>
                       )}
                     </td>
                     <td className="px-5 py-3.5 text-brand-muted max-w-xs truncate">{item.definition}</td>
@@ -3929,7 +3251,7 @@ function GlossaryTab({ authFetch }) {
                           className="h-8 w-8 object-contain rounded border border-edge bg-surface-muted mx-auto"
                         />
                       ) : (
-                        <span className="text-brand-muted text-[10px]">-</span>
+                        <span className="text-brand-muted text-[12px]">-</span>
                       )}
                     </td>
                     <td className="px-5 py-3.5 text-right whitespace-nowrap">
@@ -3969,7 +3291,7 @@ function GlossaryTab({ authFetch }) {
               </button>
             </div>
             
-            <div className="space-y-4 text-xs">
+            <div className="space-y-4 text-sm">
               <div>
                 <label className="font-semibold text-ink-primary block mb-1">Term / Word *</label>
                 <input
@@ -4012,11 +3334,11 @@ function GlossaryTab({ authFetch }) {
                       placeholder="Paste image URL..."
                       value={editTerm.image_url}
                       onChange={(e) => setEditTerm({ ...editTerm, image_url: e.target.value })}
-                      className="w-full rounded-sm border border-edge p-2 text-xs"
+                      className="w-full rounded-sm border border-edge p-2 text-sm"
                     />
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-brand-muted font-medium">Or upload file:</span>
-                      <label className="cursor-pointer border border-edge px-3 py-1 bg-surface-muted hover:bg-edge/20 rounded text-[10px] font-semibold uppercase flex items-center gap-1">
+                      <span className="text-[12px] text-brand-muted font-medium">Or upload file:</span>
+                      <label className="cursor-pointer border border-edge px-3 py-1 bg-surface-muted hover:bg-edge/20 rounded text-[12px] font-semibold uppercase flex items-center gap-1">
                         <Upload className="h-3 w-3" />
                         {uploading ? 'Uploading...' : 'Choose File'}
                         <input
@@ -4049,13 +3371,13 @@ function GlossaryTab({ authFetch }) {
             <div className="flex gap-2 justify-end border-t border-edge-subtle pt-3">
               <button
                 onClick={() => setModalOpen(false)}
-                className="rounded-sm border border-edge px-4 py-2 text-xs font-semibold uppercase hover:bg-surface-muted"
+                className="rounded-sm border border-edge px-4 py-2 text-sm font-semibold uppercase hover:bg-surface-muted"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSave}
-                className="btn-primary rounded-sm px-5 py-2 text-xs font-semibold uppercase"
+                className="btn-primary rounded-sm px-5 py-2 text-sm font-semibold uppercase"
               >
                 Save Term
               </button>
@@ -4155,17 +3477,17 @@ function FAQTab({ authFetch }) {
             placeholder="Search FAQs..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-sm border border-edge pl-8 pr-3 py-1.5 text-xs text-ink-primary font-semibold"
+            className="w-full rounded-sm border border-edge pl-8 pr-3 py-1.5 text-sm text-ink-primary font-semibold"
           />
           <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-brand-muted" />
         </div>
-        <button onClick={handleCreate} className="btn-primary py-1.5 px-3 rounded-sm text-xs font-semibold uppercase flex items-center gap-1 shrink-0">
+        <button onClick={handleCreate} className="btn-primary py-1.5 px-3 rounded-sm text-sm font-semibold uppercase flex items-center gap-1 shrink-0">
           <Plus className="h-3.5 w-3.5" /> Add FAQ
         </button>
       </div>
 
       <div className="bg-white border border-edge rounded-lg overflow-hidden shadow-xs">
-        <table className="w-full border-collapse text-left text-xs">
+        <table className="w-full border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-edge bg-surface-muted uppercase text-brand-muted font-bold tracking-wider">
               <th className="p-3.5">Category</th>
@@ -4180,7 +3502,7 @@ function FAQTab({ authFetch }) {
             {filtered.map((faq) => (
               <tr key={faq.id} className="hover:bg-surface-muted transition-colors">
                 <td className="p-3.5">
-                  <span className="inline-block bg-brand-success/15 text-brand-success text-[10px] uppercase font-bold tracking-wide rounded-sm px-1.5 py-0.5">
+                  <span className="inline-block bg-brand-success/15 text-brand-success text-[12px] uppercase font-bold tracking-wide rounded-sm px-1.5 py-0.5">
                     {faq.category || 'General'}
                   </span>
                 </td>
@@ -4188,7 +3510,7 @@ function FAQTab({ authFetch }) {
                 <td className="p-3.5 text-ink-secondary max-w-xs truncate">{faq.answer}</td>
                 <td className="p-3.5 text-center">{faq.display_order}</td>
                 <td className="p-3.5 text-center">
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-xs ${faq.is_active ? 'bg-brand-success/10 text-ink-success' : 'bg-brand-muted/10 text-brand-muted'}`}>
+                  <span className={`text-[12px] font-bold px-2 py-0.5 rounded-xs ${faq.is_active ? 'bg-brand-success/10 text-ink-success' : 'bg-brand-muted/10 text-brand-muted'}`}>
                     {faq.is_active ? 'ACTIVE' : 'HIDDEN'}
                   </span>
                 </td>
@@ -4228,14 +3550,14 @@ function FAQTab({ authFetch }) {
               </button>
             </div>
             
-            <div className="space-y-3 text-xs font-semibold text-ink-primary">
+            <div className="space-y-3 text-sm font-semibold text-ink-primary">
               <div>
                 <label className="block mb-1">Question *</label>
                 <input
                   value={editFaq.question}
                   onChange={(e) => setEditFaq({ ...editFaq, question: e.target.value })}
                   placeholder="e.g. How do I request a refund?"
-                  className="w-full rounded-sm border border-edge p-2.5 text-xs text-ink-primary font-semibold"
+                  className="w-full rounded-sm border border-edge p-2.5 text-sm text-ink-primary font-semibold"
                   required
                 />
               </div>
@@ -4247,7 +3569,7 @@ function FAQTab({ authFetch }) {
                   onChange={(e) => setEditFaq({ ...editFaq, answer: e.target.value })}
                   placeholder="Write the FAQ answer..."
                   rows={4}
-                  className="w-full rounded-sm border border-edge p-2.5 text-xs text-ink-primary font-semibold"
+                  className="w-full rounded-sm border border-edge p-2.5 text-sm text-ink-primary font-semibold"
                   required
                 />
               </div>
@@ -4258,7 +3580,7 @@ function FAQTab({ authFetch }) {
                   value={editFaq.category}
                   onChange={(e) => setEditFaq({ ...editFaq, category: e.target.value })}
                   placeholder="e.g. Shipping, Payments, Returns"
-                  className="w-full rounded-sm border border-edge p-2.5 text-xs text-ink-primary font-semibold"
+                  className="w-full rounded-sm border border-edge p-2.5 text-sm text-ink-primary font-semibold"
                 />
               </div>
 
@@ -4268,7 +3590,7 @@ function FAQTab({ authFetch }) {
                   type="number"
                   value={editFaq.display_order}
                   onChange={(e) => setEditFaq({ ...editFaq, display_order: parseInt(e.target.value) || 0 })}
-                  className="w-full rounded-sm border border-edge p-2.5 text-xs text-ink-primary font-semibold"
+                  className="w-full rounded-sm border border-edge p-2.5 text-sm text-ink-primary font-semibold"
                 />
               </div>
 
@@ -4286,13 +3608,13 @@ function FAQTab({ authFetch }) {
             <div className="flex gap-2 justify-end border-t border-edge-subtle pt-3">
               <button
                 onClick={() => setModalOpen(false)}
-                className="rounded-sm border border-edge px-4 py-2 text-xs font-semibold uppercase hover:bg-surface-muted"
+                className="rounded-sm border border-edge px-4 py-2 text-sm font-semibold uppercase hover:bg-surface-muted"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSave}
-                className="btn-primary rounded-sm px-5 py-2 text-xs font-semibold uppercase"
+                className="btn-primary rounded-sm px-5 py-2 text-sm font-semibold uppercase"
               >
                 Save FAQ
               </button>
@@ -4307,18 +3629,18 @@ function FAQTab({ authFetch }) {
 
 /* --------------------------------------------------------- Content Pages */
 function ContentOverviewTab({ authFetch, go }) {
-  const [counts, setCounts] = useState({ pages: 0, blogs: 0, media: 0, glossary: 0, faq: 0 });
+  const [counts, setCounts] = useState({ banners: 0, blogs: 0, media: 0, glossary: 0, faq: 0 });
 
   useEffect(() => {
     Promise.all([
-      authFetch('/api/admin/content-pages/').then((r) => (r.ok ? r.json() : null)),
+      authFetch('/api/admin/hero-banners/').then((r) => (r.ok ? r.json() : null)),
       authFetch('/api/admin/blog-posts/').then((r) => (r.ok ? r.json() : null)),
       authFetch('/api/admin/settings/MEDIA_ASSETS/').then((r) => (r.ok ? r.json() : null)),
       authFetch('/api/admin/glossary/').then((r) => (r.ok ? r.json() : null)),
       authFetch('/api/admin/faqs/').then((r) => (r.ok ? r.json() : null)),
-    ]).then(([pages, blogs, media, glossary, faqs]) => {
+    ]).then(([banners, blogs, media, glossary, faqs]) => {
       setCounts({
-        pages: Array.isArray(pages) ? pages.length : pages?.results?.length || 0,
+        banners: Array.isArray(banners) ? banners.length : banners?.results?.length || 0,
         blogs: Array.isArray(blogs) ? blogs.length : blogs?.results?.length || 0,
         media: Array.isArray(media?.value) ? media.value.length : 0,
         glossary: Array.isArray(glossary) ? glossary.length : glossary?.results?.length || 0,
@@ -4328,10 +3650,9 @@ function ContentOverviewTab({ authFetch, go }) {
   }, [authFetch]);
 
   const cards = [
-    { key: 'pages', title: 'Pages & banners', detail: `${counts.pages} pages`, icon: FileText },
+    { key: 'pages', title: 'Banners', detail: `${counts.banners} slides`, icon: ImageIcon },
     { key: 'blogs', title: 'Blog', detail: `${counts.blogs} articles`, icon: Film },
     { key: 'navigation', title: 'Menus', detail: 'Header and footer links', icon: MenuIcon },
-    { key: 'media', title: 'Media', detail: `${counts.media} assets`, icon: ImageIcon },
     { key: 'glossary', title: 'Glossary Manager', detail: `${counts.glossary} terms`, icon: BookOpen },
     { key: 'faq', title: 'FAQ Manager', detail: `${counts.faq} questions`, icon: HelpCircle },
   ];
@@ -4344,7 +3665,7 @@ function ContentOverviewTab({ authFetch, go }) {
           <button key={card.key} type="button" onClick={() => go(card.key)} className="rounded-lg border border-edge bg-white p-5 text-left hover:border-edge-strong hover:shadow-card transition">
             <Icon className="mb-4 h-5 w-5 text-ink-accent" />
             <p className="text-sm font-semibold text-ink-primary">{card.title}</p>
-            <p className="mt-1 text-xs text-brand-muted">{card.detail}</p>
+            <p className="mt-1 text-sm text-brand-muted">{card.detail}</p>
           </button>
         );
       })}
@@ -4360,167 +3681,6 @@ function slugify(text) {
     .slice(0, 120);
 }
 
-function PagesTab({ authFetch }) {
-  const [pages, setPages] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState(null);
-  const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
-  const contentRef = React.useRef(null);
-
-  const load = useCallback(() => {
-    setLoading(true);
-    authFetch('/api/admin/content-pages/')
-      .then((r) => r.json())
-      .then((d) => setPages(Array.isArray(d) ? d : d.results || []))
-      .catch(() => setPages([]))
-      .finally(() => setLoading(false));
-  }, [authFetch]);
-
-  useEffect(() => { load(); }, [load]);
-
-  const insertToken = (token, wrap = false) => {
-    const ta = contentRef.current;
-    if (!ta) return;
-    const start = ta.selectionStart;
-    const end = ta.selectionEnd;
-    const value = ta.value;
-    const selected = value.slice(start, end);
-    let insertion;
-    if (wrap) {
-      insertion = `${token}${selected || 'text'}${token}`;
-    } else {
-      insertion = `${token}${selected}`;
-    }
-    const next = value.slice(0, start) + insertion + value.slice(end);
-    setEditing({ ...editing, content: next });
-    setTimeout(() => { ta.focus(); ta.selectionStart = start + insertion.length; ta.selectionEnd = start + insertion.length; }, 0);
-  };
-
-  const insertLink = () => {
-    const ta = contentRef.current;
-    if (!ta) return;
-    const start = ta.selectionStart;
-    const end = ta.selectionEnd;
-    const selected = ta.value.slice(start, end) || 'link text';
-    const url = prompt('Link URL', 'https://');
-    if (!url) return;
-    const insertion = `[${selected}](${url})`;
-    const next = ta.value.slice(0, start) + insertion + ta.value.slice(end);
-    setEditing({ ...editing, content: next });
-  };
-
-  const uploadContentImage = (file) => {
-    if (!file) return;
-    uploadAdminMedia(authFetch, file)
-      .then((fileUrl) => {
-        const ta = contentRef.current;
-        const imageText = `\n![${file.name.replace(/\.[^.]+$/, '')}](${fileUrl})\n`;
-        if (!ta) {
-          setEditing((prev) => ({ ...prev, content: `${prev.content || ''}${imageText}` }));
-          return;
-        }
-        const start = ta.selectionStart;
-        const end = ta.selectionEnd;
-        const next = ta.value.slice(0, start) + imageText + ta.value.slice(end);
-        setEditing((prev) => ({ ...prev, content: next }));
-      })
-      .catch((err) => alert(err.message || 'Image upload failed.'));
-  };
-
-  const startNew = () => { setSlugManuallyEdited(false); setEditing({ title: '', slug: '', content: '', page_type: 'STANDARD', is_published: true }); };
-  
-  const save = () => {
-    const isNew = !editing.id;
-    authFetch(isNew ? '/api/admin/content-pages/' : `/api/admin/content-pages/${editing.id}/`, {
-      method: isNew ? 'POST' : 'PUT',
-      body: JSON.stringify(editing)
-    }).then(() => { setEditing(null); load(); });
-  };
-
-  const deleteItem = (item) => {
-    if (confirm(`Delete content page: ${item.title}?`)) {
-      authFetch(`/api/admin/content-pages/${item.id}/`, { method: 'DELETE' }).then(load);
-    }
-  };
-
-  const togglePublish = (item) => {
-    authFetch(`/api/admin/content-pages/${item.id}/`, {
-      method: 'PATCH',
-      body: JSON.stringify({ is_published: !item.is_published }),
-    }).then(load);
-  };
-
-  if (loading) return <p className="text-sm text-brand-muted">Loading web pages...</p>;
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-brand-muted">{pages.length} web pages</p>
-        <button onClick={startNew} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase"><Plus className="h-4 w-4" /> Create Page</button>
-      </div>
-
-      <div className="space-y-2">
-        {pages.map((p) => (
-          <div key={p.id} className="flex justify-between items-center rounded-md border border-edge bg-white shadow-card p-4">
-            <div>
-              <p className="text-sm font-semibold text-ink-primary">{toDisplayText(p.title)} <span className="font-mono text-[10px] text-brand-muted">/{toDisplayText(p.slug)}</span></p>
-              <p className="text-[10px] uppercase font-semibold text-ink-subtle">{p.page_type}</p>
-              <span className={`mt-1 inline-flex rounded-xs px-2 py-0.5 text-[9px] font-semibold uppercase ${p.is_published ? 'bg-brand-success/10 text-ink-success' : 'bg-surface-muted text-ink-muted'}`}>
-                {p.is_published ? 'Published' : 'Draft'}
-              </span>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => togglePublish(p)} className="text-brand-muted hover:text-ink-accent" title={p.is_published ? 'Unpublish' : 'Publish'}>
-                {p.is_published ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
-              </button>
-              <button onClick={() => setEditing({ ...p })} className="text-ink-accent"><Pencil className="h-4 w-4" /></button>
-              <button onClick={() => deleteItem(p)} className="text-brand-muted hover:text-brand-danger"><X className="h-4 w-4" /></button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {editing && (
-        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-          <div className="my-8 w-full max-w-lg bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
-            <h3 className="text-lg font-semibold text-ink-primary">{editing.id ? 'Edit Page' : 'Create Page'}</h3>
-            <div className="space-y-3 text-xs">
-              <input placeholder="Page Title" value={editing.title} onChange={(e) => setEditing({ ...editing, title: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
-              <input placeholder="Slug" value={editing.slug} disabled={!!editing.id} onChange={(e) => setEditing({ ...editing, slug: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-sm disabled:bg-surface-muted" />
-              <select value={editing.page_type} onChange={(e) => setEditing({ ...editing, page_type: e.target.value })} className="w-full rounded-sm border border-edge p-2 text-xs">
-                <option value="STANDARD">Standard layout</option>
-                <option value="LANDING">Landing page layout</option>
-                <option value="PROMO">Promotional grid</option>
-              </select>
-              <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => insertToken('**', true)} className="rounded-sm border border-edge px-3 py-1.5 text-[10px] font-semibold text-ink-primary">Bold</button>
-                <button type="button" onClick={() => insertToken('*', true)} className="rounded-sm border border-edge px-3 py-1.5 text-[10px] font-semibold text-ink-primary">Italic</button>
-                <button type="button" onClick={insertLink} className="rounded-sm border border-edge px-3 py-1.5 text-[10px] font-semibold text-ink-primary">Link</button>
-                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-edge px-3 py-1.5 text-[10px] font-semibold text-ink-primary">
-                  <Upload className="h-3.5 w-3.5" /> Image
-                  <input type="file" accept="image/*" onChange={(e) => uploadContentImage(e.target.files?.[0])} className="hidden" />
-                </label>
-              </div>
-              <textarea ref={contentRef} placeholder="HTML/Markdown content" value={editing.content} onChange={(e) => setEditing({ ...editing, content: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 font-mono" rows={5} />
-              
-              <div className="p-3 bg-surface-muted rounded-md border border-edge-subtle space-y-2">
-                <p className="font-semibold text-ink-subtle">SEO TAGS</p>
-                <input placeholder="Meta Title" value={editing.meta_title || ''} onChange={(e) => setEditing({ ...editing, meta_title: e.target.value })} className="w-full rounded border border-edge p-1.5 text-xs bg-white" />
-                <textarea placeholder="Meta Description" value={editing.meta_description || ''} onChange={(e) => setEditing({ ...editing, meta_description: e.target.value })} className="w-full rounded border border-edge p-1.5 text-xs bg-white" rows={2} />
-              </div>
-
-              <label className="flex items-center gap-2 text-sm text-ink-primary cursor-pointer"><input type="checkbox" checked={editing.is_published} onChange={(e) => setEditing({ ...editing, is_published: e.target.checked })} className="accent-ink-primary" /> Publish Page</label>
-              <div className="flex gap-2">
-                <button onClick={save} className="btn-primary flex-1 py-2.5 text-xs uppercase">Save Page</button>
-                <button onClick={() => setEditing(null)} className="flex-1 rounded-sm border border-edge py-2.5 text-xs font-semibold uppercase">Cancel</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 /* ------------------------------------------------------------- Blogs */
 function BlogsTab({ authFetch }) {
@@ -4540,7 +3700,32 @@ function BlogsTab({ authFetch }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const startNew = () => setEditing({ title: '', slug: '', content: '', author: 'Admin', cover_image_url: '', is_published: true });
+  const startNew = () => setEditing({
+    title: '',
+    slug: '',
+    content: '',
+    author: 'Admin',
+    category: 'Biotech',
+    cover_image_url: '',
+    is_published: true,
+    meta_title: '',
+    meta_description: '',
+  });
+
+  const startEdit = (b) => {
+    setEditing({
+      id: b.id,
+      title: b.title || '',
+      slug: b.slug || '',
+      author: b.author || 'Admin',
+      category: b.category || 'Biotech',
+      cover_image_url: b.cover_image_url || '',
+      content: b.content || '',
+      is_published: Boolean(b.is_published),
+      meta_title: b.meta_title || '',
+      meta_description: b.meta_description || '',
+    });
+  };
 
   const uploadCover = (file) => {
     if (!file) return;
@@ -4552,10 +3737,18 @@ function BlogsTab({ authFetch }) {
   };
 
   const save = () => {
+    if (!editing?.title?.trim()) {
+      alert('Article title is required.');
+      return;
+    }
     const isNew = !editing.id;
+    const payload = {
+      ...editing,
+      slug: editing.slug || editing.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+    };
     authFetch(isNew ? '/api/admin/blog-posts/' : `/api/admin/blog-posts/${editing.id}/`, {
       method: isNew ? 'POST' : 'PUT',
-      body: JSON.stringify(editing)
+      body: JSON.stringify(payload)
     }).then(() => { setEditing(null); load(); });
   };
 
@@ -4575,7 +3768,7 @@ function BlogsTab({ authFetch }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-brand-muted">{blogs.length} articles</p>
-        <button onClick={startNew} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase"><Plus className="h-4 w-4" /> Write Article</button>
+        <button onClick={startNew} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-sm uppercase"><Plus className="h-4 w-4" /> Write Article</button>
       </div>
 
       <div className="space-y-2">
@@ -4583,8 +3776,8 @@ function BlogsTab({ authFetch }) {
           <div key={b.id} className="flex justify-between items-center rounded-md border border-edge bg-white shadow-card p-4">
             <div>
               <p className="text-sm font-semibold text-ink-primary">{toDisplayText(b.title)}</p>
-              <p className="text-[10px] text-brand-muted">Written by {b.author} · /{b.slug}</p>
-              <span className={`mt-1 inline-flex rounded-xs px-2 py-0.5 text-[9px] font-semibold uppercase ${b.is_published ? 'bg-brand-success/10 text-ink-success' : 'bg-surface-muted text-ink-muted'}`}>
+              <p className="text-[12px] text-brand-muted">Category: {b.category || 'Biotech'} · Written by {b.author} · /{b.slug}</p>
+              <span className={`mt-1 inline-flex rounded-xs px-2 py-0.5 text-[13px] font-semibold uppercase ${b.is_published ? 'bg-brand-success/10 text-ink-success' : 'bg-surface-muted text-ink-muted'}`}>
                 {b.is_published ? 'Published' : 'Draft'}
               </span>
             </div>
@@ -4592,8 +3785,8 @@ function BlogsTab({ authFetch }) {
               <button onClick={() => togglePublish(b)} className="text-brand-muted hover:text-ink-accent" title={b.is_published ? 'Unpublish' : 'Publish'}>
                 {b.is_published ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
               </button>
-              <button onClick={() => setEditing({ ...b })} className="text-ink-accent"><Pencil className="h-4 w-4" /></button>
-              <button onClick={() => deleteItem(b)} className="text-brand-muted hover:text-brand-danger"><X className="h-4 w-4" /></button>
+              <button onClick={() => startEdit(b)} className="text-ink-accent p-1.5 rounded hover:bg-surface-muted" title="Edit article"><Pencil className="h-4 w-4" /></button>
+              <button onClick={() => deleteItem(b)} className="text-brand-muted hover:text-brand-danger p-1.5 rounded" title="Delete article"><X className="h-4 w-4" /></button>
             </div>
           </div>
         ))}
@@ -4603,15 +3796,30 @@ function BlogsTab({ authFetch }) {
         <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
           <div className="my-8 w-full max-w-lg bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
             <h3 className="text-lg font-semibold text-ink-primary">{editing.id ? 'Edit Article' : 'Write Article'}</h3>
-            <div className="space-y-3 text-xs">
-              <input placeholder="Article Title" value={editing.title} onChange={(e) => setEditing({ ...editing, title: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
-              <input placeholder="Slug" value={editing.slug} disabled={!!editing.id} onChange={(e) => setEditing({ ...editing, slug: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-sm disabled:bg-surface-muted" />
-              <input placeholder="Author name" value={editing.author} onChange={(e) => setEditing({ ...editing, author: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
+            <div className="space-y-3 text-sm">
               <div>
-                <label className="mb-1 block text-[10px] font-semibold uppercase text-brand-muted">Cover image</label>
+                <label className="mb-1 block text-xs font-semibold text-ink-muted">Article Title</label>
+                <input placeholder="Article Title" value={editing.title || ''} onChange={(e) => setEditing({ ...editing, title: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-ink-muted">Category</label>
+                  <input placeholder="Category (e.g. Biotech, Soil Science)" value={editing.category || ''} onChange={(e) => setEditing({ ...editing, category: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-ink-muted">Author</label>
+                  <input placeholder="Author name" value={editing.author || ''} onChange={(e) => setEditing({ ...editing, author: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-ink-muted">URL Slug</label>
+                <input placeholder="Slug (e.g. joint-care-guide)" value={editing.slug || ''} onChange={(e) => setEditing({ ...editing, slug: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-ink-muted">Cover Image</label>
                 <div className="flex gap-2">
                   <input placeholder="https://..." value={editing.cover_image_url || ''} onChange={(e) => setEditing({ ...editing, cover_image_url: e.target.value })} className="flex-1 rounded-sm border border-edge p-2.5 text-sm" />
-                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-edge px-3 py-2 text-xs font-semibold text-ink-primary hover:border-ink-primary">
+                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-edge px-3 py-2 text-sm font-semibold text-ink-primary hover:border-ink-primary">
                     <Upload className="h-3.5 w-3.5" />
                     {uploadingCover ? 'Uploading' : 'Upload'}
                     <input type="file" accept="image/*" onChange={(e) => uploadCover(e.target.files?.[0])} disabled={uploadingCover} className="hidden" />
@@ -4619,18 +3827,24 @@ function BlogsTab({ authFetch }) {
                 </div>
                 {editing.cover_image_url && <img src={editing.cover_image_url} alt="" className="mt-2 h-28 w-full rounded-lg object-cover" />}
               </div>
-              <textarea placeholder="Write article content..." value={editing.content} onChange={(e) => setEditing({ ...editing, content: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 font-serif text-sm" rows={8} />
-
-              <div className="p-3 bg-surface-muted rounded-md border border-edge-subtle space-y-2">
-                <p className="font-semibold text-ink-subtle">SEO META</p>
-                <input placeholder="Meta Title" value={editing.meta_title || ''} onChange={(e) => setEditing({ ...editing, meta_title: e.target.value })} className="w-full rounded border border-edge p-1.5 text-xs bg-white" />
-                <textarea placeholder="Meta Description" value={editing.meta_description || ''} onChange={(e) => setEditing({ ...editing, meta_description: e.target.value })} className="w-full rounded border border-edge p-1.5 text-xs bg-white" rows={2} />
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-ink-muted">Article Content</label>
+                <textarea placeholder="Write article content..." value={editing.content || ''} onChange={(e) => setEditing({ ...editing, content: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 font-sans text-sm" rows={8} />
               </div>
 
-              <label className="flex items-center gap-2 text-sm text-ink-primary cursor-pointer"><input type="checkbox" checked={editing.is_published} onChange={(e) => setEditing({ ...editing, is_published: e.target.checked })} className="accent-ink-primary" /> Publish Article</label>
-              <div className="flex gap-2">
-                <button onClick={save} className="btn-primary flex-1 py-2.5 text-xs uppercase">Save Article</button>
-                <button onClick={() => setEditing(null)} className="flex-1 rounded-sm border border-edge py-2.5 text-xs font-semibold uppercase">Cancel</button>
+              <div className="p-3 bg-surface-muted rounded-md border border-edge-subtle space-y-2">
+                <p className="font-semibold text-xs text-ink-muted uppercase">SEO Meta</p>
+                <input placeholder="Meta Title" value={editing.meta_title || ''} onChange={(e) => setEditing({ ...editing, meta_title: e.target.value })} className="w-full rounded border border-edge p-2 text-sm bg-white" />
+                <textarea placeholder="Meta Description" value={editing.meta_description || ''} onChange={(e) => setEditing({ ...editing, meta_description: e.target.value })} className="w-full rounded border border-edge p-2 text-sm bg-white" rows={2} />
+              </div>
+
+              <label className="flex items-center gap-2 text-sm text-ink-primary cursor-pointer">
+                <input type="checkbox" checked={Boolean(editing.is_published)} onChange={(e) => setEditing({ ...editing, is_published: e.target.checked })} className="accent-ink-primary" />
+                Publish Article
+              </label>
+              <div className="flex gap-2 pt-2">
+                <button onClick={save} className="btn-primary flex-1 py-2.5 text-sm uppercase font-semibold">Save Article</button>
+                <button onClick={() => setEditing(null)} className="flex-1 rounded-sm border border-edge py-2.5 text-sm font-semibold uppercase">Cancel</button>
               </div>
             </div>
           </div>
@@ -4652,21 +3866,19 @@ function AnalyticsAndReportsTab({ authFetch }) {
     { key: 'repeat', label: 'Repeat customers' },
     { key: 'products', label: 'Revenue by product' },
     { key: 'abandoned', label: 'Abandoned recovery' },
-    { key: 'geo', label: 'Geographic map' },
   ];
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2 border-b border-edge-subtle pb-2">
         {VIEWS.map((v) => (
           <button key={v.key} onClick={() => setView(v.key)}
-            className={`px-3 py-1.5 text-xs font-semibold uppercase rounded-lg ${view === v.key ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>
+            className={`px-3 py-1.5 text-sm font-semibold uppercase rounded-lg ${view === v.key ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>
             {v.label}
           </button>
         ))}
       </div>
       {view === 'overview' && <AnalyticsOverview authFetch={authFetch} />}
-      {view !== 'overview' && view !== 'geo' && <ReportsTab authFetch={authFetch} initialTab={view} />}
-      {view === 'geo' && <GeoMapView authFetch={authFetch} />}
+      {view !== 'overview' && <ReportsTab authFetch={authFetch} initialTab={view} />}
     </div>
   );
 }
@@ -4674,7 +3886,7 @@ function AnalyticsAndReportsTab({ authFetch }) {
 function AnalyticsOverview({ authFetch }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [scheduler, setScheduler] = useState({ frequency: 'weekly', email: 'admin@scleroproteins.com' });
+  const [scheduler, setScheduler] = useState({ frequency: 'weekly', email: '' });
   const [schedSaved, setSchedSaved] = useState(false);
 
   useEffect(() => {
@@ -4691,12 +3903,40 @@ function AnalyticsOverview({ authFetch }) {
       .catch(() => {});
   }, [authFetch]);
 
-  const triggerPDFDownload = () => {
-    window.open(getApiUrl('/api/admin/reports/analytics/?export=pdf'), '_blank');
+  const triggerPDFDownload = async () => {
+    try {
+      const res = await authFetch('/api/admin/reports/analytics/?export=pdf');
+      if (!res.ok) throw new Error('PDF export failed');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `sclero_performance_report.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(err.message || 'Could not export PDF report.');
+    }
   };
 
-  const triggerCSVDownload = () => {
-    window.open(getApiUrl('/api/admin/reports/analytics/?export=csv'), '_blank');
+  const triggerCSVDownload = async () => {
+    try {
+      const res = await authFetch('/api/admin/reports/analytics/?export=csv');
+      if (!res.ok) throw new Error('CSV export failed');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `sclero_sales_report.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(err.message || 'Could not export CSV report.');
+    }
   };
 
   const saveScheduler = () => {
@@ -4725,41 +3965,41 @@ function AnalyticsOverview({ authFetch }) {
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-edge-subtle pb-3">
         <h3 className="text-sm font-semibold text-ink-primary">Performance Exporter</h3>
         <div className="flex gap-2">
-          <button onClick={triggerPDFDownload} className="btn-secondary inline-flex items-center gap-1.5 px-3 py-2 text-xs border border-edge bg-white rounded-sm"><Download className="h-3.5 w-3.5 text-ink-accent" /> Export PDF Summary</button>
-          <button onClick={triggerCSVDownload} className="btn-secondary inline-flex items-center gap-1.5 px-3 py-2 text-xs border border-edge bg-white rounded-sm"><Download className="h-3.5 w-3.5 text-ink-accent" /> Export CSV Spreadsheet</button>
+          <button onClick={triggerPDFDownload} className="btn-secondary inline-flex items-center gap-1.5 px-3 py-2 text-sm border border-edge bg-white rounded-sm"><Download className="h-3.5 w-3.5 text-ink-accent" /> Export PDF Summary</button>
+          <button onClick={triggerCSVDownload} className="btn-secondary inline-flex items-center gap-1.5 px-3 py-2 text-sm border border-edge bg-white rounded-sm"><Download className="h-3.5 w-3.5 text-ink-accent" /> Export CSV Spreadsheet</button>
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-md border border-edge bg-white shadow-card p-4">
-          <p className="text-xs text-brand-muted font-semibold">GROSS SALES REVENUE</p>
+          <p className="text-sm text-brand-muted font-semibold">GROSS SALES REVENUE</p>
           <p className="mt-1 text-2xl font-semibold text-ink-primary">{sales.currency} {Number(sales.total_revenue || 0).toLocaleString()}</p>
-          <p className="text-[10px] text-ink-subtle mt-1">Average Order Value: {sales.currency} {Number(sales.aov || 0).toFixed(2)}</p>
+          <p className="text-[12px] text-ink-subtle mt-1">Average Order Value: {sales.currency} {Number(sales.aov || 0).toFixed(2)}</p>
         </div>
         <div className="rounded-md border border-edge bg-white shadow-card p-4">
-          <p className="text-xs text-brand-muted font-semibold">REPEAT CUSTOMER RATE</p>
+          <p className="text-sm text-brand-muted font-semibold">REPEAT CUSTOMER RATE</p>
           <p className="mt-1 text-2xl font-semibold text-ink-primary">{Number(customers.repeat_purchase_rate || 0).toFixed(1)}%</p>
-          <p className="text-[10px] text-ink-subtle mt-1">Total buyer database size: {customers.total_customers}</p>
+          <p className="text-[12px] text-ink-subtle mt-1">Total buyer database size: {customers.total_customers}</p>
         </div>
         <div className="rounded-md border border-edge bg-white shadow-card p-4">
-          <p className="text-xs text-brand-muted font-semibold">TOTAL CAMPAIGN CLICKS</p>
+          <p className="text-sm text-brand-muted font-semibold">TOTAL CAMPAIGN CLICKS</p>
           <p className="mt-1 text-2xl font-semibold text-ink-accent">
             {marketing.reduce((acc, c) => acc + c.clicks, 0).toLocaleString()}
           </p>
-          <p className="text-[10px] text-ink-subtle mt-1">Total campaign conversions: {marketing.reduce((acc, c) => acc + c.conversions, 0).toLocaleString()}</p>
+          <p className="text-[12px] text-ink-subtle mt-1">Total campaign conversions: {marketing.reduce((acc, c) => acc + c.conversions, 0).toLocaleString()}</p>
         </div>
       </div>
 
       {/* Schedule automated report generation */}
       <div className="rounded-lg border border-edge bg-white shadow-card p-5 space-y-4">
         <div className="border-b border-edge-subtle pb-2">
-          <h4 className="text-xs font-semibold text-ink-primary uppercase">Schedule Automated Reports Delivery</h4>
-          <p className="text-[11px] text-brand-muted">Configure the platform to automatically compile and email summary performance reports.</p>
+          <h4 className="text-sm font-semibold text-ink-primary uppercase">Schedule Automated Reports Delivery</h4>
+          <p className="text-[13px] text-brand-muted">Configure the platform to automatically compile and email summary performance reports.</p>
         </div>
-        <div className="grid gap-3 sm:grid-cols-3 text-xs">
+        <div className="grid gap-3 sm:grid-cols-3 text-sm">
           <div>
             <p className="font-semibold text-brand-muted mb-1">FREQUENCY</p>
-            <select value={scheduler.frequency} onChange={(e) => setScheduler({ ...scheduler, frequency: e.target.value })} className="w-full rounded-sm border border-edge p-2 text-xs bg-white">
+            <select value={scheduler.frequency} onChange={(e) => setScheduler({ ...scheduler, frequency: e.target.value })} className="w-full rounded-sm border border-edge p-2 text-sm bg-white">
               <option value="daily">Daily digest</option>
               <option value="weekly">Weekly performance sheet</option>
               <option value="monthly">Monthly audit pack</option>
@@ -4767,11 +4007,11 @@ function AnalyticsOverview({ authFetch }) {
           </div>
           <div>
             <p className="font-semibold text-brand-muted mb-1">RECIPIENT EMAIL</p>
-            <input placeholder="admin@scleroproteins.com" value={scheduler.email} onChange={(e) => setScheduler({ ...scheduler, email: e.target.value })} className="w-full rounded-sm border border-edge p-2 text-xs" />
+            <input placeholder="admin@scleroproteins.com" value={scheduler.email} onChange={(e) => setScheduler({ ...scheduler, email: e.target.value })} className="w-full rounded-sm border border-edge p-2 text-sm" />
           </div>
           <div className="flex items-end">
             <button onClick={saveScheduler} className="btn-primary w-full py-2 font-semibold uppercase">Schedule Delivery</button>
-            {schedSaved && <p className="text-[11px] font-semibold text-brand-success text-center">✓ Schedule saved</p>}
+            {schedSaved && <p className="text-[13px] font-semibold text-brand-success text-center">✓ Schedule saved</p>}
           </div>
         </div>
       </div>
@@ -4793,7 +4033,7 @@ function GeneralSettingsTab({ authFetch }) {
 
   // New settings states
   const [companyInfo, setCompanyInfo] = useState({
-    name: 'Sclero Proteins Ltd',
+    name: '',
     phone: '',
     email: '',
     address: '',
@@ -4824,6 +4064,8 @@ function GeneralSettingsTab({ authFetch }) {
     googleAnalytics: '',
     gtm: '',
     fbPixel: '',
+    ogImage: '',
+    twitterHandle: '',
     robotsTxt: '',
     schemaMarkup: ''
   });
@@ -4996,7 +4238,7 @@ function GeneralSettingsTab({ authFetch }) {
   ];
 
   return (
-    <div className="space-y-8 text-xs">
+    <div className="space-y-8 text-sm">
       
       {/* Tax & pricing — wired to the live store config */}
       <div className="bg-white rounded-lg border border-edge p-5 space-y-3">
@@ -5005,7 +4247,7 @@ function GeneralSettingsTab({ authFetch }) {
             <h3 className="text-sm font-semibold text-ink-primary mb-1 uppercase">Tax &amp; pricing</h3>
             <p className="text-brand-muted">Choose how product prices display and how tax is charged at checkout.</p>
           </div>
-          {taxSaved && <span className="text-[11px] font-semibold text-brand-success">✓ Saved</span>}
+          {taxSaved && <span className="text-[13px] font-semibold text-brand-success">✓ Saved</span>}
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           {TAX_OPTIONS.map((o) => (
@@ -5024,7 +4266,7 @@ function GeneralSettingsTab({ authFetch }) {
                 </span>
                 {o.title}
               </div>
-              <p className="mt-1.5 text-[11px] leading-relaxed text-brand-muted">{o.desc}</p>
+              <p className="mt-1.5 text-[13px] leading-relaxed text-brand-muted">{o.desc}</p>
             </button>
           ))}
         </div>
@@ -5037,9 +4279,9 @@ function GeneralSettingsTab({ authFetch }) {
             <h3 className="text-sm font-semibold text-ink-primary mb-1 uppercase">Checkout access</h3>
             <p className="text-brand-muted mb-0">Control whether shoppers can place orders without signing in.</p>
           </div>
-          {checkoutSaved && <span className="text-[11px] font-semibold text-brand-success">✓ Saved</span>}
+          {checkoutSaved && <span className="text-[13px] font-semibold text-brand-success">✓ Saved</span>}
         </div>
-        {checkoutError && <p className="mt-2 text-[11px] font-semibold text-brand-danger">{checkoutError}</p>}
+        {checkoutError && <p className="mt-2 text-[13px] font-semibold text-brand-danger">{checkoutError}</p>}
         <button
           type="button"
           onClick={() => saveCheckoutSettings(!checkoutSettings.allow_guest_checkout)}
@@ -5059,11 +4301,11 @@ function GeneralSettingsTab({ authFetch }) {
               )}
               Guest checkout {checkoutSettings.allow_guest_checkout ? 'enabled' : 'disabled'}
             </div>
-            <p className="mt-1 text-[11px] leading-relaxed text-brand-muted">
+            <p className="mt-1 text-[13px] leading-relaxed text-brand-muted">
               When enabled, shoppers can complete checkout as guests. When disabled, login is required before payment.
             </p>
           </div>
-          <span className="text-[10px] font-semibold uppercase text-brand-muted">
+          <span className="text-[12px] font-semibold uppercase text-brand-muted">
             {checkoutSettings.allow_guest_checkout ? 'On' : 'Off'}
           </span>
         </button>
@@ -5177,6 +4419,14 @@ function GeneralSettingsTab({ authFetch }) {
             <input type="text" value={seoSettings.gtm || ''} onChange={(e) => setSeoSettings({ ...seoSettings, gtm: e.target.value })} className="w-full rounded border border-edge p-2 bg-surface" />
           </div>
           <div>
+            <label className="block font-semibold text-ink-primary mb-1">Social Share Image URL</label>
+            <input type="url" value={seoSettings.ogImage || ''} onChange={(e) => setSeoSettings({ ...seoSettings, ogImage: e.target.value })} className="w-full rounded border border-edge p-2 bg-surface" placeholder="https://…" />
+          </div>
+          <div>
+            <label className="block font-semibold text-ink-primary mb-1">X / Twitter Handle</label>
+            <input type="text" value={seoSettings.twitterHandle || ''} onChange={(e) => setSeoSettings({ ...seoSettings, twitterHandle: e.target.value })} className="w-full rounded border border-edge p-2 bg-surface" placeholder="@brand" />
+          </div>
+          <div>
             <label className="block font-semibold text-ink-primary mb-1">Facebook Pixel ID</label>
             <input type="text" value={seoSettings.fbPixel || ''} onChange={(e) => setSeoSettings({ ...seoSettings, fbPixel: e.target.value })} className="w-full rounded border border-edge p-2 bg-surface" />
           </div>
@@ -5195,14 +4445,709 @@ function GeneralSettingsTab({ authFetch }) {
   );
 }
 
-function SettingsTab({ authFetch, regions }) {
-  const [subTab, setSubTab] = useState('general'); // general | payments | emails | shipping | theme | cookie-consent
+function HomepageSettingsTab({ authFetch }) {
+  const [settings, setSettings] = useState(() => normalizeHomepageSettings(DEFAULT_HOMEPAGE_SETTINGS));
+  const [activeSection, setActiveSection] = useState('trustSection');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    authFetch('/api/admin/settings/HOMEPAGE_SETTINGS/')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setSettings(normalizeHomepageSettings(d?.value)))
+      .catch(() => setSettings(normalizeHomepageSettings(DEFAULT_HOMEPAGE_SETTINGS)));
+  }, [authFetch]);
+
+  const SECTION_OPTIONS = [
+    { key: 'seo', label: 'SEO' },
+    { key: 'trustSection', label: 'Trust Section' },
+    { key: 'productShowcase', label: 'Product Showcase' },
+    { key: 'quizSection', label: 'Quiz Section' },
+    { key: 'chooseSection', label: 'Why Choose Us' },
+    { key: 'comparisonSection', label: 'Comparison' },
+    { key: 'ingredientsSection', label: 'Ingredients' },
+    { key: 'conversionSection', label: 'Conversion Block' },
+    { key: 'faqSection', label: 'FAQs' },
+    { key: 'educationSection', label: 'Education' },
+    { key: 'inquirySection', label: 'Inquiry CTA' },
+  ];
+
+  const syncSettings = (next) => {
+    setSettings(normalizeHomepageSettings(next));
+  };
+
+  const updateSectionField = (sectionKey, field, value) => {
+    syncSettings({
+      ...settings,
+      [sectionKey]: {
+        ...settings[sectionKey],
+        [field]: value,
+      },
+    });
+  };
+
+  const updateNestedField = (sectionKey, parentKey, field, value) => {
+    syncSettings({
+      ...settings,
+      [sectionKey]: {
+        ...settings[sectionKey],
+        [parentKey]: {
+          ...settings[sectionKey][parentKey],
+          [field]: value,
+        },
+      },
+    });
+  };
+
+  const updateArrayItem = (sectionKey, arrayKey, index, field, value) => {
+    const nextItems = [...(settings[sectionKey][arrayKey] || [])];
+    nextItems[index] = {
+      ...nextItems[index],
+      [field]: value,
+    };
+    updateSectionField(sectionKey, arrayKey, nextItems);
+  };
+
+  const addArrayItem = (sectionKey, arrayKey, template) => {
+    updateSectionField(sectionKey, arrayKey, [...(settings[sectionKey][arrayKey] || []), template]);
+  };
+
+  const removeArrayItem = (sectionKey, arrayKey, index) => {
+    updateSectionField(sectionKey, arrayKey, (settings[sectionKey][arrayKey] || []).filter((_, itemIndex) => itemIndex !== index));
+  };
+
+  const saveHomepageSettings = async () => {
+    setSaving(true);
+    setSaved(false);
+    setError('');
+    try {
+      const normalized = normalizeHomepageSettings(settings);
+      const payload = {
+        key: 'HOMEPAGE_SETTINGS',
+        value: normalized,
+        description: 'Homepage copy, product showcase labels, CTAs, FAQs, testimonial messaging, and section content.',
+      };
+
+      let response = await authFetch('/api/admin/settings/HOMEPAGE_SETTINGS/', {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      });
+      if (response.status === 404) {
+        response = await authFetch('/api/admin/settings/', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+      }
+      if (!response.ok) {
+        throw new Error('Could not save homepage settings.');
+      }
+      syncSettings(normalized);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      setError(err.message || 'Could not save homepage settings.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const resetDefaults = () => {
+    syncSettings(DEFAULT_HOMEPAGE_SETTINGS);
+  };
+
+  const InputField = ({ label, value, onChange, placeholder = '' }) => (
+    <div>
+      <label className="mb-1 block font-semibold text-ink-primary">{label}</label>
+      <input
+        type="text"
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full rounded border border-edge p-2 bg-surface"
+      />
+    </div>
+  );
+
+  const TextAreaField = ({ label, value, onChange, rows = 3, placeholder = '' }) => (
+    <div>
+      <label className="mb-1 block font-semibold text-ink-primary">{label}</label>
+      <textarea
+        rows={rows}
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full rounded border border-edge p-2 bg-surface"
+      />
+    </div>
+  );
+
+  const ToggleField = ({ checked, onChange, label, description }) => (
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      className={`flex w-full items-center justify-between rounded-lg border p-3 text-left transition ${
+        checked ? 'border-ink-primary bg-surface-muted' : 'border-edge bg-white'
+      }`}
+    >
+      <div>
+        <p className="font-semibold text-ink-primary">{label}</p>
+        {description ? <p className="mt-1 text-[13px] text-brand-muted">{description}</p> : null}
+      </div>
+      {checked ? <ToggleRight className="h-5 w-5 text-ink-accent" /> : <ToggleLeft className="h-5 w-5 text-ink-subtle" />}
+    </button>
+  );
+
+  const ArrayCard = ({ title, subtitle, children, onAdd }) => (
+    <div className="rounded-lg border border-edge bg-white p-4 space-y-4">
+      <div className="flex items-center justify-between gap-3 border-b border-edge-subtle pb-3">
+        <div>
+          <h4 className="text-sm font-semibold uppercase text-ink-primary">{title}</h4>
+          {subtitle ? <p className="mt-1 text-[13px] text-brand-muted">{subtitle}</p> : null}
+        </div>
+        {onAdd ? (
+          <button type="button" onClick={onAdd} className="rounded-sm border border-edge px-3 py-1.5 text-[12px] font-semibold uppercase text-ink-primary">
+            Add item
+          </button>
+        ) : null}
+      </div>
+      {children}
+    </div>
+  );
+
+  const renderSectionEditor = () => {
+    switch (activeSection) {
+      case 'seo':
+        return (
+          <div className="space-y-4">
+            <InputField label="Homepage SEO title" value={settings.seo.metaTitle} onChange={(value) => updateSectionField('seo', 'metaTitle', value)} />
+            <TextAreaField label="Homepage SEO description" value={settings.seo.metaDescription} onChange={(value) => updateSectionField('seo', 'metaDescription', value)} />
+            <TextAreaField label="Homepage keywords" value={settings.seo.keywords} onChange={(value) => updateSectionField('seo', 'keywords', value)} rows={2} />
+          </div>
+        );
+      case 'trustSection':
+        return (
+          <div className="space-y-4">
+            <ToggleField checked={settings.trustSection.enabled !== false} onChange={(value) => updateSectionField('trustSection', 'enabled', value)} label="Show trust section" description="Display the opening trust and reassurance section on the homepage." />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <InputField label="Kicker" value={settings.trustSection.kicker} onChange={(value) => updateSectionField('trustSection', 'kicker', value)} />
+              <InputField label="Headline" value={settings.trustSection.title} onChange={(value) => updateSectionField('trustSection', 'title', value)} />
+            </div>
+            <TextAreaField label="Description" value={settings.trustSection.description} onChange={(value) => updateSectionField('trustSection', 'description', value)} />
+            <ArrayCard title="Trust cards" subtitle="Manage the short feature cards beside the headline." onAdd={() => addArrayItem('trustSection', 'cards', { title: 'New card', description: 'Add a short description.', icon: 'ShieldCheck' })}>
+              <div className="space-y-3">
+                {settings.trustSection.cards.map((item, index) => (
+                  <div key={`${item.title}-${index}`} className="rounded-lg border border-edge bg-surface-muted p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[13px] font-semibold uppercase text-ink-accent">Card {index + 1}</p>
+                      <button type="button" onClick={() => removeArrayItem('trustSection', 'cards', index)} className="text-[12px] font-semibold uppercase text-red-600">Remove</button>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <InputField label="Title" value={item.title} onChange={(value) => updateArrayItem('trustSection', 'cards', index, 'title', value)} />
+                      <InputField label="Icon name" value={item.icon} onChange={(value) => updateArrayItem('trustSection', 'cards', index, 'icon', value)} placeholder="ShieldCheck" />
+                    </div>
+                    <TextAreaField label="Description" value={item.description} onChange={(value) => updateArrayItem('trustSection', 'cards', index, 'description', value)} rows={2} />
+                  </div>
+                ))}
+              </div>
+            </ArrayCard>
+          </div>
+        );
+      case 'productShowcase':
+        return (
+          <div className="space-y-4">
+            <ToggleField checked={settings.productShowcase.enabled !== false} onChange={(value) => updateSectionField('productShowcase', 'enabled', value)} label="Show product showcase" description="Display the bestseller and latest-arrivals shopping section." />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <InputField label="CTA label" value={settings.productShowcase.ctaLabel} onChange={(value) => updateSectionField('productShowcase', 'ctaLabel', value)} />
+              <InputField label="CTA URL" value={settings.productShowcase.ctaUrl} onChange={(value) => updateSectionField('productShowcase', 'ctaUrl', value)} />
+            </div>
+            <ArrayCard title="Product tabs" subtitle="Control each homepage product group, its label, subtitle, and product sort." onAdd={() => addArrayItem('productShowcase', 'tabs', { key: `section-${Date.now()}`, label: 'New product group', subtitle: 'Short supporting text.', apiSort: 'bestseller', limit: 4 })}>
+              <div className="space-y-3">
+                {settings.productShowcase.tabs.map((item, index) => (
+                  <div key={`${item.key}-${index}`} className="rounded-lg border border-edge bg-surface-muted p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[13px] font-semibold uppercase text-ink-accent">Tab {index + 1}</p>
+                      <button type="button" onClick={() => removeArrayItem('productShowcase', 'tabs', index)} className="text-[12px] font-semibold uppercase text-red-600">Remove</button>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <InputField label="Unique key" value={item.key} onChange={(value) => updateArrayItem('productShowcase', 'tabs', index, 'key', value)} />
+                      <InputField label="Button label" value={item.label} onChange={(value) => updateArrayItem('productShowcase', 'tabs', index, 'label', value)} />
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <InputField label="API sort" value={item.apiSort} onChange={(value) => updateArrayItem('productShowcase', 'tabs', index, 'apiSort', value)} placeholder="bestseller or newest" />
+                      <InputField label="Limit" value={String(item.limit || '')} onChange={(value) => updateArrayItem('productShowcase', 'tabs', index, 'limit', Number(value) || 4)} />
+                    </div>
+                    <TextAreaField label="Subtitle" value={item.subtitle} onChange={(value) => updateArrayItem('productShowcase', 'tabs', index, 'subtitle', value)} rows={2} />
+                  </div>
+                ))}
+              </div>
+            </ArrayCard>
+          </div>
+        );
+      case 'quizSection':
+        return (
+          <div className="space-y-4">
+            <ToggleField checked={settings.quizSection.enabled !== false} onChange={(value) => updateSectionField('quizSection', 'enabled', value)} label="Show quiz section" description="Display the product match quiz call-to-action block." />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <InputField label="Kicker" value={settings.quizSection.kicker} onChange={(value) => updateSectionField('quizSection', 'kicker', value)} />
+              <InputField label="Headline" value={settings.quizSection.title} onChange={(value) => updateSectionField('quizSection', 'title', value)} />
+            </div>
+            <TextAreaField label="Description" value={settings.quizSection.description} onChange={(value) => updateSectionField('quizSection', 'description', value)} />
+            <TextAreaField label="Card description" value={settings.quizSection.cardDescription} onChange={(value) => updateSectionField('quizSection', 'cardDescription', value)} rows={2} />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <InputField label="Button label" value={settings.quizSection.buttonLabel} onChange={(value) => updateSectionField('quizSection', 'buttonLabel', value)} />
+              <InputField label="Icon name" value={settings.quizSection.icon} onChange={(value) => updateSectionField('quizSection', 'icon', value)} />
+            </div>
+          </div>
+        );
+      case 'chooseSection':
+        return (
+          <div className="space-y-4">
+            <ToggleField checked={settings.chooseSection.enabled !== false} onChange={(value) => updateSectionField('chooseSection', 'enabled', value)} label="Show Why Choose Us section" description="Display the supporting brand benefit section." />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <InputField label="Kicker" value={settings.chooseSection.kicker} onChange={(value) => updateSectionField('chooseSection', 'kicker', value)} />
+              <InputField label="Headline" value={settings.chooseSection.title} onChange={(value) => updateSectionField('chooseSection', 'title', value)} />
+            </div>
+            <TextAreaField label="Description" value={settings.chooseSection.description} onChange={(value) => updateSectionField('chooseSection', 'description', value)} />
+            <ArrayCard title="Benefit cards" subtitle="Manage the cards in the Why Choose Us section." onAdd={() => addArrayItem('chooseSection', 'cards', { title: 'New card', description: 'Add a short description.', icon: 'HeartHandshake' })}>
+              <div className="space-y-3">
+                {settings.chooseSection.cards.map((item, index) => (
+                  <div key={`${item.title}-${index}`} className="rounded-lg border border-edge bg-surface-muted p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[13px] font-semibold uppercase text-ink-accent">Card {index + 1}</p>
+                      <button type="button" onClick={() => removeArrayItem('chooseSection', 'cards', index)} className="text-[12px] font-semibold uppercase text-red-600">Remove</button>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <InputField label="Title" value={item.title} onChange={(value) => updateArrayItem('chooseSection', 'cards', index, 'title', value)} />
+                      <InputField label="Icon name" value={item.icon} onChange={(value) => updateArrayItem('chooseSection', 'cards', index, 'icon', value)} />
+                    </div>
+                    <TextAreaField label="Description" value={item.description} onChange={(value) => updateArrayItem('chooseSection', 'cards', index, 'description', value)} rows={2} />
+                  </div>
+                ))}
+              </div>
+            </ArrayCard>
+          </div>
+        );
+      case 'comparisonSection':
+        return (
+          <div className="space-y-4">
+            <ToggleField checked={settings.comparisonSection.enabled !== false} onChange={(value) => updateSectionField('comparisonSection', 'enabled', value)} label="Show comparison section" description="Display the Sclero vs Others comparison table." />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <InputField label="Kicker" value={settings.comparisonSection.kicker} onChange={(value) => updateSectionField('comparisonSection', 'kicker', value)} />
+              <InputField label="Headline" value={settings.comparisonSection.title} onChange={(value) => updateSectionField('comparisonSection', 'title', value)} />
+            </div>
+            <TextAreaField label="Description" value={settings.comparisonSection.description} onChange={(value) => updateSectionField('comparisonSection', 'description', value)} />
+            <div className="grid gap-4 sm:grid-cols-3">
+              <InputField label="Header left" value={settings.comparisonSection.headers.left} onChange={(value) => updateNestedField('comparisonSection', 'headers', 'left', value)} />
+              <InputField label="Header middle" value={settings.comparisonSection.headers.middle} onChange={(value) => updateNestedField('comparisonSection', 'headers', 'middle', value)} />
+              <InputField label="Header right" value={settings.comparisonSection.headers.right} onChange={(value) => updateNestedField('comparisonSection', 'headers', 'right', value)} />
+            </div>
+            <ArrayCard title="Comparison rows" subtitle="Add, edit, or remove rows in the comparison table." onAdd={() => addArrayItem('comparisonSection', 'rows', { label: 'New point', sclero: 'Sclero value', others: 'Other brands value' })}>
+              <div className="space-y-3">
+                {settings.comparisonSection.rows.map((item, index) => (
+                  <div key={`${item.label}-${index}`} className="rounded-lg border border-edge bg-surface-muted p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[13px] font-semibold uppercase text-ink-accent">Row {index + 1}</p>
+                      <button type="button" onClick={() => removeArrayItem('comparisonSection', 'rows', index)} className="text-[12px] font-semibold uppercase text-red-600">Remove</button>
+                    </div>
+                    <InputField label="Label" value={item.label} onChange={(value) => updateArrayItem('comparisonSection', 'rows', index, 'label', value)} />
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <TextAreaField label="Sclero column" value={item.sclero} onChange={(value) => updateArrayItem('comparisonSection', 'rows', index, 'sclero', value)} rows={2} />
+                      <TextAreaField label="Others column" value={item.others} onChange={(value) => updateArrayItem('comparisonSection', 'rows', index, 'others', value)} rows={2} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </ArrayCard>
+          </div>
+        );
+      case 'ingredientsSection':
+        return (
+          <div className="space-y-4">
+            <ToggleField checked={settings.ingredientsSection.enabled !== false} onChange={(value) => updateSectionField('ingredientsSection', 'enabled', value)} label="Show ingredients section" description="Display the ingredient image and supporting ingredient cards." />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <InputField label="Kicker" value={settings.ingredientsSection.kicker} onChange={(value) => updateSectionField('ingredientsSection', 'kicker', value)} />
+              <InputField label="Headline" value={settings.ingredientsSection.title} onChange={(value) => updateSectionField('ingredientsSection', 'title', value)} />
+            </div>
+            <TextAreaField label="Description" value={settings.ingredientsSection.description} onChange={(value) => updateSectionField('ingredientsSection', 'description', value)} />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <InputField label="Image URL" value={settings.ingredientsSection.imageUrl} onChange={(value) => updateSectionField('ingredientsSection', 'imageUrl', value)} />
+              <InputField label="Image alt text" value={settings.ingredientsSection.imageAlt} onChange={(value) => updateSectionField('ingredientsSection', 'imageAlt', value)} />
+            </div>
+            <ArrayCard title="Ingredient cards" subtitle="Manage the ingredient highlights." onAdd={() => addArrayItem('ingredientsSection', 'cards', { title: 'New ingredient', benefit: 'Add a short customer-friendly benefit.' })}>
+              <div className="space-y-3">
+                {settings.ingredientsSection.cards.map((item, index) => (
+                  <div key={`${item.title}-${index}`} className="rounded-lg border border-edge bg-surface-muted p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[13px] font-semibold uppercase text-ink-accent">Ingredient {index + 1}</p>
+                      <button type="button" onClick={() => removeArrayItem('ingredientsSection', 'cards', index)} className="text-[12px] font-semibold uppercase text-red-600">Remove</button>
+                    </div>
+                    <InputField label="Title" value={item.title} onChange={(value) => updateArrayItem('ingredientsSection', 'cards', index, 'title', value)} />
+                    <TextAreaField label="Benefit" value={item.benefit} onChange={(value) => updateArrayItem('ingredientsSection', 'cards', index, 'benefit', value)} rows={2} />
+                  </div>
+                ))}
+              </div>
+            </ArrayCard>
+          </div>
+        );
+      case 'conversionSection':
+        return (
+          <div className="space-y-4">
+            <ToggleField checked={settings.conversionSection.enabled !== false} onChange={(value) => updateSectionField('conversionSection', 'enabled', value)} label="Show conversion block" description="Display the confidence-building conversion section on the homepage." />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <InputField label="Kicker" value={settings.conversionSection.kicker} onChange={(value) => updateSectionField('conversionSection', 'kicker', value)} />
+              <InputField label="Headline" value={settings.conversionSection.title} onChange={(value) => updateSectionField('conversionSection', 'title', value)} />
+            </div>
+            <TextAreaField label="Description" value={settings.conversionSection.description} onChange={(value) => updateSectionField('conversionSection', 'description', value)} />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <InputField label="Primary CTA label" value={settings.conversionSection.primaryCtaLabel} onChange={(value) => updateSectionField('conversionSection', 'primaryCtaLabel', value)} />
+              <InputField label="Primary CTA URL" value={settings.conversionSection.primaryCtaUrl} onChange={(value) => updateSectionField('conversionSection', 'primaryCtaUrl', value)} />
+              <InputField label="Secondary CTA label" value={settings.conversionSection.secondaryCtaLabel} onChange={(value) => updateSectionField('conversionSection', 'secondaryCtaLabel', value)} />
+              <InputField label="Secondary CTA URL" value={settings.conversionSection.secondaryCtaUrl} onChange={(value) => updateSectionField('conversionSection', 'secondaryCtaUrl', value)} />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <InputField label="Proof label" value={settings.conversionSection.proofLabel} onChange={(value) => updateSectionField('conversionSection', 'proofLabel', value)} />
+              <InputField label="Quote title" value={settings.conversionSection.quoteTitle} onChange={(value) => updateSectionField('conversionSection', 'quoteTitle', value)} />
+            </div>
+            <TextAreaField label="Quote body" value={settings.conversionSection.quoteBody} onChange={(value) => updateSectionField('conversionSection', 'quoteBody', value)} rows={2} />
+            <ArrayCard title="Trust badges" subtitle="Manage the smaller reassurance badges in this block." onAdd={() => addArrayItem('conversionSection', 'badges', { title: 'New badge', icon: 'ShieldCheck' })}>
+              <div className="space-y-3">
+                {settings.conversionSection.badges.map((item, index) => (
+                  <div key={`${item.title}-${index}`} className="rounded-lg border border-edge bg-surface-muted p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[13px] font-semibold uppercase text-ink-accent">Badge {index + 1}</p>
+                      <button type="button" onClick={() => removeArrayItem('conversionSection', 'badges', index)} className="text-[12px] font-semibold uppercase text-red-600">Remove</button>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <InputField label="Title" value={item.title} onChange={(value) => updateArrayItem('conversionSection', 'badges', index, 'title', value)} />
+                      <InputField label="Icon name" value={item.icon} onChange={(value) => updateArrayItem('conversionSection', 'badges', index, 'icon', value)} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </ArrayCard>
+            <ArrayCard title="Proof highlights" subtitle="Manage the smaller stat-style proof blocks." onAdd={() => addArrayItem('conversionSection', 'proofHighlights', { value: 'New', label: 'Short label' })}>
+              <div className="space-y-3">
+                {settings.conversionSection.proofHighlights.map((item, index) => (
+                  <div key={`${item.value}-${index}`} className="rounded-lg border border-edge bg-surface-muted p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[13px] font-semibold uppercase text-ink-accent">Highlight {index + 1}</p>
+                      <button type="button" onClick={() => removeArrayItem('conversionSection', 'proofHighlights', index)} className="text-[12px] font-semibold uppercase text-red-600">Remove</button>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <InputField label="Value" value={item.value} onChange={(value) => updateArrayItem('conversionSection', 'proofHighlights', index, 'value', value)} />
+                      <InputField label="Label" value={item.label} onChange={(value) => updateArrayItem('conversionSection', 'proofHighlights', index, 'label', value)} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </ArrayCard>
+          </div>
+        );
+      case 'faqSection':
+        return (
+          <div className="space-y-4">
+            <ToggleField checked={settings.faqSection.enabled !== false} onChange={(value) => updateSectionField('faqSection', 'enabled', value)} label="Show FAQ section" description="Display the FAQ accordion on the homepage." />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <InputField label="Kicker" value={settings.faqSection.kicker} onChange={(value) => updateSectionField('faqSection', 'kicker', value)} />
+              <InputField label="Headline" value={settings.faqSection.title} onChange={(value) => updateSectionField('faqSection', 'title', value)} />
+            </div>
+            <TextAreaField label="Description" value={settings.faqSection.description} onChange={(value) => updateSectionField('faqSection', 'description', value)} rows={2} />
+            <ArrayCard title="FAQ items" subtitle="Manage the questions and answers shown on the homepage." onAdd={() => addArrayItem('faqSection', 'items', { question: 'New question?', answer: 'Add a helpful answer.' })}>
+              <div className="space-y-3">
+                {settings.faqSection.items.map((item, index) => (
+                  <div key={`${item.question}-${index}`} className="rounded-lg border border-edge bg-surface-muted p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[13px] font-semibold uppercase text-ink-accent">FAQ {index + 1}</p>
+                      <button type="button" onClick={() => removeArrayItem('faqSection', 'items', index)} className="text-[12px] font-semibold uppercase text-red-600">Remove</button>
+                    </div>
+                    <InputField label="Question" value={item.question} onChange={(value) => updateArrayItem('faqSection', 'items', index, 'question', value)} />
+                    <TextAreaField label="Answer" value={item.answer} onChange={(value) => updateArrayItem('faqSection', 'items', index, 'answer', value)} rows={3} />
+                  </div>
+                ))}
+              </div>
+            </ArrayCard>
+          </div>
+        );
+      case 'educationSection':
+        return (
+          <div className="space-y-4">
+            <ToggleField checked={settings.educationSection.enabled !== false} onChange={(value) => updateSectionField('educationSection', 'enabled', value)} label="Show education section" description="Display the learning and blog section on the homepage." />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <InputField label="Kicker" value={settings.educationSection.kicker} onChange={(value) => updateSectionField('educationSection', 'kicker', value)} />
+              <InputField label="Headline" value={settings.educationSection.title} onChange={(value) => updateSectionField('educationSection', 'title', value)} />
+            </div>
+            <TextAreaField label="Description" value={settings.educationSection.description} onChange={(value) => updateSectionField('educationSection', 'description', value)} rows={2} />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <InputField label="CTA label" value={settings.educationSection.ctaLabel} onChange={(value) => updateSectionField('educationSection', 'ctaLabel', value)} />
+              <InputField label="CTA URL" value={settings.educationSection.ctaUrl} onChange={(value) => updateSectionField('educationSection', 'ctaUrl', value)} />
+            </div>
+          </div>
+        );
+      case 'inquirySection':
+        return (
+          <div className="space-y-4">
+            <ToggleField checked={settings.inquirySection.enabled !== false} onChange={(value) => updateSectionField('inquirySection', 'enabled', value)} label="Show inquiry section" description="Display the contact and support call-to-action at the bottom of the homepage." />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <InputField label="Kicker" value={settings.inquirySection.kicker} onChange={(value) => updateSectionField('inquirySection', 'kicker', value)} />
+              <InputField label="Headline" value={settings.inquirySection.title} onChange={(value) => updateSectionField('inquirySection', 'title', value)} />
+            </div>
+            <TextAreaField label="Description" value={settings.inquirySection.description} onChange={(value) => updateSectionField('inquirySection', 'description', value)} rows={2} />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <InputField label="Button label" value={settings.inquirySection.buttonLabel} onChange={(value) => updateSectionField('inquirySection', 'buttonLabel', value)} />
+              <InputField label="Success message" value={settings.inquirySection.successMessage} onChange={(value) => updateSectionField('inquirySection', 'successMessage', value)} />
+            </div>
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="space-y-5 text-sm">
+      <div className="rounded-lg border border-edge bg-white p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-edge-subtle pb-3">
+          <div>
+            <h3 className="text-sm font-semibold uppercase text-ink-primary">Homepage Content Manager</h3>
+            <p className="mt-1 text-brand-muted">
+              Show, hide, and edit each homepage section from one clean screen.
+            </p>
+            <p className="mt-2 text-brand-muted">
+              Hero banners remain editable under <span className="font-semibold text-ink-primary">Pages &amp; Banners → Banners</span>.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={resetDefaults}
+              className="rounded-sm border border-edge px-4 py-2 font-semibold uppercase text-ink-primary"
+            >
+              Reset to default
+            </button>
+            <button
+              type="button"
+              onClick={saveHomepageSettings}
+              disabled={saving}
+              className="btn-primary px-4 py-2 font-semibold uppercase"
+            >
+              {saving ? 'Saving...' : saved ? 'Saved ✓' : 'Save Homepage'}
+            </button>
+          </div>
+        </div>
+
+        {error && (
+          <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-semibold text-red-700">
+            {error}
+          </p>
+        )}
+
+        <div className="mt-4 grid gap-4 xl:grid-cols-[0.28fr_0.72fr]">
+          <div className="space-y-3">
+            <div className="rounded-lg border border-edge bg-surface-muted p-4">
+              <p className="text-[13px] font-semibold uppercase tracking-wide text-ink-accent">Homepage sections</p>
+              <div className="mt-3 space-y-2">
+                {SECTION_OPTIONS.map((section) => {
+                  const isActive = activeSection === section.key;
+                  const isToggleSection = section.key !== 'seo';
+                  const isEnabled = isToggleSection ? settings[section.key]?.enabled !== false : true;
+                  return (
+                    <button
+                      key={section.key}
+                      type="button"
+                      onClick={() => setActiveSection(section.key)}
+                      className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-left transition ${
+                        isActive ? 'border-ink-primary bg-white shadow-card' : 'border-edge bg-white/70 hover:bg-white'
+                      }`}
+                    >
+                      <span className="font-semibold text-ink-primary">{section.label}</span>
+                      {isToggleSection ? (
+                        <span className={`rounded-full px-2 py-0.5 text-[12px] font-semibold uppercase ${isEnabled ? 'bg-brand-success/10 text-ink-success' : 'bg-slate-100 text-slate-500'}`}>
+                          {isEnabled ? 'Shown' : 'Hidden'}
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-surface px-2 py-0.5 text-[12px] font-semibold uppercase text-ink-accent">SEO</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-edge bg-surface-muted p-4">
+              <p className="text-[13px] font-semibold uppercase tracking-wide text-ink-accent">Quick notes</p>
+              <ul className="mt-3 space-y-2 text-[13px] leading-[1.7] text-ink-secondary">
+                <li>Turn any homepage section on or off instantly.</li>
+                <li>Add, edit, or remove repeatable cards, tabs, rows, and FAQs.</li>
+                <li>Update text, links, labels, and image URLs without code changes.</li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="rounded-lg border border-edge bg-white p-5">
+              <div className="border-b border-edge-subtle pb-3">
+                <h4 className="text-sm font-semibold text-ink-primary">{SECTION_OPTIONS.find((section) => section.key === activeSection)?.label}</h4>
+                <p className="mt-1 text-[13px] text-brand-muted">Edit this section using simple fields and repeatable content blocks.</p>
+              </div>
+              <div className="mt-4">
+                {renderSectionEditor()}
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PushNotificationsTab({ authFetch }) {
+  const [campaigns, setCampaigns] = useState([]);
+  const [configured, setConfigured] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [form, setForm] = useState({ title: '', body: '', target_url: '/', scheduled_for: '' });
+
+  const load = useCallback(() => {
+    setLoading(true);
+    Promise.all([
+      authFetch('/api/admin/push-campaigns/').then((response) => response.ok ? response.json() : Promise.reject(new Error('Unable to load push campaigns.'))),
+      fetch(getApiUrl('/api/push/config/'), { credentials: 'include' }).then((response) => response.ok ? response.json() : { enabled: false }),
+    ]).then(([campaignData, configData]) => {
+      setCampaigns(Array.isArray(campaignData) ? campaignData : campaignData.results || []);
+      setConfigured(Boolean(configData.enabled));
+      setError('');
+    }).catch((requestError) => setError(requestError.message)).finally(() => setLoading(false));
+  }, [authFetch]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const queueCampaign = async (event) => {
+    event.preventDefault();
+    const title = form.title.trim();
+    const body = form.body.trim();
+    const targetUrl = form.target_url.trim() || '/';
+    if (!title || !body) return setError('Enter both a title and message.');
+    if (!targetUrl.startsWith('/') || targetUrl.startsWith('//')) return setError('Use a same-site link such as /products.');
+    setSaving(true);
+    setError('');
+    setSuccess('');
+    try {
+      const response = await authFetch('/api/admin/push-campaigns/', {
+        method: 'POST',
+        body: JSON.stringify({
+          title,
+          body,
+          target_url: targetUrl,
+          scheduled_for: form.scheduled_for ? new Date(form.scheduled_for).toISOString() : null,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const detail = data.detail || Object.values(data).flat().find(Boolean);
+        throw new Error(typeof detail === 'string' ? detail : 'Unable to queue the notification.');
+      }
+      setForm({ title: '', body: '', target_url: '/', scheduled_for: '' });
+      setSuccess('Push notification queued. The production scheduler will deliver it automatically.');
+      load();
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const cancelCampaign = async (campaign) => {
+    const response = await authFetch(`/api/admin/push-campaigns/${campaign.id}/cancel/`, { method: 'POST', body: '{}' });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      setError(data.detail || 'Unable to cancel the campaign.');
+      return;
+    }
+    load();
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className={`rounded-lg border p-4 ${configured ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
+        <div className="flex items-start gap-3">
+          <Bell className="mt-0.5 h-5 w-5" />
+          <div>
+            <p className="font-semibold">Browser push service: {configured === null ? 'Checking…' : configured ? 'Ready' : 'Not configured'}</p>
+            <p className="mt-1 text-sm text-ink-secondary">Customers opt in from the storefront footer. Campaigns are queued here and delivered with retries by the scheduler.</p>
+          </div>
+        </div>
+      </div>
+
+      {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+      {success && <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{success}</p>}
+
+      <form onSubmit={queueCampaign} className="rounded-lg border border-edge bg-white p-5 shadow-card space-y-4">
+        <div>
+          <h3 className="text-base font-semibold text-ink-primary">Create push notification</h3>
+          <p className="mt-1 text-sm text-brand-muted">Send immediately or choose a future delivery time.</p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="text-sm font-semibold">Title
+            <input maxLength={80} required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} className="mt-1 w-full rounded border border-edge p-2.5 font-normal" />
+          </label>
+          <label className="text-sm font-semibold">Storefront link
+            <input maxLength={500} required value={form.target_url} onChange={(event) => setForm({ ...form, target_url: event.target.value })} placeholder="/products" className="mt-1 w-full rounded border border-edge p-2.5 font-normal" />
+          </label>
+        </div>
+        <label className="block text-sm font-semibold">Message
+          <textarea maxLength={240} required rows={3} value={form.body} onChange={(event) => setForm({ ...form, body: event.target.value })} className="mt-1 w-full rounded border border-edge p-2.5 font-normal" />
+          <span className="mt-1 block text-xs font-normal text-brand-muted">{form.body.length}/240 characters</span>
+        </label>
+        <label className="block max-w-sm text-sm font-semibold">Schedule (optional)
+          <input type="datetime-local" value={form.scheduled_for} onChange={(event) => setForm({ ...form, scheduled_for: event.target.value })} className="mt-1 w-full rounded border border-edge p-2.5 font-normal" />
+        </label>
+        <button type="submit" disabled={saving || configured === false} className="btn-primary px-5 py-2.5 text-sm uppercase">
+          {saving ? 'Queueing…' : 'Queue notification'}
+        </button>
+      </form>
+
+      <div className="rounded-lg border border-edge bg-white shadow-card overflow-x-auto">
+        <table className="w-full min-w-[760px] text-left text-sm">
+          <thead className="border-b border-edge bg-surface-muted text-xs uppercase text-ink-muted"><tr><th className="p-3">Campaign</th><th className="p-3">Status</th><th className="p-3">Schedule</th><th className="p-3">Delivery</th><th className="p-3">Action</th></tr></thead>
+          <tbody>
+            {campaigns.map((campaign) => (
+              <tr key={campaign.id} className="border-b border-edge-subtle">
+                <td className="p-3"><p className="font-semibold">{campaign.title}</p><p className="mt-1 max-w-md text-xs text-brand-muted">{campaign.body}</p></td>
+                <td className="p-3 font-semibold">{campaign.status}</td>
+                <td className="p-3">{formatDateTime(campaign.scheduled_for || campaign.created_at)}</td>
+                <td className="p-3">{campaign.sent_count}/{campaign.total_recipients} sent{campaign.failed_count ? ` · ${campaign.failed_count} failed` : ''}</td>
+                <td className="p-3">{['QUEUED', 'PROCESSING'].includes(campaign.status) && <button type="button" onClick={() => cancelCampaign(campaign)} className="text-xs font-semibold text-red-700">Cancel</button>}</td>
+              </tr>
+            ))}
+            {!loading && campaigns.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-brand-muted">No push campaigns yet.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function SettingsTab({ authFetch, regions, initialTab = 'general' }) {
+  const allowedTabs = ['general', 'homepage', 'markets', 'payments', 'shipping', 'discounts', 'emails', 'notifications', 'theme', 'cookie-consent'];
+  const [subTab, setSubTab] = useState(allowedTabs.includes(initialTab) ? initialTab : 'general');
+
+  useEffect(() => {
+    if (allowedTabs.includes(initialTab)) setSubTab(initialTab);
+  }, [initialTab]);
 
   const SUB_TABS = [
     { key: 'general', label: 'General' },
+    { key: 'homepage', label: 'Homepage' },
+    { key: 'markets', label: 'Markets' },
     { key: 'payments', label: 'Payments' },
-    { key: 'emails', label: 'Emails' },
     { key: 'shipping', label: 'Shipping' },
+    { key: 'discounts', label: 'Discounts' },
+    { key: 'emails', label: 'Emails' },
+    { key: 'notifications', label: 'Push notifications' },
     { key: 'theme', label: 'Theme' },
     { key: 'cookie-consent', label: 'Cookie Consent' },
   ];
@@ -5212,7 +5157,7 @@ function SettingsTab({ authFetch, regions }) {
       <div className="flex flex-wrap gap-2 border-b border-edge-subtle pb-2">
         {SUB_TABS.map((t) => (
           <button key={t.key} onClick={() => setSubTab(t.key)}
-            className={`px-3 py-1.5 text-xs font-semibold uppercase rounded-lg transition-colors ${subTab === t.key ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>
+            className={`px-3 py-1.5 text-sm font-semibold uppercase rounded-lg transition-colors ${subTab === t.key ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>
             {t.label}
           </button>
         ))}
@@ -5220,8 +5165,12 @@ function SettingsTab({ authFetch, regions }) {
 
       <div className="mt-4">
         {subTab === 'general' && <GeneralSettingsTab authFetch={authFetch} />}
+        {subTab === 'homepage' && <HomepageSettingsTab authFetch={authFetch} />}
+        {subTab === 'markets' && <MarketsPanel authFetch={authFetch} />}
+        {subTab === 'discounts' && <DiscountsTab authFetch={authFetch} regions={regions} />}
         {subTab === 'payments' && <PaymentsTab authFetch={authFetch} regions={regions} />}
         {subTab === 'emails' && <EmailsTab authFetch={authFetch} regions={regions} />}
+        {subTab === 'notifications' && <PushNotificationsTab authFetch={authFetch} />}
         {subTab === 'shipping' && <ShippingTab authFetch={authFetch} regions={regions} />}
         {subTab === 'theme' && <ThemeTab authFetch={authFetch} />}
         {subTab === 'cookie-consent' && <CookieConsentTab authFetch={authFetch} />}
@@ -5333,11 +5282,11 @@ function ReviewsTab({ authFetch }) {
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center bg-white p-4 rounded-md border border-edge">
-        <p className="text-xs text-brand-muted">{reviews.length} total customer reviews pending or moderated</p>
+        <p className="text-sm text-brand-muted">{reviews.length} total customer reviews pending or moderated</p>
         <button onClick={() => {
           setEditReview({ product: '', user_name: '', user_email: '', rating: 5, comment: '', is_verified_purchase: false, is_approved: true, is_featured: false, review_media_urls: [] });
           setCrudModalOpen(true);
-        }} className="btn-primary py-1.5 px-3 rounded-sm text-xs font-semibold uppercase flex items-center gap-1">
+        }} className="btn-primary py-1.5 px-3 rounded-sm text-sm font-semibold uppercase flex items-center gap-1">
           <Plus className="h-3.5 w-3.5" /> Add Review
         </button>
       </div>
@@ -5351,15 +5300,15 @@ function ReviewsTab({ authFetch }) {
                   {rev.user_name?.substring(0, 2).toUpperCase() || 'U'}
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-ink-primary">{rev.user_name} <span className="text-xs font-mono text-ink-subtle">({rev.user_email})</span></p>
-                  <p className="text-[11px] text-ink-subtle">on <span className="font-semibold text-ink-accent">{toDisplayText(rev.product_name || rev.product_sku || rev.product) || 'Unknown product'}</span> · {formatDateTime(rev.created_at)}</p>
+                  <p className="text-sm font-semibold text-ink-primary">{rev.user_name} <span className="text-sm font-mono text-ink-subtle">({rev.user_email})</span></p>
+                  <p className="text-[13px] text-ink-subtle">on <span className="font-semibold text-ink-accent">{toDisplayText(rev.product_name || rev.product_sku || rev.product) || 'Unknown product'}</span> · {formatDateTime(rev.created_at)}</p>
                 </div>
               </div>
               <div className="flex items-center gap-1.5">
                 <button onClick={() => toggleFeature(rev.id)} className={`p-1.5 rounded-sm border ${rev.is_featured ? 'bg-amber-50 border-amber-200 text-amber-500' : 'border-edge text-ink-subtle hover:bg-surface-muted'}`} title="Feature Review">
                   <Star className="h-4 w-4 fill-current" />
                 </button>
-                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-xs ${rev.is_approved ? 'bg-brand-success/10 text-ink-success' : 'bg-red-50 text-ink-danger'}`}>
+                <span className={`text-[12px] font-semibold px-2 py-0.5 rounded-xs ${rev.is_approved ? 'bg-brand-success/10 text-ink-success' : 'bg-red-50 text-ink-danger'}`}>
                   {rev.is_approved ? 'APPROVED' : 'PENDING MODERATION'}
                 </span>
               </div>
@@ -5371,37 +5320,37 @@ function ReviewsTab({ authFetch }) {
                   <Star key={i} className={`h-4 w-4 ${i < rev.rating ? 'text-amber-400 fill-amber-400' : 'text-edge-strong'}`} />
                 ))}
                 {rev.is_verified_purchase && (
-                  <span className="ml-2 bg-brand-success/10 text-ink-success border border-brand-success/30 rounded px-1.5 py-0.2 text-[9px] font-semibold flex items-center gap-0.5">
+                  <span className="ml-2 bg-brand-success/10 text-ink-success border border-brand-success/30 rounded px-1.5 py-0.2 text-[13px] font-semibold flex items-center gap-0.5">
                     Verified Buyer
                   </span>
                 )}
               </div>
-              <p className="text-xs text-ink-primary leading-relaxed italic">"{rev.comment}"</p>
+              <p className="text-sm text-ink-primary leading-relaxed italic">"{rev.comment}"</p>
             </div>
 
             {replies[rev.id] && (
               <div className="p-3.5 bg-surface-muted border border-edge-strong rounded-md space-y-1">
-                <p className="text-[10px] font-semibold text-ink-accent uppercase">SCLERO STAFF RESPONSE</p>
-                <p className="text-xs text-ink-secondary leading-relaxed font-semibold">"{replies[rev.id]}"</p>
+                <p className="text-[12px] font-semibold text-ink-accent uppercase">SCLERO STAFF RESPONSE</p>
+                <p className="text-sm text-ink-secondary leading-relaxed font-semibold">"{replies[rev.id]}"</p>
               </div>
             )}
 
             <div className="flex gap-2 pt-2 border-t border-edge-subtle justify-end items-center">
-              <button onClick={() => { setEditReview({ ...rev }); setCrudModalOpen(true); }} className="px-2.5 py-1 text-[10px] border border-edge hover:bg-surface-muted text-ink-primary rounded-sm uppercase font-semibold flex items-center gap-0.5"><Pencil className="h-2.5 w-2.5" /> Edit</button>
-              <button onClick={() => deleteReview(rev.id)} className="px-2.5 py-1 text-[10px] border border-red-200 hover:bg-red-50 text-red-600 rounded-sm uppercase font-semibold flex items-center gap-0.5"><Trash2 className="h-2.5 w-2.5" /> Delete</button>
+              <button onClick={() => { setEditReview({ ...rev }); setCrudModalOpen(true); }} className="px-2.5 py-1 text-[12px] border border-edge hover:bg-surface-muted text-ink-primary rounded-sm uppercase font-semibold flex items-center gap-0.5"><Pencil className="h-2.5 w-2.5" /> Edit</button>
+              <button onClick={() => deleteReview(rev.id)} className="px-2.5 py-1 text-[12px] border border-red-200 hover:bg-red-50 text-red-600 rounded-sm uppercase font-semibold flex items-center gap-0.5"><Trash2 className="h-2.5 w-2.5" /> Delete</button>
               <div className="flex-1" />
               {!rev.is_approved ? (
-                <button onClick={() => approve(rev.id)} className="px-3 py-1.5 text-[10px] bg-ink-success hover:bg-ink-success/90 text-white rounded-sm uppercase font-semibold">Approve</button>
+                <button onClick={() => approve(rev.id)} className="px-3 py-1.5 text-[12px] bg-ink-success hover:bg-ink-success/90 text-white rounded-sm uppercase font-semibold">Approve</button>
               ) : (
-                <button onClick={() => reject(rev.id)} className="px-3 py-1.5 text-[10px] bg-surface-muted hover:bg-edge text-ink-secondary rounded-sm uppercase font-semibold">Reject / Hide</button>
+                <button onClick={() => reject(rev.id)} className="px-3 py-1.5 text-[12px] bg-surface-muted hover:bg-edge text-ink-secondary rounded-sm uppercase font-semibold">Reject / Hide</button>
               )}
-              <button onClick={() => setReplyingTo(rev.id)} className="px-3 py-1.5 text-[10px] border border-ink-primary text-ink-accent hover:bg-surface-muted rounded-sm uppercase font-semibold">Respond</button>
+              <button onClick={() => setReplyingTo(rev.id)} className="px-3 py-1.5 text-[12px] border border-ink-primary text-ink-accent hover:bg-surface-muted rounded-sm uppercase font-semibold">Respond</button>
             </div>
           </div>
         ))}
 
         {reviews.length === 0 && (
-          <p className="text-center py-10 text-xs text-brand-muted bg-white border border-edge rounded-lg">No customer reviews found to moderate.</p>
+          <p className="text-center py-10 text-sm text-brand-muted bg-white border border-edge rounded-lg">No customer reviews found to moderate.</p>
         )}
       </div>
 
@@ -5409,17 +5358,17 @@ function ReviewsTab({ authFetch }) {
         <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
           <div className="w-full max-w-md bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
             <h3 className="text-lg font-semibold text-ink-primary">Write Staff Response</h3>
-            <p className="text-xs text-brand-muted">This response will be visible on the public product page below the customer's comment.</p>
+            <p className="text-sm text-brand-muted">This response will be visible on the public product page below the customer's comment.</p>
             <textarea
               rows={4}
               value={replyText}
               onChange={(e) => setReplyText(e.target.value)}
               placeholder="Write your public reply..."
-              className="w-full rounded-lg border border-edge p-2.5 text-xs font-semibold text-ink-primary"
+              className="w-full rounded-lg border border-edge p-2.5 text-sm font-semibold text-ink-primary"
             />
             <div className="flex gap-2">
-              <button onClick={saveReply} className="btn-primary flex-1 py-2.5 text-xs uppercase font-semibold">Save Response</button>
-              <button onClick={() => { setReplyingTo(null); setReplyText(''); }} className="flex-1 rounded-sm border border-edge py-2.5 text-xs font-semibold uppercase">Cancel</button>
+              <button onClick={saveReply} className="btn-primary flex-1 py-2.5 text-sm uppercase font-semibold">Save Response</button>
+              <button onClick={() => { setReplyingTo(null); setReplyText(''); }} className="flex-1 rounded-sm border border-edge py-2.5 text-sm font-semibold uppercase">Cancel</button>
             </div>
           </div>
         </div>
@@ -5438,13 +5387,13 @@ function ReviewsTab({ authFetch }) {
               </button>
             </div>
             
-            <div className="space-y-3.5 text-xs">
+            <div className="space-y-3.5 text-sm">
               <div>
                 <label className="font-semibold text-ink-primary block mb-1">Product *</label>
                 <select
                   value={editReview.product}
                   onChange={(e) => setEditReview({ ...editReview, product: e.target.value })}
-                  className="w-full rounded-sm border border-edge p-2.5 bg-white text-xs font-semibold text-ink-primary"
+                  className="w-full rounded-sm border border-edge p-2.5 bg-white text-sm font-semibold text-ink-primary"
                   disabled={!!editReview.id}
                   required
                 >
@@ -5544,13 +5493,13 @@ function ReviewsTab({ authFetch }) {
             <div className="flex gap-2 justify-end border-t border-edge-subtle pt-3">
               <button
                 onClick={() => setCrudModalOpen(false)}
-                className="rounded-sm border border-edge px-4 py-2 text-xs font-semibold uppercase hover:bg-surface-muted"
+                className="rounded-sm border border-edge px-4 py-2 text-sm font-semibold uppercase hover:bg-surface-muted"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveReview}
-                className="btn-primary rounded-sm px-5 py-2 text-xs font-semibold uppercase"
+                className="btn-primary rounded-sm px-5 py-2 text-sm font-semibold uppercase"
               >
                 Save Review
               </button>
@@ -5570,12 +5519,15 @@ function ThemeTab({ authFetch }) {
     fontName: 'Inter',
     logoUrl: '/logo-mark.png',
     logoWordmarkUrl: '/logo-wordmark.png',
-    whatsappNumberIN: '918047100000',
-    whatsappNumberUK: '442045740000',
-    emailIN: 'support@scleroproteins.in',
-    emailUK: 'support@scleroproteins.co.uk',
-    phoneIN: '+91 80 4710 0000',
-    phoneUK: '+44 (0)20 4574 0000',
+    whatsappNumberIN: '',
+    whatsappNumberUK: '',
+    emailIN: '',
+    emailUK: '',
+    phoneIN: '',
+    phoneUK: '',
+    announcementEnabled: false,
+    announcementIN: '',
+    announcementUK: '',
     borderRadius: '6px',
     glassmorphism: 'None',
     customCss: ''
@@ -5641,9 +5593,9 @@ function ThemeTab({ authFetch }) {
       {/* Settings Form */}
       <div className="rounded-lg border border-edge bg-white shadow-card p-5 space-y-4">
         <h3 className="text-base font-semibold text-ink-primary">Theme Settings</h3>
-        <p className="text-xs text-brand-muted">Customize your eCommerce store storefront styling in real-time. Changes are applied instantly without deploys.</p>
+        <p className="text-sm text-brand-muted">Customize your eCommerce store storefront styling in real-time. Changes are applied instantly without deploys.</p>
         
-        <div className="space-y-3 text-xs">
+        <div className="space-y-3 text-sm">
           <div>
             <label className="block font-semibold text-ink-primary mb-1">Typography (Body Font)</label>
             <select value={theme.fontName} onChange={(e) => setTheme({ ...theme, fontName: e.target.value })} className="w-full rounded-sm border border-edge p-2 bg-white text-ink-primary">
@@ -5687,36 +5639,49 @@ function ThemeTab({ authFetch }) {
           </div>
 
           <div className="border-t border-edge-subtle pt-3 mt-3">
-            <h4 className="font-semibold text-ink-primary uppercase tracking-wider mb-2 text-[10px]">India Store Info & Widgets</h4>
+            <h4 className="font-semibold text-ink-primary uppercase tracking-wider mb-2 text-[12px]">Announcement Banner</h4>
+            <label className="mb-2 flex items-center gap-2 text-[13px] font-medium text-ink-primary">
+              <input type="checkbox" checked={theme.announcementEnabled === true} onChange={(e) => setTheme({ ...theme, announcementEnabled: e.target.checked })} />
+              Show announcement on the storefront
+            </label>
+            <div className="space-y-2">
+              <input type="text" value={theme.announcementIN || ''} onChange={(e) => setTheme({ ...theme, announcementIN: e.target.value })} className="w-full rounded-sm border border-edge p-2" placeholder="India announcement text" />
+              <input type="text" value={theme.announcementUK || ''} onChange={(e) => setTheme({ ...theme, announcementUK: e.target.value })} className="w-full rounded-sm border border-edge p-2" placeholder="UK announcement text" />
+            </div>
+            <p className="mt-1 text-[11px] text-brand-muted">Use shipping or discount claims only when they match your active rates and coupons.</p>
+          </div>
+
+          <div className="border-t border-edge-subtle pt-3 mt-3">
+            <h4 className="font-semibold text-ink-primary uppercase tracking-wider mb-2 text-[12px]">India Store Info & Widgets</h4>
             <div className="space-y-2">
               <div>
-                <label className="block text-[11px] font-medium text-brand-muted mb-0.5">Support Email (IN)</label>
+                <label className="block text-[13px] font-medium text-brand-muted mb-0.5">Support Email (IN)</label>
                 <input type="email" value={theme.emailIN || ''} onChange={(e) => setTheme({ ...theme, emailIN: e.target.value })} className="w-full rounded-sm border border-edge p-2" />
               </div>
               <div>
-                <label className="block text-[11px] font-medium text-brand-muted mb-0.5">Support Phone (IN)</label>
+                <label className="block text-[13px] font-medium text-brand-muted mb-0.5">Support Phone (IN)</label>
                 <input type="text" value={theme.phoneIN || ''} onChange={(e) => setTheme({ ...theme, phoneIN: e.target.value })} className="w-full rounded-sm border border-edge p-2" />
               </div>
               <div>
-                <label className="block text-[11px] font-medium text-brand-muted mb-0.5">WhatsApp Widget Number (IN)</label>
+                <label className="block text-[13px] font-medium text-brand-muted mb-0.5">WhatsApp Widget Number (IN)</label>
                 <input type="text" value={theme.whatsappNumberIN || ''} onChange={(e) => setTheme({ ...theme, whatsappNumberIN: e.target.value })} className="w-full rounded-sm border border-edge p-2" placeholder="e.g. 918047100000" />
               </div>
             </div>
           </div>
 
           <div className="border-t border-edge-subtle pt-3 mt-3">
-            <h4 className="font-semibold text-ink-primary uppercase tracking-wider mb-2 text-[10px]">UK Store Info & Widgets</h4>
+            <h4 className="font-semibold text-ink-primary uppercase tracking-wider mb-2 text-[12px]">UK Store Info & Widgets</h4>
             <div className="space-y-2">
               <div>
-                <label className="block text-[11px] font-medium text-brand-muted mb-0.5">Support Email (UK)</label>
+                <label className="block text-[13px] font-medium text-brand-muted mb-0.5">Support Email (UK)</label>
                 <input type="email" value={theme.emailUK || ''} onChange={(e) => setTheme({ ...theme, emailUK: e.target.value })} className="w-full rounded-sm border border-edge p-2" />
               </div>
               <div>
-                <label className="block text-[11px] font-medium text-brand-muted mb-0.5">Support Phone (UK)</label>
+                <label className="block text-[13px] font-medium text-brand-muted mb-0.5">Support Phone (UK)</label>
                 <input type="text" value={theme.phoneUK || ''} onChange={(e) => setTheme({ ...theme, phoneUK: e.target.value })} className="w-full rounded-sm border border-edge p-2" />
               </div>
               <div>
-                <label className="block text-[11px] font-medium text-brand-muted mb-0.5">WhatsApp Widget Number (UK)</label>
+                <label className="block text-[13px] font-medium text-brand-muted mb-0.5">WhatsApp Widget Number (UK)</label>
                 <input type="text" value={theme.whatsappNumberUK || ''} onChange={(e) => setTheme({ ...theme, whatsappNumberUK: e.target.value })} className="w-full rounded-sm border border-edge p-2" placeholder="e.g. 442045740000" />
               </div>
             </div>
@@ -5724,12 +5689,12 @@ function ThemeTab({ authFetch }) {
 
           <div className="border-t border-edge-subtle pt-3">
             <label className="block font-semibold text-ink-primary mb-1">Custom CSS Overrides</label>
-            <textarea rows={3} value={theme.customCss || ''} onChange={(e) => setTheme({ ...theme, customCss: e.target.value })} placeholder="e.g. .btn { text-transform: uppercase; }" className="w-full rounded-sm border border-edge p-2 font-mono text-[10px]" />
+            <textarea rows={3} value={theme.customCss || ''} onChange={(e) => setTheme({ ...theme, customCss: e.target.value })} placeholder="e.g. .btn { text-transform: uppercase; }" className="w-full rounded-sm border border-edge p-2 font-mono text-[12px]" />
           </div>
         </div>
 
-        {success && <p className="text-xs bg-brand-success/10 text-ink-success border border-brand-success/30 p-2 rounded-lg font-semibold">Theme published to storefront successfully!</p>}
-        <button onClick={save} disabled={saving} className="btn-primary w-full py-2.5 uppercase font-semibold text-xs disabled:opacity-50">
+        {success && <p className="text-sm bg-brand-success/10 text-ink-success border border-brand-success/30 p-2 rounded-lg font-semibold">Theme published to storefront successfully!</p>}
+        <button onClick={save} disabled={saving} className="btn-primary w-full py-2.5 uppercase font-semibold text-sm disabled:opacity-50">
           {saving ? 'Publishing...' : 'Save & Publish Theme'}
         </button>
       </div>
@@ -5737,7 +5702,7 @@ function ThemeTab({ authFetch }) {
       {/* Live Storefront Preview */}
       <div className="rounded-lg border border-edge bg-surface-inverse p-6 flex flex-col justify-start min-h-[500px]">
         <div className="flex items-center justify-between mb-4 border-b border-white/10 pb-3">
-          <p className="text-[10px] uppercase font-medium text-white/50 tracking-wider">LIVE STOREFRONT PREVIEW</p>
+          <p className="text-[12px] uppercase font-medium text-white/50 tracking-wider">LIVE STOREFRONT PREVIEW</p>
           <div className="flex gap-1">
             <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
             <span className="h-2.5 w-2.5 rounded-full bg-brand-accent" />
@@ -5749,10 +5714,10 @@ function ThemeTab({ authFetch }) {
           {/* Header */}
           <header className="px-4 py-3 flex items-center justify-between border-b border-white/10 bg-[#111110]">
             <div className="flex items-center gap-1.5">
-              <div className="h-5 w-5 rounded-full bg-brand-accent flex items-center justify-center text-[10px] font-semibold text-white" style={{ backgroundColor: theme.primaryColor }}>S</div>
-              <span className="text-xs font-semibold tracking-tight text-white">SCLERO PROTEINS</span>
+              <div className="h-5 w-5 rounded-full bg-brand-accent flex items-center justify-center text-[12px] font-semibold text-white" style={{ backgroundColor: theme.primaryColor }}>S</div>
+              <span className="text-sm font-semibold tracking-tight text-white">SCLERO PROTEINS</span>
             </div>
-            <nav className="flex gap-3 text-[10px] text-white/50 font-medium">
+            <nav className="flex gap-3 text-[12px] text-white/50 font-medium">
               <span className="hover:text-white cursor-pointer">Shop</span>
               <span className="hover:text-white cursor-pointer">Science</span>
               <span className="hover:text-white cursor-pointer">About</span>
@@ -5763,8 +5728,8 @@ function ThemeTab({ authFetch }) {
           {/* Hero section */}
           <div className="p-6 text-center space-y-3 relative overflow-hidden bg-surface-inverse">
             <h1 className="text-lg font-semibold text-white leading-tight">Bio-active Protein Nutrition</h1>
-            <p className="text-[10px] text-white/50 max-w-sm mx-auto">Cellular-grade targeted protein peptide concentrates engineered to accelerate structural tissue recovery and muscular restoration.</p>
-            <button className="px-4 py-2 text-[10px] font-semibold uppercase text-white hover:opacity-90 inline-block transition-opacity" style={{ backgroundColor: theme.primaryColor, borderRadius: theme.borderRadius }}>
+            <p className="text-[12px] text-white/50 max-w-sm mx-auto">Cellular-grade targeted protein peptide concentrates engineered to accelerate structural tissue recovery and muscular restoration.</p>
+            <button className="px-4 py-2 text-[12px] font-semibold uppercase text-white hover:opacity-90 inline-block transition-opacity" style={{ backgroundColor: theme.primaryColor, borderRadius: theme.borderRadius }}>
               Explore Formulas
             </button>
           </div>
@@ -5773,11 +5738,11 @@ function ThemeTab({ authFetch }) {
           <div className="p-4 grid grid-cols-2 gap-3 bg-[#111110]">
             {[{ name: 'Sclero Isolate 90', price: '£59.99' }, { name: 'Joint Repair Peptide', price: '£72.50' }].map((prod, idx) => (
               <div key={idx} className="p-3 border border-white/10 bg-white/5 relative" style={{ borderRadius: theme.borderRadius, backdropFilter: theme.glassmorphism === 'None' ? 'none' : 'blur(8px)' }}>
-                <div className="h-20 bg-white/10 rounded-sm flex items-center justify-center text-[10px] font-medium text-white/40 mb-2">IMAGE</div>
-                <h4 className="text-[11px] font-semibold text-white">{prod.name}</h4>
+                <div className="h-20 bg-white/10 rounded-sm flex items-center justify-center text-[12px] font-medium text-white/40 mb-2">IMAGE</div>
+                <h4 className="text-[13px] font-semibold text-white">{prod.name}</h4>
                 <div className="flex justify-between items-center mt-1">
-                  <span className="text-[10px] font-medium text-white/50">{prod.price}</span>
-                  <span className="text-[9px] font-semibold uppercase text-amber-500" style={{ color: theme.accentColor }}>★ 4.9</span>
+                  <span className="text-[12px] font-medium text-white/50">{prod.price}</span>
+                  <span className="text-[13px] font-semibold uppercase text-amber-500" style={{ color: theme.accentColor }}>★ 4.9</span>
                 </div>
               </div>
             ))}
@@ -5796,7 +5761,7 @@ function CookieConsentTab({ authFetch }) {
     acceptText: 'Accept All',
     declineText: 'Customize / Decline',
     layout: 'Floating Card',
-    cookiePolicyUrl: '/privacy-policy',
+    cookiePolicyUrl: '/policies/privacy',
     activeRegions: ['UK', 'IN']
   });
   const [saving, setSaving] = useState(false);
@@ -5837,9 +5802,9 @@ function CookieConsentTab({ authFetch }) {
     <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
       <div className="rounded-lg border border-edge bg-white shadow-card p-5 space-y-4">
         <h3 className="text-base font-semibold text-ink-primary">GDPR & Cookie Banner Settings</h3>
-        <p className="text-xs text-brand-muted">Manage the user privacy consent banners and cookie consent opt-in policies for different storefront regions.</p>
+        <p className="text-sm text-brand-muted">Manage the user privacy consent banners and cookie consent opt-in policies for different storefront regions.</p>
         
-        <div className="space-y-3 text-xs">
+        <div className="space-y-3 text-sm">
           <div>
             <label className="block font-semibold text-ink-primary mb-1">Banner Title</label>
             <input type="text" value={config.title} onChange={(e) => setConfig({ ...config, title: e.target.value })} className="w-full rounded-sm border border-edge p-2" />
@@ -5875,8 +5840,8 @@ function CookieConsentTab({ authFetch }) {
           </div>
         </div>
 
-        {success && <p className="text-xs bg-brand-success/10 text-ink-success border border-brand-success/30 p-2 rounded-lg font-semibold">Cookie consent banner updated successfully!</p>}
-        <button onClick={save} disabled={saving} className="btn-primary w-full py-2.5 uppercase font-semibold text-xs disabled:opacity-50">
+        {success && <p className="text-sm bg-brand-success/10 text-ink-success border border-brand-success/30 p-2 rounded-lg font-semibold">Cookie consent banner updated successfully!</p>}
+        <button onClick={save} disabled={saving} className="btn-primary w-full py-2.5 uppercase font-semibold text-sm disabled:opacity-50">
           {saving ? 'Saving...' : 'Save Configuration'}
         </button>
       </div>
@@ -5885,7 +5850,7 @@ function CookieConsentTab({ authFetch }) {
       <div className="rounded-lg border border-edge bg-surface-muted p-6 flex flex-col justify-between relative min-h-[400px]">
         <div>
           <p className="kicker mb-2">BANNER VISUAL LAYOUT PREVIEW</p>
-          <div className="bg-white rounded-md border border-edge p-6 text-center text-xs text-brand-muted italic">
+          <div className="bg-white rounded-md border border-edge p-6 text-center text-sm text-brand-muted italic">
             [ Storefront Mock Screen Container ]
           </div>
         </div>
@@ -5894,23 +5859,23 @@ function CookieConsentTab({ authFetch }) {
         {config.layout === 'Bottom Bar' ? (
           <div className="w-full bg-surface-inverse border border-white/10 text-white p-4 rounded-md flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
             <div className="space-y-1 max-w-xl text-left">
-              <p className="text-xs font-semibold text-white">{config.title}</p>
-              <p className="text-[10px] text-white/70 leading-normal">{config.description}</p>
+              <p className="text-sm font-semibold text-white">{config.title}</p>
+              <p className="text-[12px] text-white/70 leading-normal">{config.description}</p>
             </div>
             <div className="flex gap-2 whitespace-nowrap self-end md:self-auto">
-              <button className="px-3 py-1.5 text-[9px] font-semibold border border-white/20 hover:bg-white/10 text-white/70 rounded-sm">{config.declineText}</button>
-              <button className="px-3 py-1.5 text-[9px] font-semibold bg-white text-ink-primary rounded-sm">{config.acceptText}</button>
+              <button className="px-3 py-1.5 text-[13px] font-semibold border border-white/20 hover:bg-white/10 text-white/70 rounded-sm">{config.declineText}</button>
+              <button className="px-3 py-1.5 text-[13px] font-semibold bg-white text-ink-primary rounded-sm">{config.acceptText}</button>
             </div>
           </div>
         ) : (
           <div className="w-72 bg-surface-inverse border border-white/10 text-white p-4 rounded-lg shadow-overlay space-y-2.5 text-left self-end md:mr-4">
             <div className="space-y-1">
-              <p className="text-xs font-semibold text-white flex items-center gap-1.5"><Cookie className="h-4 w-4 text-amber-500 fill-amber-500" /> {config.title}</p>
-              <p className="text-[10px] text-white/70 leading-relaxed">{config.description}</p>
+              <p className="text-sm font-semibold text-white flex items-center gap-1.5"><Cookie className="h-4 w-4 text-amber-500 fill-amber-500" /> {config.title}</p>
+              <p className="text-[12px] text-white/70 leading-relaxed">{config.description}</p>
             </div>
             <div className="flex gap-2">
-              <button className="flex-1 py-1.5 text-[9px] font-semibold border border-white/20 hover:bg-white/10 text-white/70 rounded-sm">{config.declineText}</button>
-              <button className="flex-1 py-1.5 text-[9px] font-semibold bg-white text-ink-primary rounded-sm">{config.acceptText}</button>
+              <button className="flex-1 py-1.5 text-[13px] font-semibold border border-white/20 hover:bg-white/10 text-white/70 rounded-sm">{config.declineText}</button>
+              <button className="flex-1 py-1.5 text-[13px] font-semibold bg-white text-ink-primary rounded-sm">{config.acceptText}</button>
             </div>
           </div>
         )}
@@ -6062,22 +6027,22 @@ function NavigationTab({ authFetch, regions }) {
   return (
     <div className="space-y-4">
       <div className="flex gap-2 border-b border-edge-subtle pb-2">
-        <button onClick={() => setActiveSubTab('header')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm ${activeSubTab === 'header' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Header Menus</button>
-        <button onClick={() => setActiveSubTab('footer')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm ${activeSubTab === 'footer' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Footer Columns</button>
+        <button onClick={() => setActiveSubTab('header')} className={`px-4 py-1.5 text-sm font-semibold uppercase rounded-sm ${activeSubTab === 'header' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Header Menus</button>
+        <button onClick={() => setActiveSubTab('footer')} className={`px-4 py-1.5 text-sm font-semibold uppercase rounded-sm ${activeSubTab === 'footer' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Footer Columns</button>
       </div>
 
       {activeSubTab === 'header' ? (
         <div className="bg-white rounded-lg border border-edge p-5 space-y-4">
           <div className="flex justify-between items-center">
             <h4 className="text-sm font-semibold text-ink-primary">Header Navigation Links</h4>
-            <button onClick={() => openEdit('header', null, -1, null)} className="px-3 py-1.5 text-xs uppercase bg-ink-primary text-white rounded-sm font-semibold inline-flex items-center gap-1"><Plus className="h-3 w-3" /> Add Link</button>
+            <button onClick={() => openEdit('header', null, -1, null)} className="px-3 py-1.5 text-sm uppercase bg-ink-primary text-white rounded-sm font-semibold inline-flex items-center gap-1"><Plus className="h-3 w-3" /> Add Link</button>
           </div>
 
           <div className="divide-y divide-edge-subtle border border-edge-subtle rounded-md bg-surface-muted p-2 space-y-1">
             {headerLinks.map((link, idx) => (
               <div key={idx} className="flex justify-between items-center py-2 px-3 bg-white rounded-lg border border-edge-subtle shadow-card">
                 <div>
-                  <p className="text-xs font-semibold text-ink-primary">{toDisplayText(link.label)} <span className="font-mono text-[10px] text-brand-muted ml-1">{toDisplayText(link.url)}</span></p>
+                  <p className="text-sm font-semibold text-ink-primary">{toDisplayText(link.label)} <span className="font-mono text-[12px] text-brand-muted ml-1">{toDisplayText(link.url)}</span></p>
                   {link.mega_menu && <span className="rounded bg-surface-muted text-ink-accent px-1.5 py-0.2 text-[8px] font-semibold">MEGA MENU</span>}
                   {link.region_limit && <span className="rounded bg-amber-50 text-ink-accent ml-1 px-1.5 py-0.2 text-[8px] font-semibold uppercase">Region: {link.region_limit}</span>}
                 </div>
@@ -6096,17 +6061,17 @@ function NavigationTab({ authFetch, regions }) {
           {['shop', 'company', 'support', 'legal'].map((col) => (
             <div key={col} className="bg-white rounded-lg border border-edge p-4 space-y-3">
               <div className="flex justify-between items-center border-b border-edge-subtle pb-2">
-                <h4 className="text-xs font-semibold uppercase text-ink-primary">{col}</h4>
-                <button onClick={() => openEdit('footer', col, -1, null)} className="text-ink-accent font-semibold text-[10px] uppercase">Add</button>
+                <h4 className="text-sm font-semibold uppercase text-ink-primary">{col}</h4>
+                <button onClick={() => openEdit('footer', col, -1, null)} className="text-ink-accent font-semibold text-[12px] uppercase">Add</button>
               </div>
 
               <div className="space-y-1.5 min-h-[150px]">
                 {footerLinks[col]?.map((link, idx) => (
-                  <div key={idx} className="flex justify-between items-center p-2 rounded-lg border border-edge-subtle bg-surface-muted text-[11px] font-semibold text-ink-primary">
+                  <div key={idx} className="flex justify-between items-center p-2 rounded-lg border border-edge-subtle bg-surface-muted text-[13px] font-semibold text-ink-primary">
                     <span className="truncate max-w-[80px]">{toDisplayText(link.label)}</span>
                     <div className="flex gap-1.5">
-                      <button onClick={() => moveFooter(col, idx, -1)} disabled={idx === 0} className="text-[9px] text-ink-subtle">▲</button>
-                      <button onClick={() => moveFooter(col, idx, 1)} disabled={idx === footerLinks[col].length - 1} className="text-[9px] text-ink-subtle">▼</button>
+                      <button onClick={() => moveFooter(col, idx, -1)} disabled={idx === 0} className="text-[13px] text-ink-subtle">▲</button>
+                      <button onClick={() => moveFooter(col, idx, 1)} disabled={idx === footerLinks[col].length - 1} className="text-[13px] text-ink-subtle">▼</button>
                       <button onClick={() => openEdit('footer', col, idx, link)} className="text-ink-accent"><Pencil className="h-3 w-3" /></button>
                       <button onClick={() => deleteFooterItem(col, idx)} className="text-brand-danger"><X className="h-3 w-3" /></button>
                     </div>
@@ -6122,7 +6087,7 @@ function NavigationTab({ authFetch, regions }) {
         <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
           <div className="w-full max-w-md bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
             <h3 className="text-lg font-semibold text-ink-primary">{editingItem.index === -1 ? 'Add Link' : 'Edit Link'}</h3>
-            <div className="space-y-3 text-xs">
+            <div className="space-y-3 text-sm">
               <div>
                 <label className="block font-semibold text-ink-primary mb-1">Link Text / Label</label>
                 <input type="text" value={toDisplayText(editingItem.item.label)} onChange={(e) => setEditingItem({ ...editingItem, item: { ...editingItem.item, label: e.target.value } })} className="w-full rounded-sm border border-edge p-2" />
@@ -6145,8 +6110,8 @@ function NavigationTab({ authFetch, regions }) {
                 </div>
               )}
               <div className="flex gap-2 pt-3">
-                <button onClick={saveEdit} className="btn-primary flex-1 py-2.5 text-xs uppercase font-semibold">Save Link</button>
-                <button onClick={() => setEditingItem(null)} className="flex-1 rounded-sm border border-edge py-2.5 text-xs font-semibold uppercase">Cancel</button>
+                <button onClick={saveEdit} className="btn-primary flex-1 py-2.5 text-sm uppercase font-semibold">Save Link</button>
+                <button onClick={() => setEditingItem(null)} className="flex-1 rounded-sm border border-edge py-2.5 text-sm font-semibold uppercase">Cancel</button>
               </div>
             </div>
           </div>
@@ -6157,376 +6122,6 @@ function NavigationTab({ authFetch, regions }) {
 }
 
 /* ------------------------------------------------------------- Media Library */
-function MediaLibraryTab({ authFetch }) {
-  const [assets, setAssets] = useState([]);
-  const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [uploadModal, setUploadModal] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newUrl, setNewUrl] = useState('');
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [uploading, setUploading] = useState(false);
-
-  const load = useCallback(() => {
-    setLoading(true);
-    authFetch('/api/admin/settings/MEDIA_ASSETS/')
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        setAssets(Array.isArray(d?.value) ? d.value : [
-          { name: 'Sclero Whey Protein Isolate Pack', url: 'https://images.unsplash.com/photo-1579758629938-03607ccdbaba?q=80&w=200', size: '2.4 MB', date: '2026-06-15' },
-          { name: 'Pure Marine Peptide Collagen Bottle', url: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?q=80&w=200', size: '1.8 MB', date: '2026-06-18' },
-          { name: 'Molecular Formulation Laboratory', url: 'https://images.unsplash.com/photo-1532187643603-ba119ca4109e?q=80&w=200', size: '4.1 MB', date: '2026-06-20' },
-          { name: 'Anti-Gravity Recovery Serum Box', url: 'https://images.unsplash.com/photo-1601049541289-9b1b7bbbfe19?q=80&w=200', size: '1.2 MB', date: '2026-06-22' }
-        ]);
-      }).finally(() => setLoading(false));
-  }, [authFetch]);
-
-  useEffect(() => { load(); }, [load]);
-
-  const save = (nextAssets) => {
-    authFetch('/api/admin/settings/MEDIA_ASSETS/', {
-      method: 'PUT',
-      body: JSON.stringify({ key: 'MEDIA_ASSETS', value: nextAssets, description: 'Media library uploaded files registry' })
-    }).then(r => r.status === 404 ? authFetch('/api/admin/settings/', {
-      method: 'POST',
-      body: JSON.stringify({ key: 'MEDIA_ASSETS', value: nextAssets, description: 'Media library uploaded files registry' })
-    }) : r).then(() => load());
-  };
-
-  const uploadFile = async () => {
-    if (!newName.trim()) return;
-    setUploading(true);
-    try {
-      const link = selectedFile ? await uploadAdminMedia(authFetch, selectedFile) : newUrl.trim();
-      if (!link) throw new Error('Choose a file or paste an asset URL.');
-      const size = selectedFile ? `${Math.max(1, Math.round(selectedFile.size / 1024))} KB` : 'External URL';
-      const nextList = [...assets, { name: newName, url: link, size, date: new Date().toISOString().split('T')[0] }];
-      save(nextList);
-      setNewName('');
-      setNewUrl('');
-      setSelectedFile(null);
-      setUploadModal(false);
-    } catch (err) {
-      alert(err.message || 'Asset upload failed.');
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const deleteAsset = (idx) => {
-    if (confirm("Delete this asset from library? Links using this URL on landing pages will break.")) {
-      const copy = assets.filter((_, i) => i !== idx);
-      save(copy);
-    }
-  };
-
-  const copyUrl = (url) => {
-    navigator.clipboard.writeText(url);
-    alert(`Asset URL copied to clipboard: ${url}`);
-  };
-
-  const filtered = assets.filter(a => a.name.toLowerCase().includes(search.toLowerCase()));
-
-  if (loading) return <p className="text-sm text-brand-muted">Loading media library...</p>;
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white border border-edge p-4 rounded-lg">
-        <label className="relative block flex-1 max-w-md">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-muted" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search asset files..." className="w-full rounded-sm border border-edge py-2 pl-9 pr-3 text-xs" />
-        </label>
-        <button onClick={() => setUploadModal(true)} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase font-semibold"><Upload className="h-4 w-4" /> Upload Asset</button>
-      </div>
-
-      <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
-        {filtered.map((asset, idx) => (
-          <div key={idx} className="group relative rounded-lg border border-edge bg-white p-3 space-y-2 hover:shadow-elevated transition-shadow">
-            <div className="h-32 bg-surface-muted border border-edge-subtle rounded-md overflow-hidden flex items-center justify-center relative">
-              <img src={asset.url} alt={asset.name} className="h-full w-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
-              <div className="absolute inset-0 bg-surface-overlay opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                <button onClick={() => copyUrl(asset.url)} className="p-2 bg-white rounded-sm border border-edge text-ink-accent hover:scale-105 transition-transform"><LinkIcon className="h-4 w-4" /></button>
-                <button onClick={() => deleteAsset(idx)} className="p-2 bg-white rounded-sm border border-edge text-ink-danger hover:scale-105 transition-transform"><X className="h-4 w-4" /></button>
-              </div>
-            </div>
-            <div>
-              <p className="text-[11px] font-semibold text-ink-primary truncate">{asset.name}</p>
-              <p className="text-[9px] text-ink-subtle">{asset.size} · {asset.date}</p>
-            </div>
-          </div>
-        ))}
-
-        {filtered.length === 0 && (
-          <div className="col-span-4 text-center py-12 text-xs text-brand-muted bg-white border border-edge rounded-lg">No assets found in library.</div>
-        )}
-      </div>
-
-      {uploadModal && (
-        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-          <div className="w-full max-w-md bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
-            <h3 className="text-lg font-semibold text-ink-primary">Upload Asset</h3>
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="block font-semibold text-ink-primary mb-1">Asset Name</label>
-                <input placeholder="e.g. Whey Protein Isolate Pack" value={newName} onChange={(e) => setNewName(e.target.value)} className="w-full rounded-sm border border-edge p-2" />
-              </div>
-              <div>
-                <label className="block font-semibold text-ink-primary mb-1">Asset Image URL</label>
-                <input placeholder="e.g. https://images.unsplash.com/..." value={newUrl} onChange={(e) => setNewUrl(e.target.value)} className="w-full rounded-sm border border-edge p-2" />
-              </div>
-              <label className="flex cursor-pointer items-center justify-between rounded-md border border-dashed border-edge-strong bg-surface-muted p-3 font-semibold text-ink-primary">
-                <span>{selectedFile ? selectedFile.name : 'Upload from device'}</span>
-                <Upload className="h-4 w-4 text-ink-accent" />
-                <input type="file" accept="image/*,video/*" onChange={(e) => setSelectedFile(e.target.files?.[0] || null)} className="hidden" />
-              </label>
-              <div className="flex gap-2 pt-2">
-                <button onClick={uploadFile} disabled={uploading} className="btn-primary flex-1 py-2.5 text-xs uppercase font-semibold disabled:opacity-60">{uploading ? 'Uploading...' : 'Add Asset'}</button>
-                <button onClick={() => { setUploadModal(false); setSelectedFile(null); }} className="flex-1 rounded-sm border border-edge py-2.5 text-xs font-semibold uppercase">Cancel</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------- Newsletter marketing builder */
-function NewsletterTab({ authFetch }) {
-  const [activeSubTab, setActiveSubTab] = useState('subscribers');
-  const [subscribers, setSubscribers] = useState([]);
-  const [segments, setSegments] = useState([]);
-  const [flows, setFlows] = useState([]);
-  const [loading, setLoading] = useState(true);
-  
-  // segment form
-  const [editingSeg, setEditingSeg] = useState(null);
-  const [newEmail, setNewEmail] = useState('');
-  
-  const load = useCallback(() => {
-    setLoading(true);
-    Promise.all([
-      authFetch('/api/admin/customers/').then(r => r.json()).catch(() => []),
-      authFetch('/api/admin/customer-segments/').then(r => r.json()).catch(() => []),
-      authFetch('/api/admin/settings/NEWSLETTER_SUBSCRIBERS/').then(r => r.ok ? r.json() : null).catch(() => null),
-      authFetch('/api/admin/settings/NEWSLETTER_FLOWS/').then(r => r.ok ? r.json() : null).catch(() => null)
-    ]).then(([custs, segs, subSettings, flowSettings]) => {
-      // Extract customers who accepts marketing plus manual subscribers
-      const custsList = custs ? (Array.isArray(custs) ? custs : custs.results || []) : [];
-      const marketingCusts = custsList
-        .filter(c => c && (c.email_newsletter || c.email_marketing))
-        .map(c => ({ email: c.email, first_name: c.first_name || 'Customer', last_name: c.last_name || '', source: 'Customer Register' }));
-      
-      const rawManualSubs = subSettings?.value;
-      const manualSubs = Array.isArray(rawManualSubs) ? rawManualSubs : [];
-      setSubscribers([...marketingCusts, ...manualSubs]);
-      setSegments(Array.isArray(segs) ? segs : segs.results || []);
-      
-      const rawFlows = flowSettings?.value;
-      setFlows(Array.isArray(rawFlows) ? rawFlows : [
-        { id: 1, name: 'Abandoned Checkout Email Recovery Flow', is_enabled: true, sent: 242, recovered: 48, rate: '19.8%', steps: ['1 hour: Restock Reminder', '24 hours: 10% Discount Code'] },
-        { id: 2, name: 'Post-Purchase Nurture sequence', is_enabled: true, sent: 512, recovered: 89, rate: '17.3%', steps: ['3 days: Usage Instructions', '7 days: Review Request'] }
-      ]);
-    }).finally(() => setLoading(false));
-  }, [authFetch]);
-
-  useEffect(() => { load(); }, [load]);
-
-  const addManualSub = () => {
-    if (!newEmail.trim()) return;
-    const manualSubs = subscribers.filter(s => s.source === 'Manual opt-in');
-    const updated = [...manualSubs, { email: newEmail, first_name: 'Subscriber', last_name: '', source: 'Manual opt-in' }];
-    authFetch('/api/admin/settings/NEWSLETTER_SUBSCRIBERS/', {
-      method: 'PUT',
-      body: JSON.stringify({ key: 'NEWSLETTER_SUBSCRIBERS', value: updated, description: 'Manual newsletter subscriber lists' })
-    }).then(r => r.status === 404 ? authFetch('/api/admin/settings/', {
-      method: 'POST',
-      body: JSON.stringify({ key: 'NEWSLETTER_SUBSCRIBERS', value: updated, description: 'Manual newsletter subscriber lists' })
-    }) : r).then(() => {
-      setNewEmail('');
-      load();
-    });
-  };
-
-  const saveSegment = () => {
-    const isNew = !editingSeg.id;
-    authFetch(isNew ? '/api/admin/customer-segments/' : `/api/admin/customer-segments/${editingSeg.id}/`, {
-      method: isNew ? 'POST' : 'PUT',
-      body: JSON.stringify({
-        name: editingSeg.name,
-        description: editingSeg.description,
-        criteria: editingSeg.criteria || { min_orders: 1, min_spend: 10 }
-      })
-    }).then(() => {
-      setEditingSeg(null);
-      load();
-    });
-  };
-
-  const deleteSegment = (id) => {
-    if (confirm("Delete this customer segment?")) {
-      authFetch(`/api/admin/customer-segments/${id}/`, { method: 'DELETE' }).then(load);
-    }
-  };
-
-  const toggleFlow = (id) => {
-    const nextFlows = flows.map(f => f.id === id ? { ...f, is_enabled: !f.is_enabled } : f);
-    authFetch('/api/admin/settings/NEWSLETTER_FLOWS/', {
-      method: 'PUT',
-      body: JSON.stringify({ key: 'NEWSLETTER_FLOWS', value: nextFlows, description: 'E-commerce newsletter email automation flows' })
-    }).then(r => r.status === 404 ? authFetch('/api/admin/settings/', {
-      method: 'POST',
-      body: JSON.stringify({ key: 'NEWSLETTER_FLOWS', value: nextFlows, description: 'E-commerce newsletter email automation flows' })
-    }) : r).then(() => load());
-  };
-
-  if (loading) return <p className="text-sm text-brand-muted">Loading newsletter center...</p>;
-
-  return (
-    <div className="space-y-4">
-      <div className="flex gap-2 border-b border-edge-subtle pb-2">
-        <button onClick={() => setActiveSubTab('subscribers')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm ${activeSubTab === 'subscribers' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Subscribers Directory</button>
-        <button onClick={() => setActiveSubTab('segments')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm ${activeSubTab === 'segments' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Smart Segments</button>
-        <button onClick={() => setActiveSubTab('flows')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm ${activeSubTab === 'flows' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Automated Flows</button>
-      </div>
-
-      {activeSubTab === 'subscribers' && (
-        <div className="rounded-lg border border-edge bg-white shadow-card p-4 sm:p-5 space-y-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <h4 className="text-sm font-semibold text-ink-primary uppercase">Marketing Opt-in Subscribers</h4>
-              <p className="mt-1 text-xs text-brand-muted">{subscribers.length} customers and manual opt-ins are in this list.</p>
-            </div>
-            <div className="flex w-full gap-2 lg:max-w-lg">
-              <input
-                placeholder="Enter email to subscribe"
-                value={newEmail}
-                onChange={(e) => setNewEmail(e.target.value)}
-                className="min-w-0 flex-1 rounded-lg border border-edge px-3 py-2 text-xs"
-              />
-              <button onClick={addManualSub} className="shrink-0 rounded-sm bg-ink-primary px-3 py-2 text-xs font-semibold uppercase text-white">
-                Opt-in Email
-              </button>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto rounded-md border border-edge">
-            <table className="min-w-full text-left text-xs">
-              <thead className="bg-surface-muted text-[10px] font-medium uppercase tracking-wide text-ink-muted border-b border-edge">
-                <tr>
-                  <th className="px-4 py-3 font-semibold">Email</th>
-                  <th className="px-4 py-3 font-semibold">Name</th>
-                  <th className="px-4 py-3 font-semibold">Opt-in Type / Source</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-edge-subtle bg-white">
-                {subscribers.map((sub, i) => (
-                  <tr key={i} className="hover:bg-surface-muted">
-                    <td className="px-4 py-3 font-semibold text-ink-primary">{sub.email}</td>
-                    <td className="px-4 py-3 font-semibold text-ink-secondary">{sub.first_name} {sub.last_name || ''}</td>
-                    <td className="px-4 py-3 text-brand-muted"><span className="inline-flex rounded-xs bg-surface-muted px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wide">{sub.source}</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {activeSubTab === 'segments' && (
-        <div className="space-y-4">
-          <div className="flex justify-between items-center bg-white border border-edge p-4 rounded-lg">
-            <p className="text-xs text-brand-muted">{segments.length} segment configurations deployed</p>
-            <button onClick={() => setEditingSeg({ name: '', description: '', criteria: { min_orders: 1, min_spend: 50 } })} className="px-3 py-1.5 bg-ink-primary text-white font-semibold rounded-sm uppercase text-xs inline-flex items-center gap-1"><Plus className="h-3.5 w-3.5" /> New Segment</button>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2">
-            {segments.map((seg) => (
-              <div key={seg.id} className="rounded-lg border border-edge bg-white shadow-card p-4 flex flex-col justify-between">
-                <div>
-                  <h4 className="text-sm font-semibold text-ink-primary">{seg.name}</h4>
-                  <p className="text-xs text-brand-muted min-h-[30px]">{seg.description || 'No description provided.'}</p>
-                  <div className="mt-2 p-2 bg-surface-muted rounded-lg font-mono text-[10px] text-ink-accent">
-                    Criteria: Spend &gt; £{seg.criteria?.min_spend || 0} · Orders &gt;= {seg.criteria?.min_orders || 0}
-                  </div>
-                </div>
-                <div className="mt-4 flex justify-end gap-2 border-t border-edge-subtle pt-3">
-                  <button onClick={() => setEditingSeg({ ...seg })} className="text-xs px-2 py-1 rounded border border-edge text-ink-primary hover:bg-surface-muted font-semibold uppercase inline-flex items-center gap-0.5"><Pencil className="h-3 w-3" /> Edit</button>
-                  <button onClick={() => deleteSegment(seg.id)} className="text-xs px-2 py-1 rounded border border-red-200 text-ink-danger hover:bg-red-50 font-semibold uppercase inline-flex items-center gap-0.5"><X className="h-3 w-3" /> Delete</button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {editingSeg && (
-            <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-              <div className="w-full max-w-md bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
-                <h3 className="text-lg font-semibold text-ink-primary">{editingSeg.id ? 'Edit Segment' : 'Create Segment'}</h3>
-                <div className="space-y-3 text-xs">
-                  <div>
-                    <label className="block font-semibold text-ink-primary mb-1">Segment Name</label>
-                    <input value={editingSeg.name} onChange={(e) => setEditingSeg({ ...editingSeg, name: e.target.value })} className="w-full rounded-sm border border-edge p-2" />
-                  </div>
-                  <div>
-                    <label className="block font-semibold text-ink-primary mb-1">Description</label>
-                    <textarea value={editingSeg.description || ''} onChange={(e) => setEditingSeg({ ...editingSeg, description: e.target.value })} className="w-full rounded-sm border border-edge p-2" rows={2} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 border-t border-edge-subtle pt-2">
-                    <div>
-                      <label className="block font-semibold text-ink-subtle mb-1">Min Orders</label>
-                      <input type="number" value={editingSeg.criteria?.min_orders || 0} onChange={(e) => setEditingSeg({ ...editingSeg, criteria: { ...editingSeg.criteria, min_orders: Number(e.target.value) } })} className="w-full rounded-sm border border-edge p-2" />
-                    </div>
-                    <div>
-                      <label className="block font-semibold text-ink-subtle mb-1">Min Spend (GBP)</label>
-                      <input type="number" value={editingSeg.criteria?.min_spend || 0} onChange={(e) => setEditingSeg({ ...editingSeg, criteria: { ...editingSeg.criteria, min_spend: Number(e.target.value) } })} className="w-full rounded-sm border border-edge p-2" />
-                    </div>
-                  </div>
-                  <div className="flex gap-2 pt-2">
-                    <button onClick={saveSegment} className="btn-primary flex-1 py-2.5 text-xs uppercase font-semibold">Save Segment</button>
-                    <button onClick={() => setEditingSeg(null)} className="flex-1 rounded-sm border border-edge py-2.5 text-xs font-semibold uppercase">Cancel</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {activeSubTab === 'flows' && (
-        <div className="grid gap-4">
-          {flows.map((flow) => (
-            <div key={flow.id} className="bg-white rounded-lg border border-edge p-5 flex flex-col sm:flex-row justify-between gap-4">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <h4 className="text-sm font-semibold text-ink-primary">{flow.name}</h4>
-                  <span className={`rounded-xs px-2 py-0.5 text-[9px] font-semibold ${flow.is_enabled ? 'bg-brand-success/10 text-ink-success' : 'bg-surface-muted text-ink-subtle'}`}>{flow.is_enabled ? 'ACTIVE' : 'INACTIVE'}</span>
-                </div>
-                <div className="flex gap-4 text-xs font-semibold">
-                  <div><span className="text-[10px] text-ink-subtle block font-normal">EMAILS SENT</span><span className="text-ink-primary">{flow.sent}</span></div>
-                  <div><span className="text-[10px] text-ink-subtle block font-normal">RECOVERED</span><span className="text-ink-primary">{flow.recovered} ({flow.rate})</span></div>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-[10px] uppercase font-semibold text-ink-accent">Automated steps sequence:</p>
-                  <div className="flex flex-wrap gap-2">
-                    {flow.steps.map((st, i) => (
-                      <span key={i} className="rounded bg-surface-muted border border-edge-subtle p-1.5 text-[10px] font-mono text-ink-primary">{st}</span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <div className="self-end sm:self-center">
-                <button onClick={() => toggleFlow(flow.id)} className={`px-4 py-2 text-xs font-semibold uppercase rounded-sm border ${flow.is_enabled ? 'border-edge text-ink-muted hover:bg-surface-muted' : 'border-ink-primary text-ink-accent hover:bg-surface-muted'}`}>
-                  {flow.is_enabled ? 'Pause sequence' : 'Resume Flow'}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 /* ---------------------------------------------------------- Hero Banners */
 const blankHeroBanner = () => ({
   title: '',
@@ -6543,45 +6138,16 @@ const blankHeroBanner = () => ({
   secondary_cta_label: '',
   secondary_cta_url: '',
   text_position: 'LEFT',
-  overlay_opacity: 42,
+  // Scheduling / ordering / carousel timing are no longer editable — the save
+  // payload forces safe values so a banner is always live.
   sort_order: 0,
-  is_enabled: true,
-  starts_at: '',
-  ends_at: '',
-  autoplay_enabled: true,
-  show_indicators: true,
-  display_duration_ms: 6500,
-  transition_ms: 500,
   seo_title: '',
   seo_description: '',
 });
 
-function toDateTimeLocal(value) {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  const offset = date.getTimezoneOffset();
-  const local = new Date(date.getTime() - offset * 60000);
-  return local.toISOString().slice(0, 16);
-}
-
-function fromDateTimeLocal(value) {
-  return value ? new Date(value).toISOString() : null;
-}
-
 /* Pages + Banners merged surface per spec 2026-06-24. */
 function PagesAndBannersTab({ authFetch }) {
-  const [tab, setTab] = useState('pages');
-  return (
-    <div className="space-y-4">
-      <div className="flex gap-2 border-b border-edge-subtle pb-2">
-        <button onClick={() => setTab('pages')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm ${tab === 'pages' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Pages</button>
-        <button onClick={() => setTab('banners')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm ${tab === 'banners' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Banners</button>
-      </div>
-      {tab === 'pages' && <PagesTab authFetch={authFetch} />}
-      {tab === 'banners' && <HeroBannersTab authFetch={authFetch} />}
-    </div>
-  );
+  return <HeroBannersTab authFetch={authFetch} />;
 }
 
 function HeroBannersTab({ authFetch }) {
@@ -6613,11 +6179,7 @@ function HeroBannersTab({ authFetch }) {
   const startEdit = (slide) => {
     setError('');
     setNotice('');
-    setEditing({
-      ...slide,
-      starts_at: toDateTimeLocal(slide.starts_at),
-      ends_at: toDateTimeLocal(slide.ends_at),
-    });
+    setEditing({ ...slide });
   };
 
   const setField = (key, value) => setEditing((prev) => ({ ...prev, [key]: value }));
@@ -6631,14 +6193,21 @@ function HeroBannersTab({ authFetch }) {
       .finally(() => setUploadingMediaKey(''));
   };
 
+  // Scheduling, ordering and carousel timing were removed from this editor.
+  // These values are forced so a banner can never end up hidden by a setting
+  // the admin can no longer see: the public feed filters on is_enabled and the
+  // start/end window, and legibility is now handled by the storefront's scrim.
   const payload = () => ({
     ...editing,
-    overlay_opacity: Number(editing.overlay_opacity || 0),
+    is_enabled: true,
+    starts_at: null,
+    ends_at: null,
     sort_order: Number(editing.sort_order || 0),
-    display_duration_ms: Number(editing.display_duration_ms || 6500),
-    transition_ms: Number(editing.transition_ms || 500),
-    starts_at: fromDateTimeLocal(editing.starts_at),
-    ends_at: fromDateTimeLocal(editing.ends_at),
+    overlay_opacity: 0,
+    autoplay_enabled: true,
+    show_indicators: true,
+    display_duration_ms: 6500,
+    transition_ms: 500,
   });
 
   const save = () => {
@@ -6675,13 +6244,6 @@ function HeroBannersTab({ authFetch }) {
       .catch(() => setError('Could not delete hero banner slide.'));
   };
 
-  const toggle = (slide) => {
-    authFetch(`/api/admin/hero-banners/${slide.id}/`, {
-      method: 'PATCH',
-      body: JSON.stringify({ is_enabled: !slide.is_enabled }),
-    }).then(load).catch(() => setError('Could not update hero banner status.'));
-  };
-
   if (loading) return <p className="text-sm text-brand-muted">Loading hero banners...</p>;
 
   return (
@@ -6690,13 +6252,13 @@ function HeroBannersTab({ authFetch }) {
         <div>
           <p className="text-sm text-brand-muted">Manage homepage campaign slides, scheduling, responsive media, CTAs, and carousel timing.</p>
         </div>
-        <button onClick={startNew} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase">
+        <button onClick={startNew} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-sm uppercase">
           <Plus className="h-4 w-4" /> New banner
         </button>
       </div>
 
-      {notice && <p className="rounded-lg border border-brand-success/30 bg-brand-success/10 px-3 py-2 text-xs font-semibold text-ink-success">{notice}</p>}
-      {error && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-ink-danger">{error}</p>}
+      {notice && <p className="rounded-lg border border-brand-success/30 bg-brand-success/10 px-3 py-2 text-sm font-semibold text-ink-success">{notice}</p>}
+      {error && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-ink-danger">{error}</p>}
 
       <div className="grid gap-4 lg:grid-cols-2">
         {slides.map((slide) => (
@@ -6709,30 +6271,19 @@ function HeroBannersTab({ authFetch }) {
                   <img src={slide.desktop_media_url} alt={slide.alt_text || slide.heading} className="h-full w-full object-cover" />
                 )
               ) : (
-                <div className="flex h-full items-center justify-center text-xs font-semibold uppercase text-ink-subtle">No media</div>
+                <div className="flex h-full items-center justify-center text-sm font-semibold uppercase text-ink-subtle">No media</div>
               )}
-              <span className={`absolute left-3 top-3 rounded-xs px-2.5 py-1 text-[10px] font-semibold ${slide.is_enabled ? 'bg-brand-success/10 text-ink-success' : 'bg-surface-muted text-ink-muted'}`}>
-                {slide.is_enabled ? 'Enabled' : 'Disabled'}
-              </span>
-              <span className="absolute right-3 top-3 rounded-xs bg-white/90 px-2.5 py-1 text-[10px] font-semibold text-ink-primary">
-                #{slide.sort_order}
-              </span>
             </div>
             <div className="space-y-3 p-4">
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-ink-accent">{slide.eyebrow || 'Hero slide'}</p>
+                <p className="text-[12px] font-semibold uppercase tracking-wider text-ink-accent">{slide.eyebrow || 'Hero slide'}</p>
                 <h3 className="mt-1 text-base font-semibold text-ink-primary">{slide.heading}</h3>
-                <p className="mt-1 line-clamp-2 text-xs text-brand-muted">{slide.subheading}</p>
+                <p className="mt-1 line-clamp-2 text-sm text-brand-muted">{slide.subheading}</p>
               </div>
-              <div className="flex flex-wrap gap-2 text-[10px] text-brand-muted">
-                <span>Display {slide.display_duration_ms}ms</span>
-                <span>Transition {slide.transition_ms}ms</span>
-                <span>{slide.text_position}</span>
+              <div className="flex flex-wrap gap-2 text-[13px] text-brand-muted">
+                <span>Text {String(slide.text_position || '').toLowerCase()}</span>
               </div>
               <div className="flex justify-end gap-2">
-                <button onClick={() => toggle(slide)} className="rounded-sm border border-edge px-3 py-1.5 text-xs font-semibold text-ink-primary hover:bg-surface-muted">
-                  {slide.is_enabled ? 'Disable' : 'Enable'}
-                </button>
                 <button onClick={() => startEdit(slide)} className="rounded-sm border border-edge p-2 text-ink-accent hover:bg-surface-muted" aria-label={`Edit ${slide.title}`}>
                   <Pencil className="h-4 w-4" />
                 </button>
@@ -6748,7 +6299,7 @@ function HeroBannersTab({ authFetch }) {
       {slides.length === 0 && (
         <div className="rounded-lg border border-dashed border-edge-strong bg-white p-8 text-center">
           <p className="text-sm font-semibold text-ink-primary">No hero banner slides yet.</p>
-          <p className="mt-1 text-xs text-brand-muted">Create the first slide to control the homepage hero from the admin console.</p>
+          <p className="mt-1 text-sm text-brand-muted">Create the first slide to control the homepage hero from the admin console.</p>
         </div>
       )}
 
@@ -6757,7 +6308,7 @@ function HeroBannersTab({ authFetch }) {
           <div className="mx-auto my-6 max-w-5xl overflow-hidden rounded-lg border border-edge bg-white shadow-overlay">
             <div className="flex items-center justify-between border-b border-edge px-5 py-4">
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-ink-accent">Homepage hero</p>
+                <p className="text-[12px] font-semibold uppercase tracking-widest text-ink-accent">Homepage hero</p>
                 <h2 className="text-lg font-semibold text-ink-primary">{editing.id ? 'Edit banner slide' : 'New banner slide'}</h2>
               </div>
               <button onClick={() => setEditing(null)} className="rounded-sm border border-edge p-2 text-brand-muted hover:bg-surface-muted" aria-label="Close hero banner editor">
@@ -6805,7 +6356,7 @@ function HeroBannersTab({ authFetch }) {
               </div>
 
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-3 gap-3">
                   <div>
                     <label className="kicker mb-1 block">Media type</label>
                     <select value={editing.media_type} onChange={(e) => setField('media_type', e.target.value)} className="w-full rounded-sm border border-edge p-2.5 text-sm">
@@ -6814,19 +6365,62 @@ function HeroBannersTab({ authFetch }) {
                     </select>
                   </div>
                   <div>
-                    <label className="kicker mb-1 block">Text position</label>
-                    <select value={editing.text_position} onChange={(e) => setField('text_position', e.target.value)} className="w-full rounded-sm border border-edge p-2.5 text-sm">
+                    <label className="kicker mb-1 block">Horizontal Text</label>
+                    <select value={editing.text_position || 'LEFT'} onChange={(e) => setField('text_position', e.target.value)} className="w-full rounded-sm border border-edge p-2.5 text-sm">
                       <option value="LEFT">Left</option>
                       <option value="CENTER">Center</option>
                       <option value="RIGHT">Right</option>
                     </select>
                   </div>
+                  <div>
+                    <label className="kicker mb-1 block">Vertical Text</label>
+                    <select value={editing.vertical_position || 'BOTTOM'} onChange={(e) => setField('vertical_position', e.target.value)} className="w-full rounded-sm border border-edge p-2.5 text-sm">
+                      <option value="TOP">Top</option>
+                      <option value="CENTER">Center</option>
+                      <option value="BOTTOM">Bottom</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="kicker mb-1 block">Navigation Arrows Position</label>
+                  <select value={editing.arrow_position || 'BOTTOM'} onChange={(e) => setField('arrow_position', e.target.value)} className="w-full rounded-sm border border-edge p-2.5 text-sm">
+                    <option value="BOTTOM">Bottom Bar</option>
+                    <option value="SIDES">Vertically Centered on Both Sides</option>
+                    <option value="HIDDEN">Hide Arrows Completely</option>
+                  </select>
+                </div>
+                <div className="rounded-lg border border-edge bg-surface-subtle p-3 text-[13px] leading-[1.6] text-ink-secondary">
+                  <p className="font-semibold text-ink-primary">Banner sizes — upload at these dimensions</p>
+                  <table className="mt-2 w-full">
+                    <thead>
+                      <tr className="text-left text-ink-muted">
+                        <th className="font-semibold">Slot</th>
+                        <th className="font-semibold">Size (px)</th>
+                        <th className="font-semibold">Shown when</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {BANNER_SPECS.map((s) => (
+                        <tr key={s.slot}>
+                          <td className="pr-2 font-medium text-ink-primary">{s.slot}</td>
+                          <td className="pr-2 tabular-nums">{s.size}</td>
+                          <td className="text-ink-muted">{s.when}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="mt-2 text-ink-muted">
+                    Sizes are 2× for sharpness on retina screens. Keep each file under 400&nbsp;KB (JPG or WebP).
+                    The image is cropped to fill, so keep the subject centred — edges may be trimmed.
+                    Tablet and mobile are optional; if left empty the desktop image is used everywhere.
+                  </p>
                 </div>
                 <div>
                   <label className="kicker mb-1 block">Desktop image/video URL</label>
+                  <p className="mb-1.5 text-[12px] text-ink-muted">Recommended 2560 × 1080 px · shown above 1024 px wide</p>
                   <div className="flex gap-2">
                     <input value={editing.desktop_media_url} onChange={(e) => setField('desktop_media_url', e.target.value)} className="flex-1 rounded-sm border border-edge p-2.5 text-sm" placeholder="https://..." />
-                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-edge px-3 text-xs font-semibold text-ink-primary hover:border-ink-primary">
+                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-edge px-3 text-sm font-semibold text-ink-primary hover:border-ink-primary">
                       <Upload className="h-3.5 w-3.5" /> {uploadingMediaKey === 'desktop_media_url' ? 'Uploading' : 'Upload'}
                       <input type="file" accept="image/*,video/*" onChange={(e) => uploadHeroMedia('desktop_media_url', e.target.files?.[0])} className="hidden" />
                     </label>
@@ -6834,9 +6428,10 @@ function HeroBannersTab({ authFetch }) {
                 </div>
                 <div>
                   <label className="kicker mb-1 block">Tablet image URL optional</label>
+                  <p className="mb-1.5 text-[12px] text-ink-muted">Recommended 2048 × 960 px · shown 641–1024 px wide · falls back to desktop</p>
                   <div className="flex gap-2">
                     <input value={editing.tablet_media_url} onChange={(e) => setField('tablet_media_url', e.target.value)} className="flex-1 rounded-sm border border-edge p-2.5 text-sm" placeholder="https://..." />
-                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-edge px-3 text-xs font-semibold text-ink-primary hover:border-ink-primary">
+                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-edge px-3 text-sm font-semibold text-ink-primary hover:border-ink-primary">
                       <Upload className="h-3.5 w-3.5" /> {uploadingMediaKey === 'tablet_media_url' ? 'Uploading' : 'Upload'}
                       <input type="file" accept="image/*" onChange={(e) => uploadHeroMedia('tablet_media_url', e.target.files?.[0])} className="hidden" />
                     </label>
@@ -6844,9 +6439,10 @@ function HeroBannersTab({ authFetch }) {
                 </div>
                 <div>
                   <label className="kicker mb-1 block">Mobile image URL</label>
+                  <p className="mb-1.5 text-[12px] text-ink-muted">Recommended 1280 × 840 px · shown up to 640 px wide · falls back to desktop</p>
                   <div className="flex gap-2">
                     <input value={editing.mobile_media_url} onChange={(e) => setField('mobile_media_url', e.target.value)} className="flex-1 rounded-sm border border-edge p-2.5 text-sm" placeholder="https://..." />
-                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-edge px-3 text-xs font-semibold text-ink-primary hover:border-ink-primary">
+                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-edge px-3 text-sm font-semibold text-ink-primary hover:border-ink-primary">
                       <Upload className="h-3.5 w-3.5" /> {uploadingMediaKey === 'mobile_media_url' ? 'Uploading' : 'Upload'}
                       <input type="file" accept="image/*" onChange={(e) => uploadHeroMedia('mobile_media_url', e.target.files?.[0])} className="hidden" />
                     </label>
@@ -6855,46 +6451,6 @@ function HeroBannersTab({ authFetch }) {
                 <div>
                   <label className="kicker mb-1 block">Alt text</label>
                   <input value={editing.alt_text} onChange={(e) => setField('alt_text', e.target.value)} className="w-full rounded-sm border border-edge p-2.5 text-sm" placeholder="Describe the banner media for accessibility and SEO" />
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="kicker mb-1 block">Start date/time</label>
-                    <input type="datetime-local" value={editing.starts_at || ''} onChange={(e) => setField('starts_at', e.target.value)} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
-                  </div>
-                  <div>
-                    <label className="kicker mb-1 block">End date/time</label>
-                    <input type="datetime-local" value={editing.ends_at || ''} onChange={(e) => setField('ends_at', e.target.value)} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
-                  </div>
-                  <div>
-                    <label className="kicker mb-1 block">Display order</label>
-                    <input type="number" value={editing.sort_order} onChange={(e) => setField('sort_order', e.target.value)} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
-                  </div>
-                  <div>
-                    <label className="kicker mb-1 block">Overlay opacity</label>
-                    <input type="number" min="0" max="90" value={editing.overlay_opacity} onChange={(e) => setField('overlay_opacity', e.target.value)} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
-                  </div>
-                  <div>
-                    <label className="kicker mb-1 block">Display duration ms</label>
-                    <input type="number" min="2500" step="100" value={editing.display_duration_ms} onChange={(e) => setField('display_duration_ms', e.target.value)} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
-                  </div>
-                  <div>
-                    <label className="kicker mb-1 block">Transition ms</label>
-                    <input type="number" min="0" step="50" value={editing.transition_ms} onChange={(e) => setField('transition_ms', e.target.value)} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
-                  </div>
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-xs">
-                  <label className="flex items-center gap-2 rounded-lg border border-edge p-3 font-semibold text-ink-primary">
-                    <input type="checkbox" checked={editing.is_enabled} onChange={(e) => setField('is_enabled', e.target.checked)} className="accent-ink-primary" /> Enabled
-                  </label>
-                  <label className="flex items-center gap-2 rounded-lg border border-edge p-3 font-semibold text-ink-primary">
-                    <input type="checkbox" checked={editing.autoplay_enabled} onChange={(e) => setField('autoplay_enabled', e.target.checked)} className="accent-ink-primary" /> Autoplay
-                  </label>
-                  <label className="flex items-center gap-2 rounded-lg border border-edge p-3 font-semibold text-ink-primary">
-                    <input type="checkbox" checked={editing.show_indicators} onChange={(e) => setField('show_indicators', e.target.checked)} className="accent-ink-primary" /> Indicators
-                  </label>
                 </div>
               </div>
 
@@ -6916,11 +6472,11 @@ function HeroBannersTab({ authFetch }) {
                         <img src={editing.desktop_media_url} alt={editing.alt_text || editing.heading || ''} className="h-full w-full object-cover" />
                       )
                     ) : (
-                      <div className="flex h-full items-center justify-center text-xs font-semibold uppercase text-ink-subtle">Preview media</div>
+                      <div className="flex h-full items-center justify-center text-sm font-semibold uppercase text-ink-subtle">Preview media</div>
                     )}
                     <div className="absolute inset-0 bg-black/35" />
                     <div className="absolute bottom-4 left-4 right-4 text-white">
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-white/75">{editing.eyebrow}</p>
+                      <p className="text-[12px] font-semibold uppercase tracking-wider text-white/75">{editing.eyebrow}</p>
                       <p className="text-lg font-semibold leading-tight">{editing.heading || 'Banner heading preview'}</p>
                     </div>
                   </div>
@@ -6929,8 +6485,8 @@ function HeroBannersTab({ authFetch }) {
             </div>
 
             <div className="flex justify-end gap-2 border-t border-edge bg-surface-muted px-5 py-4">
-              <button onClick={() => setEditing(null)} className="rounded-sm border border-edge bg-white px-4 py-2 text-xs font-semibold uppercase text-ink-primary">Cancel</button>
-              <button onClick={save} disabled={saving} className="btn-primary px-5 py-2 text-xs uppercase">
+              <button onClick={() => setEditing(null)} className="rounded-sm border border-edge bg-white px-4 py-2 text-sm font-semibold uppercase text-ink-primary">Cancel</button>
+              <button onClick={save} disabled={saving} className="btn-primary px-5 py-2 text-sm uppercase">
                 {saving ? 'Saving...' : 'Save banner'}
               </button>
             </div>
@@ -6940,184 +6496,6 @@ function HeroBannersTab({ authFetch }) {
     </div>
   );
 }
-
-/* --------------------------------------------------- BundlesTab + DiscountsTab */
-function BundlesTab({ authFetch, regions, products }) {
-  const [bundles, setBundles] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState(null);
-
-  const load = useCallback(() => {
-    setLoading(true);
-    authFetch('/api/admin/bundles/')
-      .then((r) => r.json())
-      .then((d) => setBundles(Array.isArray(d) ? d : d.results || []))
-      .catch(() => setBundles([]))
-      .finally(() => setLoading(false));
-  }, [authFetch]);
-
-  useEffect(() => { load(); }, [load]);
-
-  const startNew = () => setEditing({
-    name: '', slug: '', description: '', is_active: true, sort_order: 0,
-    _items: [],
-    _configs: regions.map((r) => ({ region: r.id, region_code: r.code, price: '', promotional_price: '', is_visible: true })),
-  });
-
-  const startEdit = (b) => setEditing({
-    ...b,
-    _items: (b.items || []).map((it) => ({ product_id: it.product?.id, name: it.product?.name, sku: it.product?.sku, quantity: it.quantity })),
-    _configs: regions.map((r) => {
-      const c = (b.regional_configs || []).find((x) => x.region === r.id);
-      return c
-        ? { region: r.id, region_code: r.code, price: c.price, promotional_price: c.promotional_price || '', is_visible: c.is_visible }
-        : { region: r.id, region_code: r.code, price: '', promotional_price: '', is_visible: true };
-    }),
-  });
-
-  const addItem = (productId) => {
-    if (!productId) return;
-    const p = products.find((x) => x.id === Number(productId));
-    if (!p) return;
-    if (editing._items.some((i) => i.product_id === p.id)) return;
-    setEditing({ ...editing, _items: [...editing._items, { product_id: p.id, name: p.name, sku: p.sku, quantity: 1 }] });
-  };
-
-  const removeItem = (pid) => setEditing({ ...editing, _items: editing._items.filter((i) => i.product_id !== pid) });
-
-  const setItemQty = (pid, qty) => setEditing({
-    ...editing,
-    _items: editing._items.map((i) => (i.product_id === pid ? { ...i, quantity: Math.max(1, Number(qty) || 1) } : i)),
-  });
-
-  const setConfig = (regionId, field, value) => setEditing({
-    ...editing,
-    _configs: editing._configs.map((c) => (c.region === regionId ? { ...c, [field]: value } : c)),
-  });
-
-  const save = () => {
-    const payload = {
-      name: editing.name,
-      slug: editing.slug,
-      description: editing.description || '',
-      is_active: !!editing.is_active,
-      sort_order: Number(editing.sort_order) || 0,
-      items: editing._items.map((i) => ({ product_id: i.product_id, quantity: i.quantity })),
-      regional_configs: editing._configs
-        .filter((c) => c.price !== '' && c.price != null)
-        .map((c) => ({ region: c.region, price: c.price, promotional_price: c.promotional_price === '' ? null : c.promotional_price, is_visible: !!c.is_visible })),
-    };
-    const isNew = !editing.id;
-    authFetch(isNew ? '/api/admin/bundles/' : `/api/admin/bundles/${editing.id}/`, {
-      method: isNew ? 'POST' : 'PUT',
-      body: JSON.stringify(payload),
-    }).then((r) => r.json()).then(() => { setEditing(null); load(); });
-  };
-
-  const remove = (b) => {
-    if (!confirm(`Delete bundle "${b.name}"?`)) return;
-    authFetch(`/api/admin/bundles/${b.id}/`, { method: 'DELETE' }).then(load);
-  };
-
-  if (loading) return <p className="text-sm text-brand-muted">Loading bundles…</p>;
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-brand-muted">{bundles.length} bundles</p>
-        <button onClick={startNew} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase">
-          <Plus className="h-4 w-4" /> New bundle
-        </button>
-      </div>
-
-      <div className="overflow-x-auto rounded-md border border-edge bg-white shadow-card">
-        <table className="w-full text-left text-xs">
-          <thead className="bg-surface-muted text-[10px] font-medium uppercase tracking-wide text-ink-muted border-b border-edge">
-            <tr><th className="px-3 py-2">Name</th><th className="px-3 py-2">Slug</th><th className="px-3 py-2">Items</th><th className="px-3 py-2">Regions</th><th className="px-3 py-2">Active</th><th className="px-3 py-2"></th></tr>
-          </thead>
-          <tbody>
-            {bundles.map((b) => (
-              <tr key={b.id} className="border-t border-edge-subtle">
-                <td className="px-3 py-3 font-semibold text-ink-primary">{b.name}</td>
-                <td className="px-3 py-3 font-mono text-brand-muted">/{b.slug}</td>
-                <td className="px-3 py-3 text-ink-primary">{(b.items || []).length}</td>
-                <td className="px-3 py-3 text-brand-muted">{(b.regional_configs || []).map((c) => c.region_code).join(', ')}</td>
-                <td className="px-3 py-3">{b.is_active ? <span className="rounded bg-brand-success/10 px-2 py-0.5 font-semibold text-ink-success">ON</span> : <span className="rounded bg-surface-muted px-2 py-0.5 font-semibold text-ink-muted">OFF</span>}</td>
-                <td className="px-3 py-3 text-right">
-                  <button onClick={() => startEdit(b)} className="text-ink-accent"><Pencil className="h-4 w-4" /></button>
-                  <button onClick={() => remove(b)} className="ml-2 text-brand-muted hover:text-brand-danger"><X className="h-4 w-4" /></button>
-                </td>
-              </tr>
-            ))}
-            {bundles.length === 0 && (<tr><td colSpan={6} className="px-3 py-6 text-center text-brand-muted">No bundles yet.</td></tr>)}
-          </tbody>
-        </table>
-      </div>
-
-      {editing && (
-        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-          <div className="my-8 w-full max-w-2xl bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-ink-primary">{editing.id ? 'Edit bundle' : 'New bundle'}</h3>
-              <button onClick={() => setEditing(null)} className="text-brand-muted"><X className="h-5 w-5" /></button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <input placeholder="Bundle name" value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} className="col-span-2 rounded-sm border border-edge p-2.5 text-sm" />
-              <input placeholder="slug-here" value={editing.slug} onChange={(e) => setEditing({ ...editing, slug: e.target.value })} className="rounded-sm border border-edge p-2.5 font-mono" />
-              <input type="number" placeholder="Sort order" value={editing.sort_order} onChange={(e) => setEditing({ ...editing, sort_order: e.target.value })} className="rounded-sm border border-edge p-2.5" />
-              <textarea placeholder="Description" value={editing.description || ''} onChange={(e) => setEditing({ ...editing, description: e.target.value })} className="col-span-2 rounded-sm border border-edge p-2.5" rows={2} />
-              <label className="col-span-2 flex items-center gap-2 text-ink-primary font-semibold"><input type="checkbox" checked={editing.is_active} onChange={(e) => setEditing({ ...editing, is_active: e.target.checked })} className="accent-ink-primary" /> Active</label>
-            </div>
-
-            <div>
-              <p className="text-xs font-semibold uppercase text-brand-muted mb-2">Items</p>
-              <div className="flex gap-2 mb-2">
-                <select onChange={(e) => { addItem(e.target.value); e.target.value = ''; }} className="flex-1 rounded-sm border border-edge p-2 text-xs">
-                  <option value="">+ Add product…</option>
-                  {products.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>)}
-                </select>
-              </div>
-              <div className="space-y-2">
-                {editing._items.map((it) => (
-                  <div key={it.product_id} className="flex items-center gap-2 rounded-lg border border-edge p-2">
-                    <div className="flex-1">
-                      <p className="text-xs font-semibold text-ink-primary">{it.name}</p>
-                      <p className="text-[10px] text-brand-muted font-mono">{it.sku}</p>
-                    </div>
-                    <input type="number" min="1" value={it.quantity} onChange={(e) => setItemQty(it.product_id, e.target.value)} className="w-16 rounded border border-edge p-1 text-xs" />
-                    <button onClick={() => removeItem(it.product_id)} className="text-brand-muted hover:text-brand-danger"><X className="h-4 w-4" /></button>
-                  </div>
-                ))}
-                {editing._items.length === 0 && <p className="text-xs text-brand-muted italic">No items added.</p>}
-              </div>
-            </div>
-
-            <div>
-              <p className="text-xs font-semibold uppercase text-brand-muted mb-2">Regional pricing</p>
-              <div className="space-y-2">
-                {editing._configs.map((c) => (
-                  <div key={c.region} className="grid grid-cols-[60px,1fr,1fr,auto] items-center gap-2 rounded-lg border border-edge p-2">
-                    <span className="font-mono text-xs text-ink-primary">{c.region_code}</span>
-                    <input type="number" step="0.01" placeholder="Price" value={c.price} onChange={(e) => setConfig(c.region, 'price', e.target.value)} className="rounded border border-edge p-1.5 text-xs" />
-                    <input type="number" step="0.01" placeholder="Promo (opt)" value={c.promotional_price} onChange={(e) => setConfig(c.region, 'promotional_price', e.target.value)} className="rounded border border-edge p-1.5 text-xs" />
-                    <label className="text-[10px] font-semibold text-ink-primary"><input type="checkbox" checked={c.is_visible} onChange={(e) => setConfig(c.region, 'is_visible', e.target.checked)} className="mr-1 accent-ink-primary" />Visible</label>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex gap-2 pt-2">
-              <button onClick={save} className="btn-primary flex-1 py-2.5 text-xs uppercase">Save bundle</button>
-              <button onClick={() => setEditing(null)} className="flex-1 rounded-sm border border-edge py-2.5 text-xs font-semibold uppercase">Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 
 function DiscountsTab({ authFetch, regions }) {
   const [coupons, setCoupons] = useState([]);
@@ -7183,14 +6561,14 @@ function DiscountsTab({ authFetch, regions }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-brand-muted">{coupons.length} coupon codes</p>
-        <button onClick={startNew} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-xs uppercase">
+        <button onClick={startNew} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-sm uppercase">
           <Plus className="h-4 w-4" /> New discount
         </button>
       </div>
 
       <div className="overflow-x-auto rounded-md border border-edge bg-white shadow-card">
-        <table className="w-full text-left text-xs">
-          <thead className="bg-surface-muted text-[10px] font-medium uppercase tracking-wide text-ink-muted border-b border-edge">
+        <table className="w-full text-left text-sm">
+          <thead className="bg-surface-muted text-[12px] font-medium uppercase tracking-wide text-ink-muted border-b border-edge">
             <tr><th className="px-3 py-2">Code</th><th className="px-3 py-2">Type</th><th className="px-3 py-2">Value</th><th className="px-3 py-2">Region</th><th className="px-3 py-2">Window</th><th className="px-3 py-2">Usage</th><th className="px-3 py-2">Active</th><th className="px-3 py-2"></th></tr>
           </thead>
           <tbody>
@@ -7203,7 +6581,7 @@ function DiscountsTab({ authFetch, regions }) {
                 <td className="px-3 py-3 text-brand-muted">{c.start_date ? formatDate(c.start_date) : '—'} → {c.end_date ? formatDate(c.end_date) : '—'}</td>
                 <td className="px-3 py-3 text-ink-primary">{c.usage_count}{c.usage_limit ? ` / ${c.usage_limit}` : ''}</td>
                 <td className="px-3 py-3">
-                  <button onClick={() => toggleActive(c)} className={`rounded px-2 py-0.5 text-[10px] font-semibold ${c.is_active ? 'bg-brand-success/10 text-ink-success' : 'bg-surface-muted text-ink-muted'}`}>{c.is_active ? 'ON' : 'OFF'}</button>
+                  <button onClick={() => toggleActive(c)} className={`rounded px-2 py-0.5 text-[12px] font-semibold ${c.is_active ? 'bg-brand-success/10 text-ink-success' : 'bg-surface-muted text-ink-muted'}`}>{c.is_active ? 'ON' : 'OFF'}</button>
                 </td>
                 <td className="px-3 py-3 text-right">
                   <button onClick={() => startEdit(c)} className="text-ink-accent"><Pencil className="h-4 w-4" /></button>
@@ -7224,7 +6602,7 @@ function DiscountsTab({ authFetch, regions }) {
               <button onClick={() => setEditing(null)} className="text-brand-muted"><X className="h-5 w-5" /></button>
             </div>
             <input placeholder="CODE" value={editing.code} onChange={(e) => setEditing({ ...editing, code: e.target.value.toUpperCase() })} className="w-full rounded-sm border border-edge p-2.5 text-sm font-mono uppercase" />
-            <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="grid grid-cols-2 gap-2 text-sm">
               <select value={editing.discount_type} onChange={(e) => setEditing({ ...editing, discount_type: e.target.value })} className="rounded-sm border border-edge p-2">
                 <option value="PERCENTAGE">Percentage off</option>
                 <option value="FIXED_AMOUNT">Fixed amount</option>
@@ -7242,8 +6620,8 @@ function DiscountsTab({ authFetch, regions }) {
             </div>
             <label className="flex items-center gap-2 text-sm text-ink-primary"><input type="checkbox" checked={editing.is_active} onChange={(e) => setEditing({ ...editing, is_active: e.target.checked })} className="accent-ink-primary" /> Active</label>
             <div className="flex gap-2 pt-1">
-              <button onClick={save} className="btn-primary flex-1 py-2.5 text-xs uppercase">Save</button>
-              <button onClick={() => setEditing(null)} className="flex-1 rounded-sm border border-edge py-2.5 text-xs font-semibold uppercase">Cancel</button>
+              <button onClick={save} className="btn-primary flex-1 py-2.5 text-sm uppercase">Save</button>
+              <button onClick={() => setEditing(null)} className="flex-1 rounded-sm border border-edge py-2.5 text-sm font-semibold uppercase">Cancel</button>
             </div>
           </div>
         </div>
@@ -7255,77 +6633,240 @@ function DiscountsTab({ authFetch, regions }) {
 
 /* ------------------------------------------------------------------ Page */
 // Clean, Shopify-style grouping: plain section names, "Home" first, Settings last.
+/* ---------------------------------------- Consolidated section wrappers ----
+ * Each of these groups what used to be several sidebar entries into one page
+ * with tabs. Same components, fewer destinations to hunt through.
+ */
+function SectionTabs({ tabs, active, onChange }) {
+  return (
+    <div className="flex flex-wrap gap-2 border-b border-edge-subtle pb-2">
+      {tabs.map((t) => (
+        <button
+          key={t.key}
+          type="button"
+          onClick={() => onChange(t.key)}
+          className={`rounded-lg px-3 py-1.5 text-sm font-semibold uppercase transition-colors ${
+            active === t.key ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'
+          }`}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function OrdersSection({ authFetch, initialTab = 'all' }) {
+  const allowedTabs = ['all', 'drafts', 'abandoned'];
+  const [tab, setTab] = useState(allowedTabs.includes(initialTab) ? initialTab : 'all');
+  useEffect(() => {
+    if (allowedTabs.includes(initialTab)) setTab(initialTab);
+  }, [initialTab]);
+  return (
+    <div className="space-y-5">
+      <SectionTabs
+        active={tab}
+        onChange={setTab}
+        tabs={[
+          { key: 'all', label: 'All orders' },
+          { key: 'drafts', label: 'Drafts' },
+          { key: 'abandoned', label: 'Abandoned checkouts' },
+        ]}
+      />
+      {tab === 'all' && <OrdersTab authFetch={authFetch} />}
+      {tab === 'drafts' && <OrdersTab authFetch={authFetch} initialStatus="PENDING" title="draft orders" />}
+      {tab === 'abandoned' && <AbandonedTab authFetch={authFetch} />}
+    </div>
+  );
+}
+
+function CustomersSection({ authFetch }) {
+  const [tab, setTab] = useState('all');
+  return (
+    <div className="space-y-5">
+      <SectionTabs
+        active={tab}
+        onChange={setTab}
+        tabs={[
+          { key: 'all', label: 'Customers' },
+          { key: 'segments', label: 'Segments' },
+          { key: 'reviews', label: 'Reviews' },
+        ]}
+      />
+      {tab === 'all' && <CustomersTab authFetch={authFetch} />}
+      {tab === 'segments' && <SegmentsTab authFetch={authFetch} />}
+      {tab === 'reviews' && <ReviewsTab authFetch={authFetch} />}
+    </div>
+  );
+}
+
+function StaffSection({ authFetch, regions, user, onProfileSaved, initialTab = 'staff' }) {
+  const allowedTabs = ['staff', 'roles', 'security_audit'];
+  const [tab, setTab] = useState(allowedTabs.includes(initialTab) ? initialTab : 'staff');
+  useEffect(() => {
+    if (allowedTabs.includes(initialTab)) setTab(initialTab);
+  }, [initialTab]);
+  return (
+    <div className="space-y-5">
+      <SectionTabs
+        active={tab}
+        onChange={setTab}
+        tabs={[
+          { key: 'staff', label: 'Staff Directory' },
+          { key: 'roles', label: 'Roles & Permissions' },
+          { key: 'security_audit', label: 'Security & Audit Log' },
+        ]}
+      />
+      {tab === 'staff' && <StaffTab authFetch={authFetch} regions={regions} />}
+      {tab === 'roles' && <RolesTab authFetch={authFetch} />}
+      {tab === 'security_audit' && <SecurityAndAuditTab authFetch={authFetch} user={user} onSaved={onProfileSaved} />}
+    </div>
+  );
+}
+
+function DashboardSection({ authFetch, go, initialTab = 'overview' }) {
+  const allowedTabs = ['overview', 'reports'];
+  const [tab, setTab] = useState(allowedTabs.includes(initialTab) ? initialTab : 'overview');
+  useEffect(() => {
+    if (allowedTabs.includes(initialTab)) setTab(initialTab);
+  }, [initialTab]);
+  return (
+    <div className="space-y-5">
+      <SectionTabs
+        active={tab}
+        onChange={setTab}
+        tabs={[
+          { key: 'overview', label: 'Overview' },
+          { key: 'reports', label: 'Reports' },
+        ]}
+      />
+      {tab === 'overview' && <HomeTab authFetch={authFetch} go={go} />}
+      {tab === 'reports' && <AnalyticsAndReportsTab authFetch={authFetch} />}
+    </div>
+  );
+}
+
+// Eight top-level sections. Everything else lives as a tab inside one of them —
+// e.g. draft orders and abandoned checkouts are views of Orders, not separate
+// destinations. Keep this list short; a new nav entry needs a real reason.
 const NAV_GROUPS = [
   { title: null, items: [
-    { key: 'home', label: 'Home', icon: Home },
-    { key: 'analytics', label: 'Analytics', icon: BarChart3 },
-  ] },
-  { title: 'Sales', items: [
+    { key: 'home', label: 'Dashboard', icon: Home },
     { key: 'orders', label: 'Orders', icon: ShoppingCart },
-    { key: 'drafts', label: 'Draft orders', icon: ReceiptText },
-    { key: 'abandoned', label: 'Abandoned checkouts', icon: ShoppingBag },
-    { key: 'discounts', label: 'Discounts', icon: Banknote },
-  ] },
-  { title: 'Customers', items: [
-    { key: 'customers', label: 'Customers', icon: UserRound },
-    { key: 'segments', label: 'Segments', icon: UsersIcon },
-    { key: 'reviews', label: 'Reviews', icon: Star },
-  ] },
-  { title: 'Catalog', items: [
     { key: 'products', label: 'Products', icon: Package },
-    { key: 'collections', label: 'Collections', icon: Layers },
-  ] },
-  { title: 'Marketing', items: [
-    { key: 'integrations', label: 'Integrations', icon: Megaphone },
-    { key: 'newsletter', label: 'Newsletters', icon: Mail },
-  ] },
-  { title: 'Content', items: [
+    { key: 'categories', label: 'Categories', icon: Layers },
+    { key: 'customers', label: 'Customers', icon: UserRound },
     { key: 'content', label: 'Content', icon: FileText },
-  ] },
-  { title: 'Staff', items: [
-    { key: 'staff', label: 'Staff & permissions', icon: UserRound },
-    { key: 'approvals', label: 'Approvals', icon: CheckCircle2 },
-    { key: 'security', label: 'Security', icon: ShieldAlert },
-    { key: 'audit', label: 'Audit logs', icon: Activity },
-  ] },
-  { title: 'Settings', items: [
+    { key: 'staff', label: 'Staff Management', icon: UsersIcon },
     { key: 'settings', label: 'Settings', icon: Sliders },
   ] },
 ];
 const NAV = NAV_GROUPS.flatMap((g) => g.items);
+const ADMIN_SECTION_KEYS = new Set([
+  ...NAV.map((item) => item.key),
+  'pages', 'blogs', 'glossary', 'faq', 'navigation',
+]);
+const LEGACY_ADMIN_ROUTES = {
+  audit: { section: 'staff', tab: 'security_audit' },
+  security_audit: { section: 'staff', tab: 'security_audit' },
+  roles: { section: 'staff', tab: 'roles' },
+  abandoned: { section: 'orders', tab: 'abandoned' },
+  drafts: { section: 'orders', tab: 'drafts' },
+  reports: { section: 'home', tab: 'reports' },
+  analytics: { section: 'home', tab: 'reports' },
+  shipping: { section: 'settings', tab: 'shipping' },
+  markets: { section: 'settings', tab: 'markets' },
+  payments: { section: 'settings', tab: 'payments' },
+  discounts: { section: 'settings', tab: 'discounts' },
+  emails: { section: 'settings', tab: 'emails' },
+  notifications: { section: 'settings', tab: 'notifications' },
+  theme: { section: 'settings', tab: 'theme' },
+  homepage: { section: 'settings', tab: 'homepage' },
+  cookie_consent: { section: 'settings', tab: 'cookie-consent' },
+};
 
 
-/* ------------------------------------------------------------- Staff & RBAC */
+/* ------------------------------------------------------------- Staff Management */
 function StaffTab({ authFetch, regions }) {
-  const [activeSubTab, setActiveSubTab] = useState('members'); // members | roles
   const [staff, setStaff] = useState([]);
   const [roles, setRoles] = useState([]);
-  const [permCatalog, setPermCatalog] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState('ALL');
   const [editingStaff, setEditingStaff] = useState(null);
-  const [editingRole, setEditingRole] = useState(null);
+  const [isAddingStaff, setIsAddingStaff] = useState(false);
+  const [newStaff, setNewStaff] = useState({
+    first_name: '',
+    last_name: '',
+    email: '',
+    password: '',
+    roles: [],
+    assigned_regions: [],
+  });
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   const loadData = useCallback(() => {
     setLoading(true);
     Promise.all([
       authFetch('/api/admin/staff/').then((r) => r.json()).catch(() => []),
       authFetch('/api/admin/roles/').then((r) => r.json()).catch(() => []),
-      authFetch('/api/admin/roles/permission_catalog/').then((r) => r.json()).catch(() => []),
-    ]).then(([sData, rData, pData]) => {
+    ]).then(([sData, rData]) => {
       setStaff(Array.isArray(sData) ? sData : sData.results || []);
       setRoles(Array.isArray(rData) ? rData : rData.results || []);
-      setPermCatalog(pData || []);
     }).finally(() => setLoading(false));
   }, [authFetch]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  const handleCreateStaff = (e) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+    if (!newStaff.email.trim() || !newStaff.password.trim()) {
+      setError('Please provide a valid email address and a strong initial password.');
+      return;
+    }
+
+    let roleIds = newStaff.roles;
+    if (roleIds.length === 0) {
+      const defaultRole = roles.find(r => r.name === 'Staff') || roles[0];
+      if (defaultRole) roleIds = [defaultRole.id];
+    }
+
+    authFetch('/api/admin/staff/', {
+      method: 'POST',
+      body: JSON.stringify({
+        first_name: newStaff.first_name.trim(),
+        last_name: newStaff.last_name.trim(),
+        email: newStaff.email.trim().toLowerCase(),
+        password: newStaff.password,
+        roles: roleIds,
+        assigned_regions: newStaff.assigned_regions,
+        is_staff: true,
+        is_active: true
+      })
+    })
+    .then((r) => {
+      if (!r.ok) return r.json().then(e => { throw new Error(JSON.stringify(e)); });
+      return r.json();
+    })
+    .then(() => {
+      setSuccess('Staff member added successfully!');
+      setIsAddingStaff(false);
+      setNewStaff({ first_name: '', last_name: '', email: '', password: '', roles: [], assigned_regions: [] });
+      loadData();
+    })
+    .catch((e) => setError(e.message));
+  };
 
   const saveStaff = () => {
     setError('');
     authFetch(`/api/admin/staff/${editingStaff.id}/`, {
       method: 'PATCH',
       body: JSON.stringify({
+        first_name: editingStaff.first_name,
+        last_name: editingStaff.last_name,
         is_staff: editingStaff.is_staff,
         is_active: editingStaff.is_active,
         roles: editingStaff.roles,
@@ -7341,6 +6882,492 @@ function StaffTab({ authFetch, regions }) {
     .then(() => { setEditingStaff(null); loadData(); })
     .catch((e) => setError(e.message));
   };
+
+  const toggleStaffActive = (s) => {
+    authFetch(`/api/admin/staff/${s.id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify({ is_active: !s.is_active })
+    }).then(() => loadData());
+  };
+
+  const filteredStaff = staff.filter((s) => {
+    const query = search.toLowerCase();
+    const fullName = `${s.first_name || ''} ${s.last_name || ''}`.toLowerCase();
+    const matchesSearch = fullName.includes(query) || (s.email || '').toLowerCase().includes(query);
+    if (roleFilter === 'ALL') return matchesSearch;
+    const staffRoleNames = (s.roles || []).map(rId => roles.find(r => r.id === rId)?.name);
+    return matchesSearch && staffRoleNames.includes(roleFilter);
+  });
+
+  const totalCount = staff.length;
+  const adminCount = staff.filter(s => (s.roles || []).some(rId => roles.find(r => r.id === rId)?.name === 'Admin')).length;
+  const staffMemberCount = totalCount - adminCount;
+
+  if (loading) return <p className="text-sm text-brand-muted p-4">Loading staff directory...</p>;
+
+  return (
+    <div className="space-y-5">
+      {/* Metric Stat Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="rounded-xl border border-edge bg-white p-4 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold text-ink-subtle uppercase tracking-wider">Total Staff Members</p>
+            <h3 className="text-2xl font-bold text-ink-primary mt-1">{totalCount}</h3>
+          </div>
+          <div className="p-3 bg-brand-accent/10 rounded-lg text-ink-accent">
+            <UsersIcon className="h-5 w-5" />
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-edge bg-white p-4 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold text-ink-subtle uppercase tracking-wider">Administrators</p>
+            <h3 className="text-2xl font-bold text-ink-primary mt-1">{adminCount}</h3>
+          </div>
+          <div className="p-3 bg-indigo-50 rounded-lg text-indigo-600">
+            <ShieldCheck className="h-5 w-5" />
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-edge bg-white p-4 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold text-ink-subtle uppercase tracking-wider">Store Operations Staff</p>
+            <h3 className="text-2xl font-bold text-ink-primary mt-1">{staffMemberCount}</h3>
+          </div>
+          <div className="p-3 bg-emerald-50 rounded-lg text-emerald-600">
+            <UserRound className="h-5 w-5" />
+          </div>
+        </div>
+      </div>
+
+      {success && (
+        <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-800 flex justify-between items-center">
+          <span>{success}</span>
+          <button onClick={() => setSuccess('')}><X className="h-4 w-4 text-emerald-600" /></button>
+        </div>
+      )}
+
+      {/* Control Bar & Actions */}
+      <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 bg-white p-3 rounded-xl border border-edge shadow-sm">
+        <div className="flex flex-1 items-center gap-3">
+          <div className="relative flex-1 max-w-md">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-muted" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search staff by name or email..."
+              className="w-full rounded-lg border border-edge py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-1 focus:ring-ink-primary"
+            />
+          </div>
+          <select
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            className="rounded-lg border border-edge px-3 py-2 text-sm bg-white focus:outline-none"
+          >
+            <option value="ALL">All Roles</option>
+            <option value="Admin">Admin Only</option>
+            <option value="Staff">Staff Only</option>
+          </select>
+        </div>
+
+        <button
+          onClick={() => { setError(''); setIsAddingStaff(true); }}
+          className="btn-primary inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg shadow-sm cursor-pointer"
+        >
+          <UserPlus className="h-4 w-4" /> Add Staff Member
+        </button>
+      </div>
+
+      {/* Staff Directory Table */}
+      <div className="overflow-x-auto rounded-xl border border-edge bg-white shadow-card">
+        <table className="w-full text-left text-sm">
+          <thead className="bg-surface-muted text-[12px] font-semibold uppercase tracking-wider text-ink-muted border-b border-edge">
+            <tr>
+              <th className="px-4 py-3.5">Member</th>
+              <th className="px-4 py-3.5">Assigned Role</th>
+              <th className="px-4 py-3.5">Region Scope</th>
+              <th className="px-4 py-3.5">Security &amp; 2FA</th>
+              <th className="px-4 py-3.5">Status</th>
+              <th className="px-4 py-3.5 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-edge-subtle">
+            {filteredStaff.map((s) => {
+              const assignedRoles = (s.roles || []).map(rId => roles.find(r => r.id === rId)).filter(Boolean);
+              const isAdmin = assignedRoles.some(r => r.name === 'Admin');
+              return (
+                <tr key={s.id} className="hover:bg-surface-muted/50 transition-colors align-middle">
+                  <td className="px-4 py-3.5">
+                    <div className="flex items-center gap-3">
+                      <div className={`h-9 w-9 rounded-full flex items-center justify-center font-bold text-xs ${isAdmin ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                        {(s.first_name?.[0] || s.email[0] || 'U').toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-ink-primary">{s.first_name || 'Staff'} {s.last_name || ''}</p>
+                        <p className="font-mono text-xs text-brand-muted">{s.email}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3.5">
+                    <div className="flex flex-wrap gap-1">
+                      {assignedRoles.map((r) => (
+                        <span
+                          key={r.id}
+                          className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${r.name === 'Admin' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}
+                        >
+                          {r.name}
+                        </span>
+                      ))}
+                      {assignedRoles.length === 0 && <span className="text-ink-subtle text-xs">Standard Staff</span>}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3.5 text-xs font-medium text-ink-secondary">
+                    {s.assigned_regions_codes?.length > 0 ? (
+                      <span className="rounded bg-surface-muted border border-edge px-2 py-0.5 font-mono">
+                        {s.assigned_regions_codes.join(', ')}
+                      </span>
+                    ) : (
+                      <span className="text-ink-subtle">Global (All Regions)</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3.5">
+                    {s.two_factor_enabled ? (
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
+                        <ShieldCheck className="h-3 w-3" /> 2FA Active
+                      </span>
+                    ) : (
+                      <span className="text-xs text-brand-muted">Standard Password</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3.5">
+                    <button
+                      onClick={() => toggleStaffActive(s)}
+                      className={`cursor-pointer rounded-full px-2.5 py-0.5 text-xs font-semibold transition-opacity hover:opacity-80 ${s.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}
+                    >
+                      {s.is_active ? 'Active' : 'Inactive'}
+                    </button>
+                  </td>
+                  <td className="px-4 py-3.5 text-right">
+                    <button
+                      onClick={() => { setError(''); setEditingStaff({ ...s }); }}
+                      className="text-xs font-semibold text-ink-accent hover:underline inline-flex items-center gap-1 cursor-pointer"
+                    >
+                      <Pencil className="h-3.5 w-3.5" /> Manage
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+            {filteredStaff.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-4 py-8 text-center text-sm text-brand-muted">
+                  No staff members match your criteria.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Add Staff Modal */}
+      {isAddingStaff && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-edge p-6 shadow-2xl w-full max-w-lg space-y-4">
+            <div className="flex justify-between items-center pb-3 border-b border-edge">
+              <div>
+                <h3 className="text-lg font-bold text-ink-primary">Add New Staff Member</h3>
+                <p className="text-xs text-brand-muted">Create a staff account and assign immediate store permissions.</p>
+              </div>
+              <button onClick={() => setIsAddingStaff(false)} className="p-1 rounded-full hover:bg-surface-muted cursor-pointer">
+                <X className="h-5 w-5 text-brand-muted" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateStaff} className="space-y-4 text-sm">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-ink-secondary mb-1">First Name</label>
+                  <input
+                    placeholder="Jane"
+                    value={newStaff.first_name}
+                    onChange={(e) => setNewStaff({ ...newStaff, first_name: e.target.value })}
+                    className="w-full rounded-lg border border-edge p-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-ink-primary"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-ink-secondary mb-1">Last Name</label>
+                  <input
+                    placeholder="Doe"
+                    value={newStaff.last_name}
+                    onChange={(e) => setNewStaff({ ...newStaff, last_name: e.target.value })}
+                    className="w-full rounded-lg border border-edge p-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-ink-primary"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-ink-secondary mb-1">Work Email Address *</label>
+                <input
+                  type="email"
+                  required
+                  placeholder="jane.doe@scleroproteins.co.uk"
+                  value={newStaff.email}
+                  onChange={(e) => setNewStaff({ ...newStaff, email: e.target.value })}
+                  className="w-full rounded-lg border border-edge p-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-ink-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-ink-secondary mb-1">Initial Password</label>
+                <PasswordInput
+                  autoComplete="new-password"
+                  placeholder="Create a strong initial password"
+                  value={newStaff.password}
+                  onChange={(e) => setNewStaff({ ...newStaff, password: e.target.value })}
+                  className="w-full rounded-lg border border-edge p-2.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ink-primary"
+                />
+                <p className="text-[11px] text-brand-muted mt-1">Required. Use at least 12 characters; the server also checks common-password rules.</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-ink-secondary mb-1">Assign Role</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {roles.map((r) => {
+                    const isSelected = newStaff.roles.includes(r.id);
+                    return (
+                      <button
+                        key={r.id}
+                        type="button"
+                        onClick={() => {
+                          const updated = isSelected ? newStaff.roles.filter(x => x !== r.id) : [r.id];
+                          setNewStaff({ ...newStaff, roles: updated });
+                        }}
+                        className={`p-3 rounded-lg border text-left cursor-pointer transition-all ${isSelected ? 'border-ink-primary bg-brand-accent/5 font-semibold text-ink-primary shadow-xs' : 'border-edge bg-white text-ink-secondary hover:border-edge-subtle'}`}
+                      >
+                        <div className="flex justify-between items-center">
+                          <span className="font-bold text-xs">{r.name}</span>
+                          {isSelected && <CheckCircle2 className="h-4 w-4 text-ink-accent" />}
+                        </div>
+                        <p className="text-[11px] text-brand-muted mt-0.5 line-clamp-1">{r.description || 'Access level role'}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-ink-secondary mb-1">Regional Scope</label>
+                <div className="flex gap-4 p-2.5 border border-edge rounded-lg bg-surface-muted/50">
+                  {regions.map((r) => {
+                    const isAssigned = newStaff.assigned_regions.includes(r.id);
+                    return (
+                      <label key={r.id} className="flex items-center gap-2 cursor-pointer font-semibold text-xs text-ink-primary">
+                        <input
+                          type="checkbox"
+                          checked={isAssigned}
+                          onChange={(e) => {
+                            const updated = e.target.checked
+                              ? [...newStaff.assigned_regions, r.id]
+                              : newStaff.assigned_regions.filter(x => x !== r.id);
+                            setNewStaff({ ...newStaff, assigned_regions: updated });
+                          }}
+                          className="h-4 w-4 accent-ink-primary rounded"
+                        />
+                        {r.code} ({r.name})
+                      </label>
+                    );
+                  })}
+                  {regions.length === 0 && <span className="text-xs text-ink-subtle">Global (All Regions)</span>}
+                </div>
+              </div>
+
+              {error && <p className="rounded-lg bg-rose-50 border border-rose-200 p-2.5 text-xs font-semibold text-rose-700">{error}</p>}
+
+              <div className="flex gap-2 pt-2 border-t border-edge">
+                <button type="submit" className="btn-primary flex-1 py-2.5 text-sm font-semibold rounded-lg cursor-pointer">
+                  Create Staff Member
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsAddingStaff(false)}
+                  className="px-4 py-2.5 border border-edge rounded-lg text-sm font-semibold text-ink-secondary hover:bg-surface-muted cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit / Manage Staff Drawer */}
+      {editingStaff && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-end">
+          <div className="bg-white h-full w-full max-w-md border-l border-edge p-6 shadow-2xl overflow-y-auto space-y-5">
+            <div className="flex justify-between items-center pb-3 border-b border-edge">
+              <div>
+                <h3 className="text-lg font-bold text-ink-primary">Manage Staff Member</h3>
+                <p className="font-mono text-xs text-brand-muted">{editingStaff.email}</p>
+              </div>
+              <button onClick={() => setEditingStaff(null)} className="p-1 rounded-full hover:bg-surface-muted cursor-pointer">
+                <X className="h-5 w-5 text-brand-muted" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-sm">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-ink-secondary mb-1">First Name</label>
+                  <input
+                    value={editingStaff.first_name || ''}
+                    onChange={(e) => setEditingStaff({ ...editingStaff, first_name: e.target.value })}
+                    className="w-full rounded-lg border border-edge p-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-ink-secondary mb-1">Last Name</label>
+                  <input
+                    value={editingStaff.last_name || ''}
+                    onChange={(e) => setEditingStaff({ ...editingStaff, last_name: e.target.value })}
+                    className="w-full rounded-lg border border-edge p-2 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 p-3 bg-surface-muted rounded-xl border border-edge">
+                <label className="flex items-center gap-2 font-semibold text-xs text-ink-primary cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editingStaff.is_staff}
+                    onChange={(e) => setEditingStaff({ ...editingStaff, is_staff: e.target.checked })}
+                    className="h-4 w-4 accent-ink-primary"
+                  />
+                  Staff Access
+                </label>
+                <label className="flex items-center gap-2 font-semibold text-xs text-ink-primary cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editingStaff.is_active}
+                    onChange={(e) => setEditingStaff({ ...editingStaff, is_active: e.target.checked })}
+                    className="h-4 w-4 accent-ink-primary"
+                  />
+                  Account Active
+                </label>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-ink-subtle uppercase mb-1">Assigned Role</p>
+                <div className="space-y-1.5 border border-edge p-2.5 rounded-xl bg-white">
+                  {roles.map((r) => {
+                    const hasRole = (editingStaff.roles || []).includes(r.id);
+                    return (
+                      <label key={r.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-surface-muted cursor-pointer font-medium text-xs">
+                        <span>{r.name}</span>
+                        <input
+                          type="checkbox"
+                          checked={hasRole}
+                          onChange={(e) => {
+                            const newRoles = e.target.checked
+                              ? [...(editingStaff.roles || []), r.id]
+                              : (editingStaff.roles || []).filter(x => x !== r.id);
+                            setEditingStaff({ ...editingStaff, roles: newRoles });
+                          }}
+                          className="h-4 w-4 accent-ink-primary"
+                        />
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-ink-subtle uppercase mb-1">Regional Access Scope</p>
+                <div className="flex gap-4 p-3 border border-edge rounded-xl bg-surface-muted/50">
+                  {regions.map((r) => {
+                    const isAssigned = (editingStaff.assigned_regions || []).includes(r.id);
+                    return (
+                      <label key={r.id} className="flex items-center gap-2 cursor-pointer font-semibold text-xs text-ink-secondary">
+                        <input
+                          type="checkbox"
+                          checked={isAssigned}
+                          onChange={(e) => {
+                            const newRegs = e.target.checked
+                              ? [...(editingStaff.assigned_regions || []), r.id]
+                              : (editingStaff.assigned_regions || []).filter(x => x !== r.id);
+                            setEditingStaff({ ...editingStaff, assigned_regions: newRegs });
+                          }}
+                          className="h-4 w-4 accent-ink-primary"
+                        />
+                        {r.code} ({r.name})
+                      </label>
+                    );
+                  })}
+                  {regions.length === 0 && <span className="text-xs text-ink-subtle">Global Scope</span>}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-ink-subtle uppercase mb-1">Allowed IP Whitelist</p>
+                <input
+                  placeholder="e.g. 192.168.1.1, 10.0.0.5"
+                  value={editingStaff.allowed_ip_range || ''}
+                  onChange={(e) => setEditingStaff({ ...editingStaff, allowed_ip_range: e.target.value })}
+                  className="w-full rounded-lg border border-edge p-2.5 text-xs font-mono"
+                />
+                <p className="text-[11px] text-brand-muted mt-1">Comma-separated IPs. Leave empty for unrestricted access.</p>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-ink-subtle uppercase mb-1">Security</p>
+                <label className="flex items-center gap-2 font-semibold text-xs text-ink-primary cursor-pointer p-2.5 border border-edge rounded-xl bg-white">
+                  <input
+                    type="checkbox"
+                    checked={editingStaff.two_factor_enabled}
+                    onChange={(e) => setEditingStaff({ ...editingStaff, two_factor_enabled: e.target.checked })}
+                    className="h-4 w-4 accent-ink-primary"
+                  />
+                  Require Two-Factor Authentication (2FA)
+                </label>
+              </div>
+
+              {error && <p className="rounded-lg bg-rose-50 border border-rose-200 p-2.5 text-xs font-semibold text-rose-700">{error}</p>}
+
+              <div className="pt-4 border-t border-edge flex gap-2">
+                <button onClick={saveStaff} className="btn-primary flex-1 py-2.5 text-sm font-semibold rounded-lg cursor-pointer">
+                  Save Changes
+                </button>
+                <button onClick={() => setEditingStaff(null)} className="px-4 py-2.5 border border-edge rounded-lg text-sm font-semibold text-ink-secondary hover:bg-surface-muted cursor-pointer">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------- Roles & Permissions */
+function RolesTab({ authFetch }) {
+  const [roles, setRoles] = useState([]);
+  const [permCatalog, setPermCatalog] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editingRole, setEditingRole] = useState(null);
+  const [error, setError] = useState('');
+
+  const loadData = useCallback(() => {
+    setLoading(true);
+    Promise.all([
+      authFetch('/api/admin/roles/').then((r) => r.json()).catch(() => []),
+      authFetch('/api/admin/roles/permission_catalog/').then((r) => r.json()).catch(() => []),
+    ]).then(([rData, pData]) => {
+      setRoles(Array.isArray(rData) ? rData : rData.results || []);
+      setPermCatalog(pData || []);
+    }).finally(() => setLoading(false));
+  }, [authFetch]);
+
+  useEffect(() => { loadData(); }, [loadData]);
 
   const saveRole = () => {
     setError('');
@@ -7369,355 +7396,205 @@ function StaffTab({ authFetch, regions }) {
     }
   };
 
-  if (loading) return <p className="text-sm text-brand-muted">Loading Staff &amp; RBAC registry...</p>;
+  if (loading) return <p className="text-sm text-brand-muted p-4">Loading roles &amp; permissions...</p>;
 
   return (
-    <div className="space-y-4">
-      {/* Subtab Navigation */}
-      <div className="flex gap-2 border-b border-edge-subtle pb-2">
-        <button onClick={() => setActiveSubTab('members')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm transition-colors ${activeSubTab === 'members' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Staff Directory</button>
-        <button onClick={() => setActiveSubTab('roles')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm transition-colors ${activeSubTab === 'roles' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Roles &amp; Permissions</button>
+    <div className="space-y-5">
+      {/* Header Info Banner */}
+      <div className="bg-white p-5 rounded-2xl border border-edge shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h3 className="text-base font-bold text-ink-primary">Streamlined Role Hierarchy</h3>
+          <p className="text-xs text-brand-muted mt-0.5">
+            The platform is configured with 2 core roles to maintain a clutter-free, easy-to-understand permission setup.
+          </p>
+        </div>
+        <button
+          onClick={() => setEditingRole({ name: '', description: '', permissions: [] })}
+          className="btn-primary inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold uppercase tracking-wider rounded-lg cursor-pointer"
+        >
+          <Plus className="h-3.5 w-3.5" /> Custom Role
+        </button>
       </div>
 
-      {activeSubTab === 'members' ? (
-        <div className="space-y-4">
-          <div className="overflow-x-auto rounded-md border border-edge bg-white shadow-card">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-surface-muted text-[10px] font-medium uppercase tracking-wide text-ink-muted border-b border-edge">
-                <tr>
-                  <th className="px-3 py-3">Staff Member</th>
-                  <th className="px-3 py-3">Roles</th>
-                  <th className="px-3 py-3">Region Scope</th>
-                  <th className="px-3 py-3">IP whitelist</th>
-                  <th className="px-3 py-3">2FA Status</th>
-                  <th className="px-3 py-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {staff.map((s) => (
-                  <tr key={s.id} className="border-t border-edge-subtle align-middle">
-                    <td className="px-3 py-3">
-                      <p className="font-semibold text-ink-primary">{s.first_name} {s.last_name}</p>
-                      <p className="font-mono text-[10px] text-brand-muted">{s.email}</p>
-                    </td>
-                    <td className="px-3 py-3">
-                      <div className="flex flex-wrap gap-1">
-                        {(s.roles || []).map((rId) => {
-                          const r = roles.find((x) => x.id === rId);
-                          return r ? <span key={rId} className="rounded bg-surface-muted text-ink-accent px-1.5 py-0.5 text-[10px] font-semibold">{r.name}</span> : null;
-                        })}
-                        {!(s.roles || []).length && <span className="text-ink-subtle">—</span>}
-                      </div>
-                    </td>
-                    <td className="px-3 py-3 font-semibold text-ink-secondary">
-                      {s.assigned_regions_codes?.join(', ') || 'Global (All Regions)'}
-                    </td>
-                    <td className="px-3 py-3 font-mono text-ink-muted">
-                      {s.allowed_ip_range || 'Any IP Address'}
-                    </td>
-                    <td className="px-3 py-3">
-                      {s.two_factor_enabled ? <span className="rounded bg-brand-success/10 text-ink-success px-1.5 py-0.5 text-[10px] font-semibold">ENABLED</span> : <span className="rounded bg-surface-muted text-ink-subtle px-1.5 py-0.5 text-[10px] font-semibold">DISABLED</span>}
-                    </td>
-                    <td className="px-3 py-3 text-right">
-                      <button onClick={() => setEditingStaff({ ...s })} className="text-ink-accent hover:opacity-70 font-semibold inline-flex items-center gap-1"><Pencil className="h-3.5 w-3.5" /> Edit</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {editingStaff && (
-            <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-              <div className="my-8 w-full max-w-lg bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
-                <div className="flex justify-between items-center pb-2 border-b border-edge-subtle">
-                  <h3 className="text-lg font-semibold text-ink-primary">Edit Permissions: {editingStaff.email}</h3>
-                  <button onClick={() => setEditingStaff(null)}><X className="h-5 w-5 text-brand-muted" /></button>
+      {/* Roles Display Grid */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {roles.map((r) => (
+          <div key={r.id} className="rounded-2xl border border-edge bg-white shadow-card p-5 flex flex-col justify-between hover:shadow-md transition-shadow">
+            <div>
+              <div className="flex justify-between items-start mb-2">
+                <div className="flex items-center gap-2">
+                  <span className={`p-2 rounded-lg ${r.name === 'Admin' ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                    <ShieldCheck className="h-4 w-4" />
+                  </span>
+                  <h4 className="text-base font-bold text-ink-primary">{r.name}</h4>
                 </div>
-                <div className="space-y-4 text-xs">
-                  <div className="grid grid-cols-2 gap-3">
-                    <label className="flex items-center gap-2 font-semibold text-ink-primary cursor-pointer"><input type="checkbox" checked={editingStaff.is_staff} onChange={(e) => setEditingStaff({ ...editingStaff, is_staff: e.target.checked })} className="accent-ink-primary" /> Staff Access</label>
-                    <label className="flex items-center gap-2 font-semibold text-ink-primary cursor-pointer"><input type="checkbox" checked={editingStaff.is_active} onChange={(e) => setEditingStaff({ ...editingStaff, is_active: e.target.checked })} className="accent-ink-primary" /> Active Account</label>
-                  </div>
-
-                  <div>
-                    <p className="font-semibold text-brand-muted mb-1 uppercase">ASSIGN ROLES</p>
-                    <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto border border-edge p-2 rounded-lg bg-surface-muted">
-                      {roles.map((r) => {
-                        const hasRole = editingStaff.roles.includes(r.id);
-                        return (
-                          <label key={r.id} className="flex items-center gap-1.5 cursor-pointer font-medium text-ink-secondary">
-                            <input type="checkbox" checked={hasRole} onChange={(e) => {
-                              const newRoles = e.target.checked ? [...editingStaff.roles, r.id] : editingStaff.roles.filter(x => x !== r.id);
-                              setEditingStaff({ ...editingStaff, roles: newRoles });
-                            }} className="accent-ink-primary" />
-                            {r.name}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="font-semibold text-brand-muted mb-1 uppercase">REGIONAL ACCESS SCOPE (COUNTRY MANAGER)</p>
-                    <div className="flex gap-4 p-2 border border-edge rounded-lg bg-surface-muted">
-                      {regions.map((r) => {
-                        const isAssigned = editingStaff.assigned_regions.includes(r.id);
-                        return (
-                          <label key={r.id} className="flex items-center gap-1.5 cursor-pointer font-semibold text-ink-secondary">
-                            <input type="checkbox" checked={isAssigned} onChange={(e) => {
-                              const newRegs = e.target.checked ? [...editingStaff.assigned_regions, r.id] : editingStaff.assigned_regions.filter(x => x !== r.id);
-                              setEditingStaff({ ...editingStaff, assigned_regions: newRegs });
-                            }} className="accent-ink-primary" />
-                            {r.code} ({r.name})
-                          </label>
-                        );
-                      })}
-                      {regions.length === 0 && <p className="text-ink-subtle">No regions populated.</p>}
-                    </div>
-                    <p className="text-[10px] text-ink-subtle mt-1">If no regions are selected, the user has global scope (can access UK &amp; India).</p>
-                  </div>
-
-                  <div>
-                    <p className="font-semibold text-brand-muted mb-1 uppercase">ALLOWED IP WHITELIST</p>
-                    <input placeholder="e.g. 127.0.0.1, 192.168.1.15" value={editingStaff.allowed_ip_range || ''} onChange={(e) => setEditingStaff({ ...editingStaff, allowed_ip_range: e.target.value })} className="w-full rounded-sm border border-edge p-2 text-xs font-mono" />
-                    <p className="text-[10px] text-ink-subtle mt-1">Comma-separated IP addresses. Leave empty to allow any connection.</p>
-                  </div>
-
-                  <div>
-                    <p className="font-semibold text-brand-muted mb-1 uppercase">SECURITY</p>
-                    <label className="flex items-center gap-1.5 cursor-pointer font-semibold text-ink-primary"><input type="checkbox" checked={editingStaff.two_factor_enabled} onChange={(e) => setEditingStaff({ ...editingStaff, two_factor_enabled: e.target.checked })} className="accent-ink-primary" /> Enforce Two-Factor Authentication (2FA)</label>
-                  </div>
-
-                  {editingStaff.current_devices?.length > 0 && (
-                    <div>
-                      <p className="font-semibold text-brand-muted mb-1 uppercase">ACTIVE LOGGED-IN SESSIONS ({editingStaff.current_devices.length})</p>
-                      <div className="space-y-1.5 max-h-24 overflow-y-auto border border-edge p-2 rounded-lg bg-surface-muted text-[10px] font-mono text-brand-muted">
-                        {editingStaff.current_devices.map((dev, idx) => (
-                          <div key={idx} className="flex justify-between border-b border-edge-subtle pb-1">
-                            <span>{dev.ip} · {dev.user_agent.substring(0, 30)}...</span>
-                            <span>{new Date(dev.last_active).toLocaleDateString()}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {error && <p className="rounded bg-brand-danger/10 p-2 text-xs text-brand-danger">{error}</p>}
-                  <button onClick={saveStaff} className="btn-primary w-full py-2.5 text-xs uppercase font-semibold">Save Settings</button>
-                </div>
+                {r.is_system && (
+                  <span className="rounded-full bg-surface-muted text-ink-muted border border-edge px-2.5 py-0.5 text-xs font-bold">SYSTEM ROLE</span>
+                )}
+              </div>
+              <p className="text-xs text-brand-muted mt-2 min-h-[36px]">
+                {r.description || (r.name === 'Admin' ? 'Full unrestricted platform control & management.' : 'Day-to-day store operations: orders, stock, enquiries.')}
+              </p>
+              <div className="mt-3 flex items-center gap-2">
+                <span className="rounded-md bg-brand-accent/10 text-ink-accent px-2 py-1 text-xs font-mono font-semibold">
+                  {r.permissions.length} Active Permissions
+                </span>
               </div>
             </div>
-          )}
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <div className="mb-2 flex justify-between items-center">
-            <p className="text-xs text-brand-muted">{roles.length} roles seeded in the registry</p>
-            <button onClick={() => setEditingRole({ name: '', description: '', permissions: [] })} className="btn-primary inline-flex items-center gap-1 px-3 py-1.5 text-xs uppercase"><Plus className="h-3.5 w-3.5" /> Create Custom Role</button>
-          </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
-            {roles.map((r) => (
-              <div key={r.id} className="rounded-lg border border-edge bg-white shadow-card p-4 flex flex-col justify-between">
-                <div>
-                  <div className="flex justify-between items-start mb-2">
-                    <h4 className="text-sm font-semibold text-ink-primary">{r.name}</h4>
-                    {r.is_system && <span className="rounded bg-surface-muted text-ink-muted px-1.5 py-0.5 text-[9px] font-semibold">SYSTEM</span>}
-                  </div>
-                  <p className="text-xs text-brand-muted min-h-[30px]">{r.description || 'No description provided.'}</p>
-                  <p className="mt-2 text-[10px] text-ink-accent font-semibold font-mono">{r.permissions.length} permission keys active</p>
-                </div>
-                <div className="mt-4 flex justify-end gap-2 border-t border-edge-subtle pt-3">
-                  <button onClick={() => setEditingRole({ ...r })} className="text-xs px-2.5 py-1.2 rounded border border-edge text-ink-primary hover:bg-surface-muted font-semibold uppercase inline-flex items-center gap-1"><Pencil className="h-3 w-3" /> Edit</button>
-                  {!r.is_system && (
-                    <button onClick={() => deleteRole(r)} className="text-xs px-2.5 py-1.2 rounded border border-red-200 text-ink-danger hover:bg-red-50 font-semibold uppercase inline-flex items-center gap-1"><X className="h-3 w-3" /> Delete</button>
-                  )}
-                </div>
+            <div className="mt-5 flex justify-end gap-2 border-t border-edge-subtle pt-3.5">
+              <button
+                onClick={() => setEditingRole({ ...r })}
+                className="text-xs px-3 py-1.5 rounded-lg border border-edge text-ink-primary hover:bg-surface-muted font-semibold inline-flex items-center gap-1 cursor-pointer"
+              >
+                <Pencil className="h-3 w-3" /> Configure Permissions
+              </button>
+              {!r.is_system && (
+                <button
+                  onClick={() => deleteRole(r)}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50 font-semibold inline-flex items-center gap-1 cursor-pointer"
+                >
+                  <X className="h-3 w-3" /> Delete
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Edit / Create Role Modal */}
+      {editingRole && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-edge p-6 shadow-2xl w-full max-w-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center pb-3 border-b border-edge">
+              <h3 className="text-lg font-bold text-ink-primary">{editingRole.id ? `Configure Role: ${editingRole.name}` : 'Create Custom Role'}</h3>
+              <button onClick={() => setEditingRole(null)} className="p-1 rounded-full hover:bg-surface-muted cursor-pointer">
+                <X className="h-5 w-5 text-brand-muted" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-sm">
+              <div className="grid gap-3">
+                <input
+                  placeholder="Role Name"
+                  value={editingRole.name}
+                  disabled={editingRole.is_system}
+                  onChange={(e) => setEditingRole({ ...editingRole, name: e.target.value })}
+                  className="w-full rounded-lg border border-edge p-2.5 text-sm font-semibold disabled:bg-surface-muted"
+                />
+                <textarea
+                  placeholder="Description of what this role does..."
+                  value={editingRole.description}
+                  onChange={(e) => setEditingRole({ ...editingRole, description: e.target.value })}
+                  className="w-full rounded-lg border border-edge p-2.5 text-sm"
+                  rows={2}
+                />
               </div>
-            ))}
-          </div>
 
-          {editingRole && (
-            <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-              <div className="my-8 w-full max-w-xl bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
-                <div className="flex justify-between items-center pb-2 border-b border-edge-subtle">
-                  <h3 className="text-lg font-semibold text-ink-primary">{editingRole.id ? 'Edit Role' : 'Create Role'}</h3>
-                  <button onClick={() => setEditingRole(null)}><X className="h-5 w-5 text-brand-muted" /></button>
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <p className="font-bold text-xs uppercase tracking-wider text-ink-primary">
+                    Permission Scope Matrix
+                  </p>
+                  <span className="text-xs font-mono text-ink-accent font-semibold">
+                    {editingRole.permissions.length} of {permCatalog.reduce((n, g) => n + g.permissions.length, 0)} Selected
+                  </span>
                 </div>
-                <div className="space-y-4 text-xs">
-                  <div className="grid gap-3">
-                    <input placeholder="Role Name" value={editingRole.name} disabled={editingRole.is_system} onChange={(e) => setEditingRole({ ...editingRole, name: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-sm disabled:bg-surface-muted" />
-                    <textarea placeholder="Description" value={editingRole.description} onChange={(e) => setEditingRole({ ...editingRole, description: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-xs" rows={2} />
-                  </div>
 
-                  <div>
-                    <p className="font-semibold text-brand-muted mb-2 uppercase">ASSIGN PERMISSIONS ({editingRole.permissions.length} SELECTED)</p>
-                    <div className="border border-edge rounded-lg max-h-60 overflow-y-auto p-3 bg-surface-muted grid gap-3 grid-cols-2">
-                      {/* Group permission keys by category prefix */}
-                      {['dashboard', 'products', 'inventory', 'orders', 'customers', 'content', 'marketing', 'reports', 'finance', 'staff', 'security'].map((cat) => {
-                        const items = permCatalog.filter(p => p.key.startsWith(cat + '.'));
-                        if (items.length === 0) return null;
-                        return (
-                          <div key={cat} className="space-y-1.5 col-span-2 md:col-span-1 border-b border-edge pb-2">
-                            <p className="font-semibold text-ink-accent uppercase text-[10px] tracking-wide">{cat} privileges</p>
-                            {items.map((p) => {
-                              const active = editingRole.permissions.includes(p.key);
-                              return (
-                                <label key={p.key} className="flex items-start gap-1.5 cursor-pointer font-medium text-ink-secondary leading-tight">
-                                  <input type="checkbox" checked={active} disabled={editingRole.is_system} onChange={(e) => {
-                                    const nextPerms = e.target.checked ? [...editingRole.permissions, p.key] : editingRole.permissions.filter(x => x !== p.key);
-                                    setEditingRole({ ...editingRole, permissions: nextPerms });
-                                  }} className="mt-0.5 accent-ink-primary" />
-                                  <span>
-                                    <span className="block text-[11px] font-semibold text-ink-primary">{p.key}</span>
-                                    <span className="block text-[9px] text-brand-muted">{p.label}</span>
-                                  </span>
-                                </label>
-                              );
+                <div className="grid max-h-80 grid-cols-1 gap-3 overflow-y-auto rounded-xl border border-edge bg-surface-muted/50 p-3 md:grid-cols-2">
+                  {permCatalog.map((group) => {
+                    const keys = group.permissions.map((p) => p.key);
+                    const allOn = keys.every((k) => editingRole.permissions.includes(k));
+                    return (
+                      <div key={group.group} className="space-y-2 rounded-xl border border-edge bg-white p-3 shadow-xs">
+                        <div className="flex items-center justify-between border-b border-edge-subtle pb-1.5">
+                          <p className="font-bold text-xs text-ink-primary">{group.group}</p>
+                          <button
+                            type="button"
+                            disabled={editingRole.is_system}
+                            onClick={() => setEditingRole({
+                              ...editingRole,
+                              permissions: allOn
+                                ? editingRole.permissions.filter((k) => !keys.includes(k))
+                                : [...new Set([...editingRole.permissions, ...keys])],
                             })}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {error && <p className="rounded bg-brand-danger/10 p-2 text-xs text-brand-danger">{error}</p>}
-                  {!editingRole.is_system && (
-                    <button onClick={saveRole} className="btn-primary w-full py-2.5 text-xs uppercase font-semibold">Save Role</button>
-                  )}
-                  {editingRole.is_system && (
-                    <p className="text-center text-ink-subtle font-semibold">System roles are read-only and cannot be mutated.</p>
-                  )}
+                            className="rounded-full border border-edge px-2 py-0.5 text-[11px] font-semibold text-ink-muted hover:border-ink-primary hover:text-ink-primary disabled:opacity-40"
+                          >
+                            {allOn ? 'Clear' : 'Select All'}
+                          </button>
+                        </div>
+                        {group.permissions.map((p) => {
+                          const active = editingRole.permissions.includes(p.key);
+                          return (
+                            <label key={p.key} className="flex items-start gap-2 cursor-pointer leading-snug py-0.5">
+                              <input
+                                type="checkbox"
+                                checked={active}
+                                disabled={editingRole.is_system}
+                                onChange={(e) => setEditingRole({
+                                  ...editingRole,
+                                  permissions: e.target.checked
+                                    ? [...editingRole.permissions, p.key]
+                                    : editingRole.permissions.filter((x) => x !== p.key),
+                                })}
+                                className="mt-0.5 h-3.5 w-3.5 accent-ink-primary rounded"
+                              />
+                              <span className="text-xs text-ink-secondary">{p.label}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
+
+              {error && <p className="rounded-lg bg-rose-50 border border-rose-200 p-2.5 text-xs font-semibold text-rose-700">{error}</p>}
+
+              <div className="flex gap-2 pt-2 border-t border-edge">
+                {!editingRole.is_system ? (
+                  <button onClick={saveRole} className="btn-primary flex-1 py-2.5 text-sm font-semibold rounded-lg cursor-pointer">
+                    Save Role Configuration
+                  </button>
+                ) : (
+                  <p className="flex-1 text-center text-xs font-semibold text-brand-muted py-2">
+                    System roles are pre-configured defaults.
+                  </p>
+                )}
+                <button onClick={() => setEditingRole(null)} className="px-4 py-2.5 border border-edge rounded-lg text-sm font-semibold text-ink-secondary hover:bg-surface-muted cursor-pointer">
+                  Close
+                </button>
+              </div>
             </div>
-          )}
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-/* ----------------------------------------------------------- ApprovalsTab */
-function ApprovalsTab({ authFetch }) {
-  const [activeSubTab, setActiveSubTab] = useState('pending'); // pending | resolved
-  const [requests, setRequests] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [rejectingReq, setRejectingReq] = useState(null);
-  const [rejectionReason, setRejectionReason] = useState('');
-  const [error, setError] = useState('');
-
-  const loadRequests = useCallback(() => {
-    setLoading(true);
-    authFetch('/api/admin/approval-requests/')
-      .then((r) => r.json())
-      .then((d) => setRequests(Array.isArray(d) ? d : d.results || []))
-      .catch(() => setRequests([]))
-      .finally(() => setLoading(false));
-  }, [authFetch]);
-
-  useEffect(() => { loadRequests(); }, [loadRequests]);
-
-  const handleApprove = (id) => {
-    setError('');
-    authFetch(`/api/admin/approval-requests/${id}/approve/`, { method: 'POST' })
-      .then((r) => r.json().then(d => ({ ok: r.ok, d })))
-      .then(({ ok, d }) => {
-        if (!ok) throw new Error(d.error || 'Approval failed.');
-        loadRequests();
-      })
-      .catch((e) => setError(e.message));
-  };
-
-  const handleReject = () => {
-    if (!rejectionReason.trim()) return;
-    setError('');
-    authFetch(`/api/admin/approval-requests/${rejectingReq.id}/reject/`, {
-      method: 'POST',
-      body: JSON.stringify({ rejection_reason: rejectionReason })
-    })
-    .then((r) => r.json().then(d => ({ ok: r.ok, d })))
-    .then(({ ok, d }) => {
-      if (!ok) throw new Error(d.error || 'Rejection failed.');
-      setRejectingReq(null);
-      setRejectionReason('');
-      loadRequests();
-    })
-    .catch((e) => setError(e.message));
-  };
-
-  if (loading) return <p className="text-sm text-brand-muted">Loading approval workflows...</p>;
-
-  const filtered = requests.filter(r => activeSubTab === 'pending' ? r.status === 'PENDING' : r.status !== 'PENDING');
-
+/* ------------------------------------------------------------- Security & Audit Log */
+function SecurityAndAuditTab({ authFetch, user, onSaved }) {
+  const [subTab, setSubTab] = useState('audit'); // audit | security
   return (
     <div className="space-y-4">
-      {/* Subtab Navigation */}
       <div className="flex gap-2 border-b border-edge-subtle pb-2">
-        <button onClick={() => setActiveSubTab('pending')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm transition-colors ${activeSubTab === 'pending' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Pending Queue</button>
-        <button onClick={() => setActiveSubTab('resolved')} className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-sm transition-colors ${activeSubTab === 'resolved' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>History log</button>
+        <button
+          onClick={() => setSubTab('audit')}
+          className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-md transition-colors ${subTab === 'audit' ? 'bg-ink-primary text-white shadow-xs' : 'text-ink-primary hover:bg-surface-muted'}`}
+        >
+          Audit Log Trail
+        </button>
+        <button
+          onClick={() => setSubTab('security')}
+          className={`px-4 py-1.5 text-xs font-semibold uppercase rounded-md transition-colors ${subTab === 'security' ? 'bg-ink-primary text-white shadow-xs' : 'text-ink-primary hover:bg-surface-muted'}`}
+        >
+          Security Center
+        </button>
       </div>
 
-      {error && <p className="rounded bg-brand-danger/10 p-2 text-xs text-brand-danger">{error}</p>}
-
-      <div className="space-y-3">
-        {filtered.map((req) => (
-          <div key={req.id} className="rounded-lg border border-edge bg-white p-5 space-y-3 shadow-card">
-            <div className="flex flex-wrap justify-between items-start gap-2 border-b border-edge-subtle pb-2">
-              <div>
-                <span className="rounded bg-amber-50 text-ink-accent px-2 py-0.5 text-[9px] font-semibold uppercase">{req.request_type}</span>
-                <h4 className="text-sm font-semibold text-ink-primary mt-1">{req.summary}</h4>
-                <p className="text-[10px] text-brand-muted mt-0.5">Submitted by <span className="font-semibold text-ink-primary">{req.requester_email}</span> on {formatDateTime(req.created_at)}</p>
-              </div>
-              <span className={`rounded-xs px-2 py-0.5 text-[10px] font-semibold ${req.status === 'PENDING' ? 'bg-amber-50 text-ink-accent' : req.status === 'APPROVED' ? 'bg-brand-success/10 text-ink-success' : 'bg-red-50 text-ink-danger'}`}>
-                {req.status}
-              </span>
-            </div>
-
-            <div className="grid gap-2 sm:grid-cols-2 text-xs text-brand-muted p-3 bg-surface-muted rounded-md border border-edge-subtle font-mono">
-              <div>
-                <p className="font-semibold text-ink-subtle uppercase text-[9px] tracking-wide mb-0.5">Threshold Details</p>
-                <pre className="text-[10px] leading-tight overflow-x-auto whitespace-pre-wrap">{JSON.stringify(req.details, null, 2)}</pre>
-              </div>
-              <div>
-                <p className="font-semibold text-ink-subtle uppercase text-[9px] tracking-wide mb-0.5">Action payload</p>
-                <pre className="text-[10px] leading-tight overflow-x-auto whitespace-pre-wrap">{JSON.stringify(req.payload, null, 2)}</pre>
-              </div>
-            </div>
-
-            {req.status === 'PENDING' ? (
-              <div className="flex justify-end gap-2 pt-1">
-                <button onClick={() => setRejectingReq(req)} className="text-xs px-4 py-2 border border-red-200 text-ink-danger hover:bg-red-50 font-semibold rounded-sm uppercase flex items-center gap-1"><X className="h-3.5 w-3.5" /> Reject</button>
-                <button onClick={() => handleApprove(req.id)} className="text-xs px-4 py-2 bg-ink-success text-white hover:bg-ink-success/90 font-semibold rounded-sm uppercase flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5" /> Approve &amp; Execute</button>
-              </div>
-            ) : (
-              <div className="text-[10px] text-brand-muted border-t border-edge-subtle pt-2 flex flex-wrap gap-x-4">
-                <span>Resolved by: <span className="font-semibold text-ink-primary">{req.approver_email || 'system'}</span></span>
-                {req.resolved_at && <span>Resolved on: {formatDateTime(req.resolved_at)}</span>}
-                {req.rejection_reason && <span className="block w-full text-ink-danger mt-1 font-semibold">Rejection reason: {req.rejection_reason}</span>}
-              </div>
-            )}
-          </div>
-        ))}
-        {filtered.length === 0 && <p className="text-center py-8 text-xs text-brand-muted">No requests found in this queue.</p>}
-      </div>
-
-      {rejectingReq && (
-        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-          <div className="w-full max-w-md bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
-            <h3 className="text-lg font-semibold text-ink-primary">Reject Approval Request</h3>
-            <div className="space-y-3 text-xs">
-              <p className="text-brand-muted">Please specify the reason for rejecting this change:</p>
-              <textarea rows={3} value={rejectionReason} onChange={(e) => setRejectionReason(e.target.value)} placeholder="Provide rejection feedback..." className="w-full rounded-sm border border-edge p-2.5 text-xs" />
-              <div className="flex gap-2">
-                <button onClick={handleReject} disabled={!rejectionReason.trim()} className="btn-primary flex-1 py-2.5 text-xs bg-red-700 uppercase font-semibold">Confirm Reject</button>
-                <button onClick={() => { setRejectingReq(null); setRejectionReason(''); }} className="flex-1 rounded-sm border border-edge py-2.5 text-xs font-semibold uppercase">Cancel</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {subTab === 'audit' && <AuditTab authFetch={authFetch} />}
+      {subTab === 'security' && <SecurityCenterTab authFetch={authFetch} user={user} onSaved={onSaved} />}
     </div>
   );
 }
@@ -7737,6 +7614,7 @@ function AuditTab({ authFetch }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [totalCount, setTotalCount] = useState(0);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -7747,6 +7625,7 @@ function AuditTab({ authFetch }) {
 
   const loadLogs = useCallback(() => {
     setLoading(true);
+    setError('');
     const params = new URLSearchParams({
       page,
       page_size: pageSize,
@@ -7755,13 +7634,24 @@ function AuditTab({ authFetch }) {
     if (filterAction !== 'ALL') params.append('action', filterAction);
     if (filterActor.trim()) params.append('actor_email', filterActor);
     
+    const readJson = async (response) => {
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.detail || data.error || `Audit request failed (${response.status}).`);
+      }
+      return data;
+    };
     Promise.all([
-      authFetch(`/api/admin/audit-logs/?${params.toString()}`).then((r) => r.json()).catch(() => ({ results: [], count: 0 })),
-      authFetch('/api/admin/audit-logs/actions/').then((r) => r.json()).catch(() => []),
+      authFetch(`/api/admin/audit-logs/?${params.toString()}`).then(readJson),
+      authFetch('/api/admin/audit-logs/actions/').then(readJson),
     ]).then(([lData, aData]) => {
       setLogs(lData.results || []);
       setTotalCount(lData.count || 0);
       setActions(aData || []);
+    }).catch((requestError) => {
+      setLogs([]);
+      setTotalCount(0);
+      setError(requestError.message || 'Unable to load audit logs.');
     }).finally(() => setLoading(false));
   }, [authFetch, page, pageSize, debouncedQuery, filterAction, filterActor]);
 
@@ -7773,26 +7663,31 @@ function AuditTab({ authFetch }) {
 
   return (
     <div className="space-y-4">
+      {error && (
+        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert">
+          {error} Check that your staff role includes the “Read the audit log” permission.
+        </div>
+      )}
       {/* Filters bar */}
       <div className="grid gap-3 rounded-md border border-edge bg-white p-3 md:grid-cols-[1fr_200px_200px_auto]">
         <label className="relative block">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-muted" />
-          <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search audit summaries..." className="w-full rounded-sm border border-edge py-2 pl-9 pr-3 text-xs focus:outline-none" />
+          <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search audit summaries..." className="w-full rounded-sm border border-edge py-2 pl-9 pr-3 text-sm focus:outline-none" />
         </label>
-        <select value={filterAction} onChange={(e) => setFilterAction(e.target.value)} className="rounded-sm border border-edge px-3 py-2 text-xs bg-white focus:outline-none">
+        <select value={filterAction} onChange={(e) => setFilterAction(e.target.value)} className="rounded-sm border border-edge px-3 py-2 text-sm bg-white focus:outline-none">
           <option value="ALL">All Actions</option>
           {actions.map((act) => <option key={act} value={act}>{act}</option>)}
         </select>
-        <input value={filterActor} onChange={(e) => setFilterActor(e.target.value)} placeholder="Filter actor email" className="rounded-sm border border-edge px-3 py-2 text-xs focus:outline-none" />
-        <button onClick={loadLogs} className="btn-primary px-4 py-2 text-xs uppercase font-semibold">Apply</button>
+        <input value={filterActor} onChange={(e) => setFilterActor(e.target.value)} placeholder="Filter actor email" className="rounded-sm border border-edge px-3 py-2 text-sm focus:outline-none" />
+        <button onClick={loadLogs} className="btn-primary px-4 py-2 text-sm uppercase font-semibold">Apply</button>
       </div>
 
       {loading && logs.length === 0 ? (
         <p className="text-sm text-brand-muted">Querying audit logs trail...</p>
       ) : (
         <div className="overflow-x-auto rounded-md border border-edge bg-white shadow-card">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-surface-muted text-[10px] font-medium uppercase tracking-wide text-ink-muted border-b border-edge">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-surface-muted text-[12px] font-medium uppercase tracking-wide text-ink-muted border-b border-edge">
               <tr>
                 <th className="px-3 py-3">Timestamp</th>
                 <th className="px-3 py-3">Actor</th>
@@ -7805,15 +7700,15 @@ function AuditTab({ authFetch }) {
             <tbody>
               {logs.map((log) => (
                 <tr key={log.id} className="cursor-pointer border-t border-edge-subtle hover:bg-surface-muted" onClick={() => setSelectedLog(log)}>
-                  <td className="px-3 py-3 font-mono text-[10px] text-brand-muted">{formatDateTime(log.created_at)}</td>
+                  <td className="px-3 py-3 font-mono text-[12px] text-brand-muted">{formatDateTime(log.created_at)}</td>
                   <td className="px-3 py-3 font-semibold text-ink-primary">{log.actor_email}</td>
-                  <td className="px-3 py-3 font-mono text-[10px]"><span className="rounded bg-surface-muted px-1.5 py-0.5 text-ink-accent">{log.action}</span></td>
-                  <td className="px-3 py-3 text-ink-muted font-mono text-[10px]">{log.target_type} #{log.target_id}</td>
+                  <td className="px-3 py-3 font-mono text-[12px]"><span className="rounded bg-surface-muted px-1.5 py-0.5 text-ink-accent">{log.action}</span></td>
+                  <td className="px-3 py-3 text-ink-muted font-mono text-[12px]">{log.target_type} #{log.target_id}</td>
                   <td className="px-3 py-3 font-semibold text-ink-primary truncate max-w-[200px]">{log.summary}</td>
                   <td className="px-3 py-3 font-mono text-ink-muted">{log.ip_address}</td>
                 </tr>
               ))}
-              {logs.length === 0 && <tr><td colSpan={6} className="px-3 py-8 text-center text-brand-muted text-xs">No audit logs matching query parameters.</td></tr>}
+              {logs.length === 0 && <tr><td colSpan={6} className="px-3 py-8 text-center text-brand-muted text-sm">No audit logs matching query parameters.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -7836,7 +7731,7 @@ function AuditTab({ authFetch }) {
               <h3 className="text-lg font-semibold text-ink-primary">Audit Log Details</h3>
               <button onClick={() => setSelectedLog(null)}><X className="h-5 w-5 text-brand-muted" /></button>
             </div>
-            <div className="space-y-3 text-xs">
+            <div className="space-y-3 text-sm">
               <p><span className="font-semibold uppercase text-brand-muted">Timestamp:</span> {formatDateTime(selectedLog.created_at)}</p>
               <p><span className="font-semibold uppercase text-brand-muted">Actor:</span> {selectedLog.actor_email} (IP: {selectedLog.ip_address})</p>
               <p><span className="font-semibold uppercase text-brand-muted">Action:</span> {selectedLog.action}</p>
@@ -7847,12 +7742,12 @@ function AuditTab({ authFetch }) {
               </div>
               <div>
                 <p className="font-semibold text-brand-muted mb-1">DEVICE USER AGENT</p>
-                <p className="font-mono text-[10px] text-ink-muted bg-surface-muted p-2 rounded-lg border border-edge-subtle">{selectedLog.user_agent}</p>
+                <p className="font-mono text-[12px] text-ink-muted bg-surface-muted p-2 rounded-lg border border-edge-subtle">{selectedLog.user_agent}</p>
               </div>
               {selectedLog.changes && Object.keys(selectedLog.changes).length > 0 && (
                 <div>
                   <p className="font-semibold text-brand-muted mb-1">CHANGESET DIFF (BEFORE → AFTER)</p>
-                  <div className="space-y-1 max-h-40 overflow-y-auto bg-surface-muted p-2 rounded-lg border border-edge-subtle font-mono text-[10px] mb-2">
+                  <div className="space-y-1 max-h-40 overflow-y-auto bg-surface-muted p-2 rounded-lg border border-edge-subtle font-mono text-[12px] mb-2">
                     {Object.entries(selectedLog.changes).map(([field, val]) => {
                       const before = Array.isArray(val) ? val[0] : '—';
                       const after = Array.isArray(val) ? val[1] : val;
@@ -7866,24 +7761,6 @@ function AuditTab({ authFetch }) {
                     })}
                   </div>
                   
-                  <button
-                    onClick={() => {
-                      if (confirm("Are you sure you want to revert these target fields to their previous state?")) {
-                        authFetch(`/api/admin/audit-logs/${selectedLog.id}/rollback/`, { method: 'POST' })
-                          .then((r) => r.json().then(d => ({ ok: r.ok, d })))
-                          .then(({ ok, d }) => {
-                            if (!ok) throw new Error(d.error || 'Rollback failed.');
-                            alert(d.message || 'Rollback successful!');
-                            setSelectedLog(null);
-                            loadLogs();
-                          })
-                          .catch((e) => alert(e.message));
-                      }
-                    }}
-                    className="w-full mt-2 py-2 bg-brand-accent hover:bg-brand-accent/90 text-white font-semibold rounded-lg uppercase text-[10px]"
-                  >
-                    Rollback Configuration Changes
-                  </button>
                 </div>
               )}
             </div>
@@ -7946,49 +7823,49 @@ function SecurityCenterTab({ authFetch, user, onSaved }) {
   };
 
   return (
-    <div className="space-y-6 text-xs bg-white rounded-lg border border-edge p-5 shadow-card">
+    <div className="space-y-6 text-sm bg-white rounded-lg border border-edge p-5 shadow-card">
       <div>
         <h3 className="text-sm font-semibold text-ink-primary mb-1 uppercase">Account Security Status</h3>
         <p className="text-brand-muted mb-3">Manage Two-Factor Authentication and whitelist range settings for your staff profile.</p>
         
-        {success && <p className="rounded bg-brand-success/10 p-2.5 text-xs text-ink-success font-semibold mb-3">{success}</p>}
-        {error && <p className="rounded bg-brand-danger/10 p-2.5 text-xs text-brand-danger font-semibold mb-3">{error}</p>}
+        {success && <p className="rounded bg-brand-success/10 p-2.5 text-sm text-ink-success font-semibold mb-3">{success}</p>}
+        {error && <p className="rounded bg-brand-danger/10 p-2.5 text-sm text-brand-danger font-semibold mb-3">{error}</p>}
         
         <div className="space-y-3">
           <label className="flex items-start gap-3 rounded-md border border-edge bg-white shadow-card p-4 cursor-pointer">
             <input type="checkbox" checked={user.two_factor_enabled} disabled={saving} onChange={handleToggle2FA} className="mt-0.5 h-4 w-4 accent-ink-primary" />
             <span>
               <span className="block text-sm font-semibold text-ink-primary">Enable 2-Step OTP Authentication</span>
-              <span className="block text-xs text-brand-muted mt-0.5">Enforces a 6-digit OTP code sent to your registered email ({user.email}) during sign-in.</span>
+              <span className="block text-sm text-brand-muted mt-0.5">Enforces a 6-digit OTP code sent to your registered email ({user.email}) during sign-in.</span>
             </span>
           </label>
           
           {user.allowed_ip_range && (
             <div className="rounded-md border border-edge bg-surface-muted p-4 font-mono">
-              <span className="block text-[10px] font-semibold text-ink-subtle uppercase mb-1">Active IP Whitelist restrictions</span>
+              <span className="block text-[12px] font-semibold text-ink-subtle uppercase mb-1">Active IP Whitelist restrictions</span>
               <span className="text-ink-primary font-semibold">{user.allowed_ip_range}</span>
-              <p className="text-[10px] text-ink-subtle mt-1 font-sans">You are restricted to connecting only from these IP addresses. Contact Super Admin to update your IP scope.</p>
+              <p className="text-[12px] text-ink-subtle mt-1 font-sans">You are restricted to connecting only from these IP addresses. Contact Super Admin to update your IP scope.</p>
             </div>
           )}
         </div>
       </div>
 
       <div className="border-t border-edge-subtle pt-4">
-        <h3 className="text-xs font-semibold text-ink-primary mb-1 uppercase">Active login sessions</h3>
+        <h3 className="text-sm font-semibold text-ink-primary mb-1 uppercase">Active login sessions</h3>
         <p className="text-brand-muted mb-3">These devices are currently logged in. Terminating other sessions logs out all other browsers.</p>
         
         <div className="space-y-2 mb-4">
           {(user.current_devices || []).map((dev, idx) => {
             const isCurrent = dev.id === currentSessionId;
             return (
-              <div key={idx} className="flex justify-between items-center p-3 rounded-lg border border-edge-subtle bg-surface-muted font-mono text-[10px]">
+              <div key={idx} className="flex justify-between items-center p-3 rounded-lg border border-edge-subtle bg-surface-muted font-mono text-[12px]">
                 <div className="space-y-0.5">
                   <span className="font-semibold text-ink-primary">{dev.ip}</span>
                   <span className="block text-ink-subtle font-sans">{dev.user_agent.substring(0, 50)}...</span>
                 </div>
                 <div className="text-right">
                   {isCurrent ? (
-                    <span className="rounded bg-surface-muted text-ink-accent px-1.5 py-0.5 text-[9px] font-semibold font-sans">CURRENT SESSION</span>
+                    <span className="rounded bg-surface-muted text-ink-accent px-1.5 py-0.5 text-[13px] font-semibold font-sans">CURRENT SESSION</span>
                   ) : (
                     <span className="text-ink-subtle font-sans">Active: {new Date(dev.last_active).toLocaleDateString()}</span>
                   )}
@@ -8010,24 +7887,37 @@ function SecurityCenterTab({ authFetch, user, onSaved }) {
 
 export default function AdminPage() {
   const dispatch = useDispatch();
-  const { user, access } = useSelector((s) => s.auth);
+  const { user, sessionChecked } = useSelector((s) => s.auth);
   const authFetch = useAuthFetch();
   const [section, setSection] = useState('home');
+  const [sectionTab, setSectionTab] = useState('');
+
+  const navigateAdmin = useCallback((requestedSection, requestedTab = '') => {
+    const legacy = LEGACY_ADMIN_ROUTES[requestedSection];
+    const nextSection = legacy?.section || (ADMIN_SECTION_KEYS.has(requestedSection) ? requestedSection : 'home');
+    const nextTab = requestedTab || legacy?.tab || '';
+    setSection(nextSection);
+    setSectionTab(nextTab);
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams();
+      params.set('section', nextSection);
+      if (nextTab) params.set('tab', nextTab);
+      window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
-      const sec = params.get('section');
-      if (sec) setSection(sec);
+      navigateAdmin(params.get('section') || 'home', params.get('tab') || '');
     }
-  }, []);
+  }, [navigateAdmin]);
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [regions, setRegions] = useState([]);
   const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
 
-  useEffect(() => { if (access && !user) dispatch(fetchProfile()); }, [access, user, dispatch]);
   // Lock body scroll while mobile drawer is open
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -8046,6 +7936,10 @@ export default function AdminPage() {
 
   const isAdmin = user && (user.is_staff || user.is_superuser);
 
+  if (!sessionChecked) {
+    return <StoreShell showFooter={false}><div className="mx-auto max-w-2xl px-4 py-20 text-center text-sm text-ink-muted">Checking your session…</div></StoreShell>;
+  }
+
   if (!user) {
     return (
       <StoreShell showFooter={false}>
@@ -8053,7 +7947,7 @@ export default function AdminPage() {
           <ShieldAlert className="mx-auto mb-3 h-10 w-10 text-brand-muted" />
           <h1 className="mb-2 text-xl font-semibold text-ink-primary">Admin access</h1>
           <p className="mb-4 text-sm text-brand-muted">Please log in with an administrator account.</p>
-          <Link href="/account" className="btn-primary inline-flex px-5 py-2.5 text-xs uppercase">Go to login</Link>
+          <Link href="/account" className="btn-primary inline-flex px-5 py-2.5 text-sm uppercase">Go to login</Link>
         </div>
       </StoreShell>
     );
@@ -8080,7 +7974,7 @@ export default function AdminPage() {
         </span>
         <div className="leading-tight">
           <span className="block text-sm font-semibold text-ink-primary">Admin</span>
-          <span className="block text-[10px] text-brand-muted">Sclero Proteins</span>
+          <span className="block text-[12px] text-brand-muted">Sclero Proteins</span>
         </div>
       </div>
       <div className="flex-1 overflow-y-auto">
@@ -8090,7 +7984,7 @@ export default function AdminPage() {
               <p className="kicker px-2 pb-1 pt-3">{group.title}</p>
             )}
             {group.items.map((n) => (
-              <button key={n.key} onClick={() => { setSection(n.key); if (isMobile) onClose(); }}
+              <button key={n.key} onClick={() => { navigateAdmin(n.key); if (isMobile) onClose(); }}
                 className={`relative flex w-full items-center gap-2.5 rounded-sm px-2.5 py-2 text-[13px] font-medium transition-colors ${
                   section === n.key ? 'bg-surface-muted text-ink-primary' : 'text-ink-secondary hover:bg-surface-muted hover:text-ink-primary'
                 }`}>
@@ -8134,7 +8028,7 @@ export default function AdminPage() {
         <main className="flex-1 min-w-0 py-4 pr-4 pl-4 sm:py-6 sm:pr-6 sm:pl-6 lg:py-8 lg:pr-8 md:pl-[280px] lg:pl-[288px] space-y-6">
           {/* Top Control Bar for Mobile (sticky) */}
         <div className="sticky top-[65px] z-20 -mx-4 sm:-mx-6 mb-3 flex items-center justify-between gap-3 border-b border-edge bg-white/95 px-4 sm:px-6 py-2.5 backdrop-blur md:hidden">
-          <button onClick={() => setMobileMenuOpen(true)} aria-label="Open admin menu" className="inline-flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-sm border border-edge bg-white px-3 text-xs font-semibold text-ink-primary">
+          <button onClick={() => setMobileMenuOpen(true)} aria-label="Open admin menu" className="inline-flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-sm border border-edge bg-white px-3 text-sm font-semibold text-ink-primary">
             <MenuIcon className="h-5 w-5" />
             <span className="sr-only sm:not-sr-only">Menu</span>
           </button>
@@ -8148,46 +8042,33 @@ export default function AdminPage() {
             </div>
           </div>
 
-          {/* 'home' + 'reports' folded into 'analytics' per spec 2026-06-24. */}
-          {section === 'orders' && <OrdersTab authFetch={authFetch} />}
-          {section === 'drafts' && <OrdersTab authFetch={authFetch} initialStatus="PENDING" title="draft orders" />}
-          {section === 'abandoned' && <AbandonedTab authFetch={authFetch} />}
+          {/* The eight sections. Former sidebar entries now live as tabs inside
+              these (see the *Section wrappers above), so there is one obvious
+              place to find each job. */}
+          {section === 'home' && <DashboardSection authFetch={authFetch} go={navigateAdmin} initialTab={sectionTab} />}
+          {section === 'orders' && <OrdersSection authFetch={authFetch} initialTab={sectionTab} />}
           {section === 'products' && <ProductsTab authFetch={authFetch} regions={regions} categories={categories} />}
-          {section === 'collections' && <CollectionsTab authFetch={authFetch} />}
-          {/* Bundles tab removed per spec 2026-06-24 (deprecated in favour of Collections). */}
-          {section === 'discounts' && <DiscountsTab authFetch={authFetch} regions={regions} />}
-          {section === 'payments' && <PaymentsTab authFetch={authFetch} regions={regions} />}
-          {section === 'emails' && <EmailsTab authFetch={authFetch} regions={regions} />}
-          {section === 'shipping' && <ShippingTab authFetch={authFetch} regions={regions} />}
+          {section === 'categories' && <CollectionsTab authFetch={authFetch} />}
+          {section === 'customers' && <CustomersSection authFetch={authFetch} />}
+          {section === 'content' && <ContentOverviewTab authFetch={authFetch} go={navigateAdmin} />}
+          {section === 'staff' && (
+            <StaffSection
+              authFetch={authFetch}
+              regions={regions}
+              user={user}
+              onProfileSaved={() => dispatch(fetchProfile())}
+              initialTab={sectionTab}
+            />
+          )}
+          {section === 'settings' && <SettingsTab authFetch={authFetch} regions={regions} initialTab={sectionTab} />}
 
-          {/* New Expanded Tabs */}
-          {section === 'customers' && <CustomersTab authFetch={authFetch} />}
-          {section === 'segments' && <SegmentsTab authFetch={authFetch} />}
-          {section === 'support' && <SupportTab authFetch={authFetch} />}
-          {section === 'integrations' && <IntegrationsTab authFetch={authFetch} />}
-          {section === 'glossary' && <GlossaryTab authFetch={authFetch} />}
-          {section === 'faq' && <FAQTab authFetch={authFetch} />}
-          {/* hero-banners merged into 'pages' (Pages & Banners) per spec 2026-06-24. */}
-          {section === 'content' && <ContentOverviewTab authFetch={authFetch} go={setSection} />}
+          {/* Content sub-pages, reached from the Content overview rather than
+              the sidebar. */}
           {section === 'pages' && <PagesAndBannersTab authFetch={authFetch} />}
           {section === 'blogs' && <BlogsTab authFetch={authFetch} />}
-          {section === 'home' && <HomeTab authFetch={authFetch} go={setSection} />}
-          {section === 'analytics' && <AnalyticsAndReportsTab authFetch={authFetch} />}
-          {section === 'settings' && <SettingsTab authFetch={authFetch} regions={regions} />}
-
-          {/* Enterprise Added Modules */}
-          {section === 'reviews' && <ReviewsTab authFetch={authFetch} />}
-          {section === 'newsletter' && <NewsletterTab authFetch={authFetch} />}
+          {section === 'glossary' && <GlossaryTab authFetch={authFetch} />}
+          {section === 'faq' && <FAQTab authFetch={authFetch} />}
           {section === 'navigation' && <NavigationTab authFetch={authFetch} regions={regions} />}
-          {section === 'media' && <MediaLibraryTab authFetch={authFetch} />}
-          {section === 'theme' && <ThemeTab authFetch={authFetch} />}
-          {section === 'cookie-consent' && <CookieConsentTab authFetch={authFetch} />}
-
-          {/* Enterprise & Security Tabs */}
-          {section === 'staff' && <StaffTab authFetch={authFetch} regions={regions} />}
-          {section === 'approvals' && <ApprovalsTab authFetch={authFetch} />}
-          {section === 'audit' && <AuditTab authFetch={authFetch} />}
-          {section === 'security' && <SecurityCenterTab authFetch={authFetch} user={user} onSaved={() => dispatch(fetchProfile())} />}
         </main>
       </div>
     </StoreShell>

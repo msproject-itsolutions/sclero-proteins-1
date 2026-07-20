@@ -12,6 +12,7 @@ media/
 staticfiles/
 *.pdf
 *.log
+secrets/
 
 # Node / Frontend
 node_modules/
@@ -33,6 +34,7 @@ yarn-error.log*
 
 # Local tooling / agent artifacts
 .claude/
+.codex/
 .playwright-mcp/
 .agents/
 

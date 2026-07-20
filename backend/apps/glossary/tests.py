@@ -2,7 +2,7 @@ from django.test import TestCase
 from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase
 from rest_framework import status
-from .models import GlossaryTerm
+from .models import GeneralFAQ, GlossaryTerm
 
 User = get_user_model()
 
@@ -119,8 +119,6 @@ class GlossaryAPITest(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertEqual(GlossaryTerm.objects.count(), 1)
 
-
-from .models import GeneralFAQ
 
 class GeneralFAQModelTest(TestCase):
     def test_create_general_faq(self):

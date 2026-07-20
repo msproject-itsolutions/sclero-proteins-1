@@ -14,3 +14,4 @@ pyotp==2.10.0
 qrcode[pil]==8.2
 geoip2==5.2.0
 sentry-sdk==2.63.0
+pywebpush==2.3.0

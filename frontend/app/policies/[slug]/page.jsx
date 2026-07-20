@@ -144,11 +144,11 @@ const POLICIES = {
     ],
   },
   about: {
-    title: 'About Sclero Proteins',
+    title: 'Our Story',
     lastUpdated: 'June 23, 2026',
     icon: HeartPulse,
-    metaTitle: 'About Us | Sclero Proteins Ltd',
-    metaDesc: 'Learn about Sclero Proteins, our science-backed formulations, and GMP standards.',
+    metaTitle: 'Our Story | Sclero Proteins Ltd',
+    metaDesc: 'Learn the story behind Sclero Proteins and our more human, trust-led approach to wellness.',
     sections: [
       {
         heading: 'Our Vision',
@@ -205,7 +205,7 @@ export default async function PolicyPage({ params }) {
   return (
     <StoreShell>
       <div className="bg-surface-muted py-16 md:py-20 border-b border-edge">
-        <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+        <div className="container-page">
           <div className="flex items-center gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-md border border-edge bg-surface text-brand-accent">
               <IconComponent className="h-6 w-6" />
@@ -222,7 +222,7 @@ export default async function PolicyPage({ params }) {
         </div>
       </div>
 
-      <div className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8">
+      <div className="container-page py-12">
         <div className="grid grid-cols-1 gap-10 md:grid-cols-12">
           
           {/* Policy Links Navigation */}

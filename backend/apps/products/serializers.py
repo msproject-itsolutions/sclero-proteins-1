@@ -2,8 +2,9 @@ from rest_framework import serializers
 from django.db.models import Avg, Sum
 from apps.regions.models import Warehouse
 from apps.inventory.models import StockLevel
+from .pricing import resolve_price, resolve_variant_price
 from .models import (
-    Product, ProductRegionConfig, ProductMedia, ProductReview, Category, ProductLandingPage,
+    Product, ProductVariant, ProductRegionConfig, ProductMedia, ProductReview, Category, ProductLandingPage,
     Bundle, BundleItem, BundleRegionConfig,
 )
 
@@ -14,6 +15,21 @@ class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
         fields = ['id', 'name', 'slug', 'description', 'display_order', 'product_count', 'image_url']
+
+
+class ProductVariantSerializer(serializers.ModelSerializer):
+    price = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProductVariant
+        fields = [
+            'id', 'sku', 'name', 'option_name', 'option_value',
+            'price', 'price_gbp', 'price_inr', 'stock_qty', 'is_active', 'sort_order'
+        ]
+
+    def get_price(self, obj):
+        region = self.context.get('region')
+        return resolve_variant_price(obj, region) if region else None
 
 
 class ProductMediaSerializer(serializers.ModelSerializer):
@@ -51,10 +67,11 @@ class ProductListSerializer(serializers.ModelSerializer):
     average_rating = serializers.SerializerMethodField()
     thumbnail = serializers.SerializerMethodField()
     categories = CategorySerializer(many=True, read_only=True)
+    variants = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
-        fields = ['id', 'sku', 'name', 'price', 'promotional_price', 'stock_available', 'average_rating', 'thumbnail', 'categories']
+        fields = ['id', 'sku', 'name', 'price', 'promotional_price', 'stock_available', 'average_rating', 'thumbnail', 'categories', 'variants']
 
     def get_region(self):
         return self.context.get('region')
@@ -63,32 +80,51 @@ class ProductListSerializer(serializers.ModelSerializer):
         region = self.get_region()
         if not region:
             return None
-        config = obj.regional_configs.filter(region=region).first()
-        return config.price if config else None
+        if hasattr(obj, '_public_region_configs'):
+            configs = obj._public_region_configs
+            return resolve_price(obj, region, config=configs[0] if configs else None)[0]
+        return resolve_price(obj, region)[0]
 
     def get_promotional_price(self, obj):
         region = self.get_region()
         if not region:
             return None
-        config = obj.regional_configs.filter(region=region).first()
-        return config.promotional_price if config else None
+        if hasattr(obj, '_public_region_configs'):
+            configs = obj._public_region_configs
+            return resolve_price(obj, region, config=configs[0] if configs else None)[1]
+        return resolve_price(obj, region)[1]
 
     def get_stock_available(self, obj):
         region = self.get_region()
         if not region:
             return 0
-        # Sum of available stock across all warehouses of this region
+        prefetched = getattr(obj, '_public_region_stock', None)
+        if prefetched is not None:
+            return sum(row.available for row in prefetched)
         warehouses = Warehouse.objects.filter(region=region, is_active=True)
-        stock_sum = StockLevel.objects.filter(product=obj, warehouse__in=warehouses).aggregate(total=Sum('available'))['total']
-        return stock_sum or 0
+        return StockLevel.objects.filter(
+            product=obj, warehouse__in=warehouses,
+        ).aggregate(total=Sum('available'))['total'] or 0
 
     def get_average_rating(self, obj):
-        rating = obj.reviews.filter(is_approved=True).aggregate(avg=Avg('rating'))['avg']
+        prefetched = getattr(obj, '_public_reviews', None)
+        if prefetched is not None:
+            ratings = [review.rating for review in prefetched]
+            rating = sum(ratings) / len(ratings) if ratings else None
+        else:
+            rating = obj.reviews.filter(is_approved=True).aggregate(avg=Avg('rating'))['avg']
         return round(rating, 1) if rating else 5.0
 
     def get_thumbnail(self, obj):
-        media = obj.media.filter(media_type='IMAGE').first()
+        prefetched = getattr(obj, '_public_images', None)
+        media = prefetched[0] if prefetched else obj.media.filter(media_type='IMAGE').first()
         return media.file_url if media else None
+
+    def get_variants(self, obj):
+        variants = getattr(obj, '_public_variants', None)
+        if variants is None:
+            variants = obj.variants.filter(is_active=True).order_by('sort_order', 'id')
+        return ProductVariantSerializer(variants, many=True, context=self.context).data
 
 
 class ProductDetailSerializer(serializers.ModelSerializer):
@@ -99,6 +135,7 @@ class ProductDetailSerializer(serializers.ModelSerializer):
     media = ProductMediaSerializer(many=True, read_only=True)
     reviews = serializers.SerializerMethodField()
     categories = CategorySerializer(many=True, read_only=True)
+    variants = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -106,7 +143,7 @@ class ProductDetailSerializer(serializers.ModelSerializer):
             'id', 'sku', 'name', 'hsn_code', 'description', 'benefits',
             'ingredients', 'nutrition_facts', 'faq', 'dietary_tags', 'short_benefit', 'price',
             'promotional_price', 'stock_available', 'average_rating',
-            'media', 'reviews', 'categories'
+            'media', 'reviews', 'categories', 'variants'
         ]
 
     def get_region(self):
@@ -116,31 +153,54 @@ class ProductDetailSerializer(serializers.ModelSerializer):
         region = self.get_region()
         if not region:
             return None
-        config = obj.regional_configs.filter(region=region).first()
-        return config.price if config else None
+        if hasattr(obj, '_public_region_configs'):
+            configs = obj._public_region_configs
+            return resolve_price(obj, region, config=configs[0] if configs else None)[0]
+        return resolve_price(obj, region)[0]
 
     def get_promotional_price(self, obj):
         region = self.get_region()
         if not region:
             return None
-        config = obj.regional_configs.filter(region=region).first()
-        return config.promotional_price if config else None
+        if hasattr(obj, '_public_region_configs'):
+            configs = obj._public_region_configs
+            return resolve_price(obj, region, config=configs[0] if configs else None)[1]
+        return resolve_price(obj, region)[1]
 
     def get_stock_available(self, obj):
         region = self.get_region()
         if not region:
             return 0
+        prefetched = getattr(obj, '_public_region_stock', None)
+        if prefetched is not None:
+            return sum(row.available for row in prefetched)
         warehouses = Warehouse.objects.filter(region=region, is_active=True)
-        stock_sum = StockLevel.objects.filter(product=obj, warehouse__in=warehouses).aggregate(total=Sum('available'))['total']
-        return stock_sum or 0
+        return StockLevel.objects.filter(
+            product=obj, warehouse__in=warehouses,
+        ).aggregate(total=Sum('available'))['total'] or 0
 
     def get_average_rating(self, obj):
-        rating = obj.reviews.filter(is_approved=True).aggregate(avg=Avg('rating'))['avg']
+        prefetched = getattr(obj, '_public_reviews', None)
+        if prefetched is not None:
+            ratings = [review.rating for review in prefetched]
+            rating = sum(ratings) / len(ratings) if ratings else None
+        else:
+            rating = obj.reviews.filter(is_approved=True).aggregate(avg=Avg('rating'))['avg']
         return round(rating, 1) if rating else 5.0
 
     def get_reviews(self, obj):
-        reviews = obj.reviews.filter(is_approved=True)[:10]
+        reviews = getattr(obj, '_public_reviews', None)
+        if reviews is None:
+            reviews = obj.reviews.filter(is_approved=True)[:10]
+        else:
+            reviews = reviews[:10]
         return ProductReviewSerializer(reviews, many=True).data
+
+    def get_variants(self, obj):
+        variants = getattr(obj, '_public_variants', None)
+        if variants is None:
+            variants = obj.variants.filter(is_active=True).order_by('sort_order', 'id')
+        return ProductVariantSerializer(variants, many=True, context=self.context).data
 
 
 # --- Admin Serializers for Regional CRUD Operations --- #
@@ -166,6 +226,7 @@ class ProductAdminSerializer(serializers.ModelSerializer):
     regional_stock = serializers.SerializerMethodField()
     media = ProductMediaAdminSerializer(many=True, read_only=True)
     categories = CategorySerializer(many=True, read_only=True)
+    variants = ProductVariantSerializer(many=True, read_only=True)
     average_rating = serializers.SerializerMethodField()
     total_reviews = serializers.SerializerMethodField()
 
@@ -173,40 +234,48 @@ class ProductAdminSerializer(serializers.ModelSerializer):
         model = Product
         fields = [
             'id', 'sku', 'name', 'hsn_code', 'description', 'benefits',
-            'ingredients', 'nutrition_facts', 'faq', 'dietary_tags', 'short_benefit', 'is_active', 'is_archived',
-            'regional_configs', 'regional_stock', 'media', 'categories',
+            'ingredients', 'nutrition_facts', 'faq', 'dietary_tags', 'short_benefit',
+            'base_price', 'is_active', 'is_archived',
+            'regional_configs', 'regional_stock', 'media', 'categories', 'variants',
             'average_rating', 'total_reviews', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
     def get_average_rating(self, obj):
-        rating = obj.reviews.filter(is_approved=True).aggregate(avg=Avg('rating'))['avg']
-        return round(rating, 1) if rating else 0.0
+        reviews = [review for review in obj.reviews.all() if review.is_approved]
+        if not reviews:
+            return 0.0
+        return round(sum(review.rating for review in reviews) / len(reviews), 1)
 
     def get_total_reviews(self, obj):
-        return obj.reviews.filter(is_approved=True).count()
+        return sum(1 for review in obj.reviews.all() if review.is_approved)
 
     def get_regional_stock(self, obj):
         """Per-region available stock (summed across that region's warehouses).
         Surfacing stock per region prevents 'ghost stock' — admins see exactly
         what can be fulfilled in each market, not a misleading global total."""
         from apps.regions.models import Region
+        regions = self.context.get('active_regions')
+        if regions is None:
+            regions = list(Region.objects.filter(is_active=True).order_by('code'))
+        stock_rows = list(obj.stocks.all())
         out = []
-        for region in Region.objects.filter(is_active=True).order_by('code'):
-            warehouses = Warehouse.objects.filter(region=region, is_active=True)
-            agg = StockLevel.objects.filter(product=obj, warehouse__in=warehouses).aggregate(
-                available=Sum('available'), reserved=Sum('reserved'))
+        for region in regions:
+            rows = [
+                row for row in stock_rows
+                if row.warehouse.region_id == region.id and row.warehouse.is_active
+            ]
             out.append({
                 'region_id': region.id,
                 'region_code': region.code,
-                'available': agg['available'] or 0,
-                'reserved': agg['reserved'] or 0,
+                'available': sum(row.available for row in rows),
+                'reserved': sum(row.reserved for row in rows),
             })
         return out
 
 
 class ProductAdminCreateUpdateSerializer(serializers.ModelSerializer):
-    """For creating/updating products with nested regional configs and media."""
+    """For creating/updating products with nested regional configs, media, and variants."""
     regional_configs = serializers.ListField(
         child=serializers.DictField(), write_only=True, required=False
     )
@@ -219,19 +288,20 @@ class ProductAdminCreateUpdateSerializer(serializers.ModelSerializer):
     regional_stock = serializers.ListField(
         child=serializers.DictField(), write_only=True, required=False
     )
+    variants = serializers.ListField(
+        child=serializers.DictField(), write_only=True, required=False
+    )
 
     class Meta:
         model = Product
         fields = [
             'sku', 'name', 'hsn_code', 'description', 'benefits',
             'ingredients', 'nutrition_facts', 'faq', 'dietary_tags', 'short_benefit', 'is_active', 'is_archived',
-            'regional_configs', 'media_files', 'category_ids', 'regional_stock'
+            'regional_configs', 'media_files', 'category_ids', 'regional_stock', 'variants'
         ]
 
     def _apply_regional_stock(self, product, regional_stock_data):
-        """Set available stock per region on that region's first active warehouse.
-        Keeps UK and IN inventory independent (dual inventory)."""
-        from apps.regions.models import Region, Warehouse
+        from apps.regions.models import Warehouse
         from apps.inventory.models import StockLevel
         for row in regional_stock_data:
             region_id = row.get('region') or row.get('region_id')
@@ -245,14 +315,35 @@ class ProductAdminCreateUpdateSerializer(serializers.ModelSerializer):
                 defaults={'available': int(row.get('available', 0))},
             )
 
+    def _apply_variants(self, product, variants_data):
+        from .models import ProductVariant
+        product.variants.all().delete()
+        for idx, v_data in enumerate(variants_data):
+            v_sku = v_data.get('sku') or f"{product.sku}-V{idx+1}"
+            ProductVariant.objects.create(
+                product=product,
+                sku=v_sku,
+                name=v_data.get('name') or 'Standard',
+                option_name=v_data.get('option_name', 'Size'),
+                option_value=v_data.get('option_value', v_data.get('name', 'Standard')),
+                price_gbp=v_data.get('price_gbp'),
+                price_inr=v_data.get('price_inr'),
+                stock_qty=v_data.get('stock_qty', 100),
+                is_active=v_data.get('is_active', True),
+                sort_order=idx,
+            )
+
     def create(self, validated_data):
         regional_configs_data = validated_data.pop('regional_configs', [])
         media_files_data = validated_data.pop('media_files', [])
         category_ids = validated_data.pop('category_ids', [])
         regional_stock_data = validated_data.pop('regional_stock', [])
+        variants_data = validated_data.pop('variants', [])
 
         product = Product.objects.create(**validated_data)
         self._apply_regional_stock(product, regional_stock_data)
+        if variants_data:
+            self._apply_variants(product, variants_data)
 
         # Create regional configs
         for config_data in regional_configs_data:
@@ -286,6 +377,7 @@ class ProductAdminCreateUpdateSerializer(serializers.ModelSerializer):
         media_files_data = validated_data.pop('media_files', None)
         category_ids = validated_data.pop('category_ids', None)
         regional_stock_data = validated_data.pop('regional_stock', None)
+        variants_data = validated_data.pop('variants', None)
 
         # Update base product fields
         for attr, value in validated_data.items():
@@ -294,6 +386,9 @@ class ProductAdminCreateUpdateSerializer(serializers.ModelSerializer):
 
         if regional_stock_data is not None:
             self._apply_regional_stock(instance, regional_stock_data)
+
+        if variants_data is not None:
+            self._apply_variants(instance, variants_data)
 
         # Update regional configs if provided
         if regional_configs_data is not None:

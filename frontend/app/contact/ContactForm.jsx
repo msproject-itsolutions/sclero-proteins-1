@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react';
 import { Check, Send } from 'lucide-react';
-import { getApiUrl } from '../../lib/api';
+import { postJson } from '../../lib/api';
+import { firstApiError, validateEnquiry } from '../../lib/formValidation';
 
 export default function ContactForm() {
   const [form, setForm] = useState({ name: '', email: '', message: '' });
@@ -13,22 +14,23 @@ export default function ContactForm() {
 
   const submit = async (event) => {
     event.preventDefault();
-    setStatus('loading');
     setError('');
+    const { cleaned, error: validationError } = validateEnquiry(form);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    setForm(cleaned);
+    setStatus('loading');
     try {
-      const response = await fetch(getApiUrl('/api/enquiries/'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: form.name,
-          email: form.email,
-          message: form.message,
-          enquiry_type: 'GENERAL',
-          product_interest: 'Customer support',
-        }),
+      const { response, data } = await postJson('/api/enquiries/', {
+        name: cleaned.name,
+        email: cleaned.email,
+        message: cleaned.message,
+        enquiry_type: 'GENERAL',
+        product_interest: 'Customer support',
       });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.detail || data.error || 'Could not send your message.');
+      if (!response.ok) throw new Error(firstApiError(data, 'Could not send your message.'));
       setStatus('sent');
       setForm({ name: '', email: '', message: '' });
     } catch (err) {
@@ -55,6 +57,7 @@ export default function ContactForm() {
           type="text"
           autoComplete="name"
           required
+          minLength={2}
           value={form.name}
           onChange={update('name')}
           className="w-full rounded-sm border border-edge bg-surface p-3 text-sm text-ink-primary focus:border-ink-primary focus:outline-none"
@@ -78,6 +81,7 @@ export default function ContactForm() {
           id="contact-message"
           rows={5}
           required
+          minLength={10}
           value={form.message}
           onChange={update('message')}
           className="w-full rounded-sm border border-edge bg-surface p-3 text-sm text-ink-primary focus:border-ink-primary focus:outline-none"

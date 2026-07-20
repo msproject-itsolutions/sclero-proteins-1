@@ -629,8 +629,8 @@ export default function KnowledgeHub() {
       <title>Sclero Knowledge Hub | Collagen &amp; Calcium Science</title>
       <meta name="description" content="Explore peer-reviewed structural cell biology, absorption kinetics, and bioavailability research backing eggshell membrane bioactives." />
       {/* Banner / Hero Section */}
-      <div className="bg-brand-bg border-b border-edge py-12 md:py-16">
-        <div className="container-page max-w-5xl text-center px-4">
+      <div className="bg-brand-bg border-b border-edge py-14 md:py-20">
+        <div className="container-page text-center">
           <span className="kicker flex items-center justify-center gap-1.5 font-bold uppercase tracking-widest text-[#C89838]">
             <Brain className="h-4 w-4" /> Avian Research &amp; Clinical Bioactives
           </span>
@@ -643,7 +643,7 @@ export default function KnowledgeHub() {
         </div>
       </div>
 
-      <div className="container-page max-w-6xl py-6 md:py-10 px-4">
+      <div className="container-page py-10 md:py-14">
         {/* Mobile Filter & Selector Header (Tablet / Mobile Only) */}
         <div className="lg:hidden bg-surface border border-edge rounded-lg p-4 mb-6 shadow-sm">
           <button
@@ -730,7 +730,7 @@ export default function KnowledgeHub() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
           {/* DESKTOP INDEX PANEL - SIDEBAR (Hidden on Mobile) */}
-          <aside className="hidden lg:block lg:col-span-4 bg-surface border border-edge rounded-lg p-5 space-y-4 max-h-[80vh] overflow-y-auto sticky top-24 shadow-sm">
+          <aside className="hidden lg:block lg:col-span-3 bg-surface border border-edge rounded-lg p-5 space-y-4 max-h-[80vh] overflow-y-auto sticky top-24 shadow-sm">
             <div className="relative">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-ink-muted" />
               <input
@@ -792,7 +792,7 @@ export default function KnowledgeHub() {
           </aside>
 
           {/* MAIN READER PANEL */}
-          <main id="main-reader-panel" className="lg:col-span-8 bg-white border border-edge rounded-lg p-6 md:p-10 space-y-8 shadow-sm">
+          <main id="main-reader-panel" className="lg:col-span-9 bg-white border border-edge rounded-lg p-6 md:p-10 space-y-8 shadow-sm">
             <div>
               {/* Category Breadcrumbs */}
               <div className="flex items-center gap-2 text-[10px] uppercase font-bold text-brand-muted mb-2 tracking-wider">

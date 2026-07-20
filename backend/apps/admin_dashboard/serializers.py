@@ -100,6 +100,7 @@ class HeroBannerSlideSerializer(serializers.ModelSerializer):
             'desktop_media_url', 'tablet_media_url', 'mobile_media_url',
             'media_type', 'alt_text', 'primary_cta_label', 'primary_cta_url',
             'secondary_cta_label', 'secondary_cta_url', 'text_position',
+            'vertical_position', 'arrow_position',
             'overlay_opacity', 'sort_order', 'is_enabled', 'starts_at',
             'ends_at', 'autoplay_enabled', 'show_indicators',
             'display_duration_ms', 'transition_ms', 'seo_title',
@@ -132,6 +133,13 @@ class PaymentGatewayAdminSerializer(serializers.ModelSerializer):
             validated_data.pop('secret_key', None)
         if not validated_data.get('extra_config'):
             validated_data.pop('extra_config', None)
+        else:
+            # Credential forms submit only the secret being rotated. Preserve
+            # unrelated provider settings instead of replacing the JSON blob.
+            validated_data['extra_config'] = {
+                **(instance.extra_config or {}),
+                **validated_data['extra_config'],
+            }
         return super().update(instance, validated_data)
 
 

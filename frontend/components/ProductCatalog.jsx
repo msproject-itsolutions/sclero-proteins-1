@@ -70,6 +70,8 @@ export default function ProductCatalog({
   onOpenCart,
   className = '',
   filterable = false,
+  showRating = true,
+  apiSort = '',
 }) {
   const dispatch = useDispatch();
   const router = useRouter();
@@ -143,6 +145,8 @@ export default function ProductCatalog({
     if (activeCategory) params.append('category', activeCategory);
     if (search) params.set('search', search);
 
+    if (apiSort) params.set('sort', apiSort);
+
     fetch(getApiUrl(`/api/products/?${params.toString()}`))
       .then((res) => res.json())
       .then((data) => {
@@ -159,7 +163,7 @@ export default function ProductCatalog({
     return () => {
       ignore = true;
     };
-  }, [currentRegion, activeCategory, search]);
+  }, [currentRegion, activeCategory, search, apiSort]);
 
   // Filter products client-side for advanced choices (Goals, Dietary, Form, Price, Ratings)
   const filteredProducts = useMemo(() => {
@@ -582,6 +586,7 @@ export default function ProductCatalog({
                 <ProductCard
                   key={p.id}
                   product={p}
+                  showRating={showRating}
                   onAddToCart={handleAddToCart}
                   onViewDetails={(sku) => router.push(`/products/${sku}?region=${currentRegion}`)}
                 />

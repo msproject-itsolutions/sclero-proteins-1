@@ -1,36 +1,38 @@
+"""Deliver due outbound webhooks from the durable database queue."""
+
 from django.core.management.base import BaseCommand
-from django.utils import timezone
 from django.db.models import Q
-from apps.webhooks.models import WebhookDelivery
+from django.utils import timezone
+
 from apps.webhooks.dispatcher import send_delivery
+from apps.webhooks.models import WebhookDelivery
+
 
 class Command(BaseCommand):
-    help = 'Processes queued outbound webhooks with exponential backoff.'
+    help = 'Processes queued outbound webhook deliveries with retry backoff.'
+
+    def add_arguments(self, parser):
+        parser.add_argument('--limit', type=int, default=100)
 
     def handle(self, *args, **options):
-        self.stdout.write(self.style.SUCCESS("Starting Outbound Webhook Processor..."))
-        
+        limit = min(max(options['limit'], 1), 1000)
         now = timezone.now()
-        deliveries = WebhookDelivery.objects.filter(
-            status__in=['PENDING', 'FAILED']
-        ).filter(
-            Q(next_attempt_at__isnull=True) | Q(next_attempt_at__lte=now)
+        delivery_ids = list(
+            WebhookDelivery.objects.filter(status__in=['PENDING', 'FAILED'])
+            .filter(Q(next_attempt_at__isnull=True) | Q(next_attempt_at__lte=now))
+            .order_by('created_at')
+            .values_list('id', flat=True)[:limit]
         )
-        
-        count = deliveries.count()
-        if count == 0:
-            self.stdout.write("No pending outbound webhooks to process.")
-            return
 
-        self.stdout.write(f"Found {count} outgoing deliveries to process.")
+        processed = 0
+        for delivery_id in delivery_ids:
+            delivery = WebhookDelivery.objects.select_related('subscription').filter(
+                pk=delivery_id,
+                status__in=['PENDING', 'FAILED'],
+            ).first()
+            if not delivery:
+                continue
+            send_delivery(delivery)
+            processed += 1
 
-        for delivery in deliveries:
-            self.stdout.write(f"Processing delivery {delivery.id} ({delivery.event_type} to {delivery.subscription.name}), Attempt #{delivery.attempts + 1}")
-            try:
-                send_delivery(delivery)
-                if delivery.status == 'SUCCESS':
-                    self.stdout.write(self.style.SUCCESS(f"Delivery {delivery.id} sent successfully."))
-                else:
-                    self.stdout.write(self.style.WARNING(f"Delivery {delivery.id} failed. Status: {delivery.status}. Next attempt: {delivery.next_attempt_at}"))
-            except Exception as e:
-                self.stdout.write(self.style.ERROR(f"Error processing delivery {delivery.id}: {str(e)}"))
+        self.stdout.write(f'Processed {processed} outbound webhook delivery(s).')

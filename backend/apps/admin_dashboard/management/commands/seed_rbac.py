@@ -3,14 +3,12 @@ import random
 from django.core.management.base import BaseCommand
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth import get_user_model
-from django.utils import timezone
-from decimal import Decimal
 from apps.users.models import Role
 from apps.regions.models import Region
 from apps.orders.models import Order
 from apps.admin_dashboard.models import ApprovalRequest
 from apps.audit.models import AuditLog
-from apps.users.permissions import DEFAULT_ROLES
+from apps.users.permissions import DEFAULT_ROLES, ENFORCED_PERMISSION_KEYS
 
 User = get_user_model()
 
@@ -21,13 +19,19 @@ class Command(BaseCommand):
         self.stdout.write("Starting Sclero Proteins RBAC & Workflows Seeding...")
 
         # 1. Seed Roles
+        # Only store permissions the code actually enforces. DEFAULT_ROLES still
+        # lists aspirational keys (products.edit, dashboard.view, ...) that no
+        # require_permission() check reads; storing them made roles look more
+        # capable than they are — e.g. Compliance Manager appeared to grant
+        # product editing while granting nothing at all.
         role_objs = {}
         for role_name, perms in DEFAULT_ROLES.items():
+            real_perms = [p for p in perms if p in ENFORCED_PERMISSION_KEYS]
             role, created = Role.objects.update_or_create(
                 name=role_name,
                 defaults={
                     'description': f"Hierarchical access level role for {role_name}",
-                    'permissions': perms,
+                    'permissions': real_perms,
                     'is_system': True
                 }
             )
@@ -35,20 +39,26 @@ class Command(BaseCommand):
             action_word = "Created" if created else "Updated"
             self.stdout.write(f"  {action_word} Role: {role_name} ({len(perms)} permissions)")
 
-        # Ensure we have regions populated
-        gb_region, _ = Region.objects.get_or_create(code='GB', defaults={'name': 'United Kingdom', 'currency_code': 'GBP', 'currency_symbol': '£', 'is_active': True})
+        # Ensure we have regions populated.
+        # NOTE: the UK region's code is 'UK' (see regions/seed_db.py and geo.py).
+        # This used to create a second 'GB' region, which left the UK manager
+        # scoped to an empty duplicate that held no orders or products.
+        gb_region, _ = Region.objects.get_or_create(code='UK', defaults={'name': 'United Kingdom', 'currency_code': 'GBP', 'currency_symbol': '£', 'is_active': True})
         in_region, _ = Region.objects.get_or_create(code='IN', defaults={'name': 'India', 'currency_code': 'INR', 'currency_symbol': '₹', 'is_active': True})
+
+        # Cleanup obsolete system roles not in DEFAULT_ROLES
+        Role.objects.filter(is_system=True).exclude(name__in=list(DEFAULT_ROLES.keys())).delete()
 
         # 2. Seed Mock Staff Users
         staff_data = [
-            ('owner@scleroproteins.co.uk', 'Owner', 'Super', 'Super Admin', True, []),
+            ('owner@scleroproteins.co.uk', 'Owner', 'Super', 'Admin', True, []),
             ('admin@scleroproteins.co.uk', 'Admin', 'User', 'Admin', False, []),
-            ('opsmanager@scleroproteins.co.uk', 'Operations', 'Manager', 'Operations Manager', False, []),
-            ('supportagent@scleroproteins.co.uk', 'Support', 'Agent', 'Customer Support Agent', False, []),
-            ('ukmanager@scleroproteins.co.uk', 'UK Country', 'Manager', 'Admin', False, ['GB']),
+            ('opsmanager@scleroproteins.co.uk', 'Operations', 'Manager', 'Staff', False, []),
+            ('supportagent@scleroproteins.co.uk', 'Support', 'Agent', 'Staff', False, []),
+            ('ukmanager@scleroproteins.co.uk', 'UK Country', 'Manager', 'Admin', False, ['UK']),
             ('indiamanager@scleroproteins.co.uk', 'India Country', 'Manager', 'Admin', False, ['IN']),
-            ('finance@scleroproteins.co.uk', 'Finance', 'Manager', 'Finance Manager', False, []),
-            ('quality@scleroproteins.co.uk', 'Quality', 'Compliance', 'Compliance Manager', False, []),
+            ('finance@scleroproteins.co.uk', 'Finance', 'Manager', 'Staff', False, []),
+            ('quality@scleroproteins.co.uk', 'Quality', 'Compliance', 'Staff', False, []),
         ]
 
         user_objs = {}

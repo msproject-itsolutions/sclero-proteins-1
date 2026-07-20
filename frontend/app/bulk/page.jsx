@@ -1,5 +1,7 @@
 import React from 'react';
 import StoreShell from '../../components/StoreShell';
+import Link from 'next/link';
+import { ArrowRight, ShoppingBag } from 'lucide-react';
 import BulkEnquiryForm from './BulkEnquiryForm';
 
 export const metadata = {
@@ -11,7 +13,7 @@ export const metadata = {
   openGraph: {
     title: 'Bulk & Wholesale | Sclero Proteins',
     description: 'Submit an enquiry for bulk ingredients, OEM, and private label partnerships with Sclero Proteins.',
-    url: 'https://scleroproteins.co.uk/bulk',
+    url: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/bulk`,
   },
 };
 
@@ -31,6 +33,15 @@ export default function BulkEnquiryPage() {
           <p className="mt-2 text-xs text-ink-muted">
             MOQ: 25 kg (minerals) / 5–10 kg (collagen) · Global shipping available
           </p>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <Link href="/products" className="btn-primary px-6 py-3 text-sm">
+              <ShoppingBag className="h-4 w-4" />
+              Shop retail products
+            </Link>
+            <Link href="/contact" className="btn-ghost px-6 py-3 text-sm">
+              General contact <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
         </div>
       </div>
 

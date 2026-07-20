@@ -41,6 +41,17 @@ class HeroBannerSlide(models.Model):
         ('RIGHT', 'Right'),
     ]
 
+    VERTICAL_POSITIONS = [
+        ('TOP', 'Top'),
+        ('CENTER', 'Center'),
+        ('BOTTOM', 'Bottom'),
+    ]
+    ARROW_POSITIONS = [
+        ('BOTTOM', 'Bottom Bar'),
+        ('SIDES', 'Centered on Both Sides'),
+        ('HIDDEN', 'Hidden'),
+    ]
+
     title = models.CharField(max_length=120, help_text="Internal admin title for this banner slide")
     eyebrow = models.CharField(max_length=120, blank=True, default='')
     heading = models.CharField(max_length=180)
@@ -55,6 +66,8 @@ class HeroBannerSlide(models.Model):
     secondary_cta_label = models.CharField(max_length=80, blank=True, default='')
     secondary_cta_url = models.CharField(max_length=500, blank=True, default='')
     text_position = models.CharField(max_length=10, choices=TEXT_POSITIONS, default='LEFT')
+    vertical_position = models.CharField(max_length=10, choices=VERTICAL_POSITIONS, default='BOTTOM')
+    arrow_position = models.CharField(max_length=10, choices=ARROW_POSITIONS, default='BOTTOM')
     overlay_opacity = models.PositiveSmallIntegerField(default=42, help_text="Dark overlay percentage from 0 to 90")
     sort_order = models.PositiveIntegerField(default=0, db_index=True)
     is_enabled = models.BooleanField(default=True, db_index=True)
@@ -237,6 +250,7 @@ class BlogPost(models.Model):
     slug = models.SlugField(max_length=150, unique=True, db_index=True)
     content = models.TextField()
     author = models.CharField(max_length=100, default='Admin')
+    category = models.CharField(max_length=100, blank=True, default='Biotech')
     cover_image_url = models.URLField(max_length=500, blank=True, null=True)
     is_published = models.BooleanField(default=False, db_index=True)
     published_at = models.DateTimeField(null=True, blank=True)

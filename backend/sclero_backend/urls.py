@@ -3,7 +3,6 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from rest_framework.routers import DefaultRouter
-from rest_framework_simplejwt.views import TokenRefreshView
 from sclero_backend.health import live, ready
 
 from apps.regions.views import (
@@ -22,6 +21,7 @@ from apps.users.views import (
     SendOTPView, VerifyOTPView, GoogleLoginView,
     MagicLinkRequestView, MagicLinkVerifyView,
     RoleViewSet, StaffUserViewSet, WishlistViewSet, WishlistGroupViewSet, PublicWishlistView, AuditedLoginView,
+    CookieTokenRefreshView, LogoutView,
     CustomerProfileViewSet, CustomerSegmentViewSet, CustomerActivityViewSet, SupportTicketViewSet,
     TerminateDevicesView, DataExportView, AccountDeleteView,
     PasswordResetRequestView, PasswordResetConfirmView,
@@ -30,7 +30,7 @@ from apps.users.totp import (
     TOTPSetupView, TOTPVerifyView, TOTPDisableView, TOTPStatusView,
 )
 from apps.orders.views import (
-    CartViewSet, CheckoutView, ApplyCouponView, RefundView, MyOrdersView,
+    CartViewSet, CheckoutView, ApplyCouponView, CreatePaymentIntentView, RefundView, MyOrdersView,
     OrderAdminViewSet, RefundAdminViewSet, InvoiceAdminViewSet, AbandonedCheckoutsView,
     StripeWebhookView, RazorpayWebhookView, PaypalWebhookView,
     UnifiedPaymentWebhookView, CouponAdminViewSet,
@@ -49,6 +49,7 @@ from apps.audit.views import AuditLogViewSet
 from apps.enquiries.views import BulkEnquiryCreateView, BulkEnquiryAdminViewSet, NewsletterSubscribeView
 from apps.inventory.views import StockLevelAdminViewSet, StockTransferAdminViewSet
 from apps.fraud.views import RiskAssessmentAdminViewSet
+from apps.push_notifications.views import PushCampaignViewSet, PushConfigurationView, PushSubscriptionView
 
 router = DefaultRouter()
 router.register(r'regions', RegionViewSet, basename='region')
@@ -100,6 +101,7 @@ router.register(r'admin/risk-assessments', RiskAssessmentAdminViewSet, basename=
 router.register(r'admin/webhook-subscriptions', WebhookSubscriptionViewSet, basename='admin-webhook-subscription')
 router.register(r'admin/webhook-deliveries', WebhookDeliveryViewSet, basename='admin-webhook-delivery')
 router.register(r'admin/incoming-webhooks', IncomingWebhookEventViewSet, basename='admin-incoming-webhook')
+router.register(r'admin/push-campaigns', PushCampaignViewSet, basename='admin-push-campaign')
 
 urlpatterns = [
     path('api/health/live/', live, name='health_live'),
@@ -115,6 +117,8 @@ urlpatterns = [
     path('api/shipping/calculate/', ShippingCalculateView.as_view(), name='shipping_calculate'),
     path('api/admin/tax-settings/', TaxSettingsAdminView.as_view(), name='admin_tax_settings'),
     path('api/newsletter/subscribe/', NewsletterSubscribeView.as_view(), name='newsletter_subscribe'),
+    path('api/push/config/', PushConfigurationView.as_view(), name='push_config'),
+    path('api/push/subscriptions/', PushSubscriptionView.as_view(), name='push_subscriptions'),
     path('api/wishlists/shared/<str:share_token>/', PublicWishlistView.as_view(), name='shared-wishlist'),
     path('api/admin/upload-media/', MediaUploadView.as_view(), name='admin_upload_media'),
     
@@ -124,7 +128,8 @@ urlpatterns = [
     # Auth Endpoints
     path('api/auth/register/', RegisterView.as_view(), name='auth_register'),
     path('api/auth/login/', AuditedLoginView.as_view(), name='auth_login'),
-    path('api/auth/token/refresh/', TokenRefreshView.as_view(), name='auth_token_refresh'),
+    path('api/auth/token/refresh/', CookieTokenRefreshView.as_view(), name='auth_token_refresh'),
+    path('api/auth/logout/', LogoutView.as_view(), name='auth_logout'),
     path('api/auth/profile/', UserProfileView.as_view(), name='auth_profile'),
     path('api/auth/profile/erasure-request/', UserErasureRequestView.as_view(), name='auth_erasure_request'),
     path('api/auth/me/export/', DataExportView.as_view(), name='auth_data_export'),
@@ -150,6 +155,7 @@ urlpatterns = [
     path('api/cart/remove/', CartViewSet.as_view({'post': 'remove_item'}), name='cart_remove'),
     path('api/checkout/', CheckoutView.as_view(), name='checkout'),
     path('api/checkout/apply-coupon/', ApplyCouponView.as_view(), name='checkout_apply_coupon'),
+    path('api/checkout/payment-intent/', CreatePaymentIntentView.as_view(), name='checkout_payment_intent'),
     path('api/webhooks/stripe/', StripeWebhookView.as_view(), name='webhook_stripe'),
     path('api/webhooks/razorpay/', RazorpayWebhookView.as_view(), name='webhook_razorpay'),
     path('api/webhooks/paypal/', PaypalWebhookView.as_view(), name='webhook_paypal'),

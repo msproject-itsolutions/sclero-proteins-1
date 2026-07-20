@@ -1,10 +1,117 @@
 import os
 from pathlib import Path
+from xml.sax.saxutils import escape
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from django.utils import timezone
+
+# ---------------------------------------------------------------------------
+# Register Unicode-capable fonts so ₹ and £ render correctly in the PDF.
+# On Windows use Arial; on Linux/Mac fall back to DejaVu Sans.
+# ---------------------------------------------------------------------------
+_FONT_REGISTERED = False
+
+def _register_fonts():
+    global _FONT_REGISTERED
+    if _FONT_REGISTERED:
+        return
+    import platform
+    candidate_families = []
+
+    if platform.system() == 'Windows':
+        font_dir = Path('C:/Windows/Fonts')
+        candidate_families = [
+            {
+                'regular': font_dir / 'segoeui.ttf',
+                'bold': font_dir / 'segoeuib.ttf',
+                'italic': font_dir / 'segoeuii.ttf',
+            },
+            {
+                'regular': font_dir / 'arial.ttf',
+                'bold': font_dir / 'arialbd.ttf',
+                'italic': font_dir / 'ariali.ttf',
+            },
+        ]
+    else:
+        candidate_families = [
+            {
+                'regular': Path('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'),
+                'bold': Path('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'),
+                'italic': Path('/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf'),
+            },
+            {
+                'regular': Path('/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf'),
+                'bold': Path('/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf'),
+                'italic': Path('/usr/share/fonts/truetype/noto/NotoSans-Italic.ttf'),
+            },
+        ]
+
+    for family in candidate_families:
+        if not all(path.exists() for path in family.values()):
+            continue
+        try:
+            pdfmetrics.registerFont(TTFont('InvoiceFont', str(family['regular'])))
+            pdfmetrics.registerFont(TTFont('InvoiceFont-Bold', str(family['bold'])))
+            pdfmetrics.registerFont(TTFont('InvoiceFont-Italic', str(family['italic'])))
+            _FONT_REGISTERED = True
+            return
+        except Exception:
+            continue
+
+    _FONT_REGISTERED = True
+
+
+def _company_block(region):
+    """Legal entity details for a market's invoices, straight from the Region."""
+    if not region:
+        company_info = {}
+        try:
+            from apps.admin_dashboard.models import SystemSetting
+            setting = SystemSetting.objects.filter(key='COMPANY_INFO').first()
+            if setting and isinstance(setting.value, dict):
+                company_info = setting.value
+        except Exception:
+            company_info = {}
+        return {
+            'name': company_info.get('name') or 'Online store',
+            'address': company_info.get('address') or '',
+            'phone': company_info.get('phone') or '',
+            'email': company_info.get('support') or company_info.get('email') or '',
+            'tax_id': '',
+        }
+
+    label = (getattr(region, 'tax_registration_label', '') or '').strip()
+    number = (getattr(region, 'tax_registration_number', '') or '').strip()
+    reg_code = (getattr(region, 'code', '') or '').upper()
+    if not number:
+        from django.conf import settings
+        number = (
+            getattr(settings, 'IN_GSTIN', '') if reg_code == 'IN'
+            else getattr(settings, 'UK_VAT_NUMBER', '')
+        ) or ''
+
+    tax_id_parts = []
+    if number:
+        tax_id_parts.append(f"{label}: {number}" if label else number)
+    for entry in (getattr(region, 'extra_registrations', []) or []):
+        if isinstance(entry, dict) and entry.get('value'):
+            entry_label = str(entry.get('label') or '').strip()
+            value = str(entry['value']).strip()
+            tax_id_parts.append(f"{entry_label}: {value}" if entry_label else value)
+
+    return {
+        'name': getattr(region, 'company_name', None) or getattr(region, 'name', None) or 'Online store',
+        'address': getattr(region, 'company_address', '') or '',
+        'phone': getattr(region, 'company_phone', '') or '',
+        'email': getattr(region, 'company_email', '') or '',
+        'tax_id': '\n'.join(tax_id_parts),
+    }
+
 
 def generate_invoice_pdf(order):
     """
@@ -12,34 +119,24 @@ def generate_invoice_pdf(order):
     """
     from django.conf import settings
 
+    # Register Unicode fonts on first call
+    _register_fonts()
+
     # Resolve Order instance from Invoice if needed
     if hasattr(order, 'order'):
         order = order.order
     
-    region_code = order.region.code
-    company_details = {
-        'IN': {
-            'name': 'Sclero Proteins (India)',
-            'address': 'Rajeshwar Farm & Hatchery, Samarkha Ajarpura Road,\nAjarpura, Anand, 388310, Gujarat, India',
-            'phone': '+91 84888 03622',
-            'email': 'india@scleroproteins.co.uk',
-            'tax_id': f"GSTIN: {settings.IN_GSTIN}",
-        },
-        'UK': {
-            'name': 'Sclero Proteins Ltd',
-            'address': 'Unit B2A Horsted Keynes Business Park, Horsted Keynes,\nHaywards Heath, RH17 7BA, United Kingdom',
-            'phone': '01293 901941',
-            'email': 'support@scleroproteins.co.uk',
-            'tax_id': f"VAT Reg No: {settings.UK_VAT_NUMBER}",
-        },
-    }
-    company = company_details.get(region_code, company_details['UK'])
+    region_code = getattr(order.region, 'code', 'IN') if order.region else (getattr(order, 'region_code', 'IN') or 'IN')
+    company = _company_block(order.region)
+    company = {key: escape(str(value or '')) for key, value in company.items()}
+    company['tax_id'] = company['tax_id'].replace('\n', '<br/>')
     
     # Establish file paths
     invoice_dir = Path(settings.MEDIA_ROOT) / 'invoices'
     os.makedirs(invoice_dir, exist_ok=True)
     
-    invoice_filename = f"invoice_{order.id}_{order.created_at.strftime('%Y%m%d%H%M%S')}.pdf"
+    created_at_dt = getattr(order, 'created_at', None) or timezone.now()
+    invoice_filename = f"invoice_{order.id}_{created_at_dt.strftime('%Y%m%d%H%M%S')}.pdf"
     pdf_path = invoice_dir / invoice_filename
     
     # Setup document template
@@ -57,15 +154,19 @@ def generate_invoice_pdf(order):
     # Custom Brand Colors
     BRAND_INK = colors.HexColor('#1A1A1A')
     BRAND_BRONZE = colors.HexColor('#6E4F13')
-    BRAND_BG = colors.HexColor('#FAFAF7')
     TEXT_MUTED = colors.HexColor('#6E6A61')
     BORDER_COLOR = colors.HexColor('#E8E6E1')
+
+    # Font names — use registered Unicode fonts, fall back to Helvetica
+    FONT = 'InvoiceFont' if 'InvoiceFont' in pdfmetrics.getRegisteredFontNames() else 'Helvetica'
+    FONT_BOLD = 'InvoiceFont-Bold' if 'InvoiceFont-Bold' in pdfmetrics.getRegisteredFontNames() else 'Helvetica-Bold'
+    FONT_ITALIC = 'InvoiceFont-Italic' if 'InvoiceFont-Italic' in pdfmetrics.getRegisteredFontNames() else 'Helvetica-Oblique'
 
     # Custom styles
     title_style = ParagraphStyle(
         'InvoiceTitle',
         parent=styles['Heading1'],
-        fontName='Helvetica-Bold',
+        fontName=FONT_BOLD,
         fontSize=20,
         leading=24,
         textColor=BRAND_INK
@@ -73,7 +174,7 @@ def generate_invoice_pdf(order):
     company_style = ParagraphStyle(
         'CompanyDetails',
         parent=styles['Normal'],
-        fontName='Helvetica',
+        fontName=FONT,
         fontSize=9,
         leading=13,
         textColor=TEXT_MUTED
@@ -81,7 +182,7 @@ def generate_invoice_pdf(order):
     meta_style = ParagraphStyle(
         'MetaDetails',
         parent=styles['Normal'],
-        fontName='Helvetica',
+        fontName=FONT,
         fontSize=9,
         leading=13,
         textColor=BRAND_INK
@@ -89,7 +190,7 @@ def generate_invoice_pdf(order):
     headers_style = ParagraphStyle(
         'TableHeader',
         parent=styles['Normal'],
-        fontName='Helvetica-Bold',
+        fontName=FONT_BOLD,
         fontSize=9,
         leading=11,
         textColor=colors.white
@@ -97,7 +198,7 @@ def generate_invoice_pdf(order):
     body_style = ParagraphStyle(
         'TableBody',
         parent=styles['Normal'],
-        fontName='Helvetica',
+        fontName=FONT,
         fontSize=9,
         leading=12
     )
@@ -105,7 +206,8 @@ def generate_invoice_pdf(order):
     story = []
     
     # Header block (Logo/Title on left, company details on right)
-    invoice_title = "TAX INVOICE" if region_code == 'IN' else "VAT RECEIPT"
+    tax_name = escape(str(getattr(order.region, 'tax_name', '') or 'Tax'))
+    invoice_title = f"{tax_name.upper()} INVOICE"
     
     # Find logo path
     logo_path = Path(settings.BASE_DIR) / '..' / 'frontend' / 'public' / 'logo-full.png'
@@ -124,13 +226,12 @@ def generate_invoice_pdf(order):
             [
                 logo_img,
                 Paragraph(f"<b>{company['name']}</b><br/>{invoice_title}", title_style),
-                Paragraph(
-                    f"{company['address']}<br/>"
-                    f"Phone: {company['phone']}<br/>"
-                    f"Email: {company['email']}<br/>"
-                    f"<b>{company['tax_id']}</b>",
-                    company_style
-                )
+                Paragraph('<br/>'.join(filter(None, [
+                    company['address'],
+                    f"Phone: {company['phone']}" if company['phone'] else '',
+                    f"Email: {company['email']}" if company['email'] else '',
+                    f"<b>{company['tax_id']}</b>" if company['tax_id'] else '',
+                ])), company_style)
             ]
         ]
         header_table = Table(header_data, colWidths=[1.6*inch, 2.4*inch, 3.5*inch])
@@ -142,13 +243,12 @@ def generate_invoice_pdf(order):
         header_data = [
             [
                 Paragraph(f"<b>{company['name']}</b><br/>{invoice_title}", title_style),
-                Paragraph(
-                    f"{company['address']}<br/>"
-                    f"Phone: {company['phone']}<br/>"
-                    f"Email: {company['email']}<br/>"
-                    f"<b>{company['tax_id']}</b>",
-                    company_style
-                )
+                Paragraph('<br/>'.join(filter(None, [
+                    company['address'],
+                    f"Phone: {company['phone']}" if company['phone'] else '',
+                    f"Email: {company['email']}" if company['email'] else '',
+                    f"<b>{company['tax_id']}</b>" if company['tax_id'] else '',
+                ])), company_style)
             ]
         ]
         header_table = Table(header_data, colWidths=[3.5*inch, 4.0*inch])
@@ -167,20 +267,20 @@ def generate_invoice_pdf(order):
         [
             Paragraph(
                 f"<b>BILL TO:</b><br/>"
-                f"{order.shipping_name}<br/>"
-                f"{order.shipping_address_line1}<br/>"
-                f"{order.shipping_address_line2 + '<br/>' if order.shipping_address_line2 else ''}"
-                f"{order.shipping_city}, {order.shipping_state} - {order.shipping_postal_code}<br/>"
-                f"Phone: {order.shipping_phone}<br/>"
-                f"Email: {order.email}",
+                f"{escape(str(order.shipping_name or ''))}<br/>"
+                f"{escape(str(order.shipping_address_line1 or ''))}<br/>"
+                f"{escape(str(order.shipping_address_line2 or '')) + '<br/>' if order.shipping_address_line2 else ''}"
+                f"{escape(str(order.shipping_city or ''))}, {escape(str(order.shipping_state or ''))} - {escape(str(order.shipping_postal_code or ''))}<br/>"
+                f"Phone: {escape(str(order.shipping_phone or ''))}<br/>"
+                f"Email: {escape(str(order.email or ''))}",
                 meta_style
             ),
             Paragraph(
                 f"<b>Invoice Number:</b> {invoice_num}<br/>"
                 f"<b>Order Date:</b> {order.created_at.strftime('%d-%b-%Y')}<br/>"
-                f"<b>Payment Method:</b> {order.payment_method}<br/>"
-                f"<b>Transaction ID:</b> {order.payment_id or 'Not applicable'}<br/>"
-                f"<b>Status:</b> {order.payment_status}",
+                f"<b>Payment Method:</b> {escape(str(order.payment_method or ''))}<br/>"
+                f"<b>Transaction ID:</b> {escape(str(order.payment_id or 'Not applicable'))}<br/>"
+                f"<b>Status:</b> {escape(str(order.payment_status or ''))}",
                 meta_style
             )
         ]
@@ -219,14 +319,23 @@ def generate_invoice_pdf(order):
         
     table_data = [table_headers]
     
-    currency = order.currency_code
-    symbol = "Rs. " if currency == 'INR' else "£"
+    # Use region_code (reliable) instead of currency_code for symbol selection.
+    # ₹ (\u20B9) requires a Unicode-capable font (registered above).
+    symbol = getattr(order.region, 'currency_symbol', '') if order.region else order.currency_code
     
     for item in order.items.all():
-        prod_desc = f"<b>{item.product.name}</b><br/>SKU: {item.product.sku}"
+        variant_line = (
+            f"<br/>Option: {escape(str(item.variant_name))} "
+            f"({escape(str(item.variant_sku))})"
+            if getattr(item, 'variant_sku', '') else ''
+        )
+        prod_desc = (
+            f"<b>{escape(str(item.product.name))}</b><br/>"
+            f"SKU: {escape(str(item.product.sku))}{variant_line}"
+        )
         
         if region_code == 'IN':
-            hsn = item.product.hsn_code or "3004"
+            hsn = escape(str(item.product.hsn_code or '—'))
             row = [
                 Paragraph(prod_desc, body_style),
                 Paragraph(hsn, body_style),
@@ -278,8 +387,11 @@ def generate_invoice_pdf(order):
  
     totals_data = [
         [Paragraph("Subtotal", meta_style), Paragraph(f"{symbol}{order.subtotal:.2f}", meta_style)],
-        [Paragraph(f"<b>Tax Breakdown</b>", meta_style), Paragraph(tax_detail_str, meta_style)],
-        [Paragraph("Shipping Cost", meta_style), Paragraph(f"{symbol}{order.shipping_cost:.2f}", meta_style)],
+        [Paragraph("<b>Tax Breakdown</b>", meta_style), Paragraph(tax_detail_str, meta_style)],
+        [Paragraph(
+            f"Shipping ({escape(str(order.shipping_method))})" if order.shipping_method else "Shipping Cost",
+            meta_style,
+        ), Paragraph(f"{symbol}{order.shipping_cost:.2f}", meta_style)],
         [Paragraph("<b>Total Amount Paid</b>", meta_style), Paragraph(f"<b>{symbol}{order.total:.2f}</b>", meta_style)]
     ]
     
@@ -305,13 +417,17 @@ def generate_invoice_pdf(order):
     footer_style = ParagraphStyle(
         'FooterNote',
         parent=styles['Normal'],
-        fontName='Helvetica-Oblique',
+        fontName=FONT_ITALIC,
         fontSize=8,
         leading=10,
         alignment=1, # Center
         textColor=colors.HexColor('#94A3B8')
     )
-    story.append(Paragraph("This is a computer generated invoice and requires no physical signature.<br/>For any support, please contact us at support@scleroproteins.co.uk. Thank you for shopping with Sclero Proteins!", footer_style))
+    support_line = f" For support, contact {company['email']}." if company['email'] else ''
+    story.append(Paragraph(
+        f"This is a computer-generated invoice and requires no physical signature.{support_line}",
+        footer_style,
+    ))
     
     # Build document
     doc.build(story)

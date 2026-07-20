@@ -90,98 +90,58 @@ PERMISSIONS = {
 
 ALL_PERMISSION_KEYS = set(PERMISSIONS.keys())
 
+# --- What the admin panel should actually offer ------------------------------ #
+# Only these keys are checked by require_permission() anywhere in the codebase.
+# The rest of PERMISSIONS are declarative leftovers: granting or revoking them
+# changes nothing, which is worse than useless on a permissions screen — an
+# owner un-ticking "products.delete" would believe they had restricted someone
+# who can still delete. The admin UI shows only these, grouped and in plain
+# English. If you add a new require_permission('x.y') check, add 'x.y' here.
+#
+# Keep in step with:  grep -rho "require_permission('[a-z.]*')" apps/
+ENFORCED_PERMISSION_GROUPS = [
+    ('Orders', [
+        ('orders.view', 'See orders and customer details'),
+        ('orders.manage', 'Edit orders and update their status'),
+        ('orders.refund', 'Issue refunds'),
+    ]),
+    ('Catalogue', [
+        ('products.manage', 'Add, edit and archive products and categories'),
+        ('inventory.manage', 'Adjust stock levels, warehouses and transfers'),
+        ('reviews.moderate', 'Approve, reject or feature product reviews'),
+    ]),
+    ('Customers', [
+        ('enquiries.manage', 'Handle B2B and wholesale enquiries'),
+    ]),
+    ('Money & reporting', [
+        ('finance.view', 'See financial reports and payouts'),
+        ('reports.view', 'See sales reports and analytics'),
+    ]),
+    ('Marketing & content', [
+        ('marketing.edit', 'Edit marketing integrations and campaigns'),
+    ]),
+    ('Administration', [
+        ('settings.manage', 'Change store settings, payments, shipping and templates'),
+        ('users.manage', 'Add and edit staff accounts'),
+        ('rbac.manage', 'Create roles and change what staff can do'),
+        ('audit.view', 'Read the audit log'),
+    ]),
+]
+
+ENFORCED_PERMISSION_KEYS = [key for _group, items in ENFORCED_PERMISSION_GROUPS for key, _label in items]
+
 # --- Seeded Staff Hierarchy Roles -------------------------------------------- #
 DEFAULT_ROLES = {
-    'Super Admin': sorted(ALL_PERMISSION_KEYS),
+    'Admin': sorted(ALL_PERMISSION_KEYS),
     
-    'Admin': [
+    'Staff': [
         'dashboard.view', 'dashboard.export',
         'products.view', 'products.create', 'products.edit', 'products.delete', 'products.publish', 'products.manage',
         'inventory.view', 'inventory.edit', 'inventory.import', 'inventory.export', 'inventory.manage',
         'orders.view', 'orders.create', 'orders.edit', 'orders.cancel', 'orders.refund', 'orders.manage',
-        'customers.view', 'customers.edit', 'customers.export', 'users.manage',
-        'content.view', 'content.create', 'content.edit', 'content.publish',
-        'marketing.view', 'marketing.create', 'marketing.edit', 'marketing.launch',
+        'customers.view', 'customers.edit', 'customers.export',
+        'reviews.moderate', 'enquiries.manage',
         'reports.view', 'reports.export',
-        'finance.view', 'finance.export',
-        'settings.manage', 'audit.view', 'reviews.moderate', 'enquiries.manage',
-    ],
-    
-    'Operations Manager': [
-        'dashboard.view',
-        'inventory.view', 'inventory.edit', 'inventory.import', 'inventory.export',
-        'orders.view', 'orders.create', 'orders.edit', 'orders.cancel', 'orders.refund',
-        'customers.view',
-    ],
-    
-    'Inventory Manager': [
-        'dashboard.view',
-        'products.view',
-        'inventory.view', 'inventory.edit', 'inventory.import', 'inventory.export',
-    ],
-    
-    'Product Manager': [
-        'dashboard.view',
-        'products.view', 'products.create', 'products.edit', 'products.delete', 'products.publish',
-    ],
-    
-    'Content Manager': [
-        'dashboard.view',
-        'content.view', 'content.create', 'content.edit', 'content.publish',
-    ],
-    
-    'SEO Manager': [
-        'dashboard.view',
-        'content.view', 'content.edit',
-    ],
-    
-    'Marketing Manager': [
-        'dashboard.view',
-        'marketing.view', 'marketing.create', 'marketing.edit', 'marketing.launch',
-    ],
-    
-    'Customer Support Manager': [
-        'dashboard.view',
-        'orders.view', 'orders.edit', 'orders.cancel', 'orders.refund',
-        'customers.view', 'customers.edit',
-    ],
-    
-    'Customer Support Agent': [
-        'orders.view',
-        'customers.view',
-    ],
-    
-    'Finance Manager': [
-        'dashboard.view', 'dashboard.export',
-        'finance.view', 'finance.edit', 'finance.export',
-        'reports.view', 'reports.export',
-    ],
-    
-    'Accountant': [
-        'dashboard.view',
-        'finance.view', 'finance.export',
-        'reports.view',
-    ],
-    
-    'Warehouse Manager': [
-        'dashboard.view',
-        'inventory.view', 'inventory.edit',
-        'orders.view', 'orders.edit',
-    ],
-    
-    'Warehouse Staff': [
-        'inventory.view',
-        'orders.view',
-    ],
-    
-    'Affiliate Manager': [
-        'dashboard.view',
-        'marketing.view', 'marketing.edit',
-    ],
-    
-    'Compliance Manager': [
-        'dashboard.view',
-        'products.view', 'products.edit',
     ],
 }
 

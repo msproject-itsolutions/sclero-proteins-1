@@ -1,7 +1,7 @@
 from django.test import TestCase
 
-from .models import MarketingIntegration, SystemSetting
-from .serializers import MarketingIntegrationSerializer, SystemSettingSerializer
+from .models import HeroBannerSlide, MarketingIntegration, SystemSetting
+from .serializers import HeroBannerSlideSerializer, MarketingIntegrationSerializer, SystemSettingSerializer
 
 
 class SecretSerializationTests(TestCase):
@@ -37,3 +37,20 @@ class SecretSerializationTests(TestCase):
         data = MarketingIntegrationSerializer(integration).data
         self.assertNotIn('credentials', data)
         self.assertTrue(data['is_configured'])
+
+
+class HeroBannerSettingsTests(TestCase):
+    def test_vertical_and_arrow_positions_round_trip_through_api_serializer(self):
+        slide = HeroBannerSlide.objects.create(title='Test', heading='Test heading')
+        serializer = HeroBannerSlideSerializer(
+            slide,
+            data={'vertical_position': 'TOP', 'arrow_position': 'SIDES'},
+            partial=True,
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        serializer.save()
+        slide.refresh_from_db()
+        self.assertEqual(slide.vertical_position, 'TOP')
+        self.assertEqual(slide.arrow_position, 'SIDES')
+        self.assertEqual(HeroBannerSlideSerializer(slide).data['vertical_position'], 'TOP')
+        self.assertEqual(HeroBannerSlideSerializer(slide).data['arrow_position'], 'SIDES')

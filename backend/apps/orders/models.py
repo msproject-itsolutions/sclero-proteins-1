@@ -32,12 +32,22 @@ class Cart(models.Model):
 class CartItem(models.Model):
     cart = models.ForeignKey(Cart, on_delete=models.CASCADE, related_name="items")
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
+    # Store the SKU rather than a foreign key. Administrators may replace a
+    # product's variant rows while editing it; keeping the SKU makes an open
+    # cart stable and lets checkout fail clearly if that option was retired.
+    variant_sku = models.CharField(max_length=100, blank=True, default='')
+    variant_name = models.CharField(max_length=150, blank=True, default='')
     quantity = models.PositiveIntegerField(default=1)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ('cart', 'product')
+        constraints = [
+            models.UniqueConstraint(
+                fields=['cart', 'product', 'variant_sku'],
+                name='unique_cart_product_variant',
+            ),
+        ]
 
     def __str__(self):
         return f"{self.quantity} x {self.product.name} in Cart {self.cart.id}"
@@ -67,6 +77,13 @@ class Order(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="orders")
     region = models.ForeignKey(Region, on_delete=models.PROTECT, related_name="orders")
     status = models.CharField(max_length=20, choices=ORDER_STATUS, default='PENDING', db_index=True)
+    # Set when the order first reaches DELIVERED. `updated_at` can't be used to
+    # time the review request — any later edit would move the goalposts.
+    delivered_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    review_request_sent_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="Stamped when the review request goes out, so it is only ever sent once.",
+    )
     
     # Customer Info at the time of purchase
     email = models.EmailField(db_index=True)
@@ -85,6 +102,10 @@ class Order(models.Model):
     tax_rate = models.DecimalField(max_digits=5, decimal_places=2, help_text="Tax rate at checkout")
     tax_amount = models.DecimalField(max_digits=12, decimal_places=2)
     shipping_cost = models.DecimalField(max_digits=12, decimal_places=2)
+    shipping_method = models.CharField(max_length=100, blank=True, default='Standard Shipping')
+    shipping_rate_name = models.CharField(max_length=100, blank=True, default='')
+    shipping_estimated_days = models.CharField(max_length=50, blank=True, default='')
+    staff_notes = models.TextField(blank=True, default='')
     coupon_code = models.CharField(max_length=50, blank=True, null=True)
     discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     total = models.DecimalField(max_digits=12, decimal_places=2)
@@ -114,6 +135,10 @@ class Order(models.Model):
 class OrderItem(models.Model):
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="items")
     product = models.ForeignKey(Product, on_delete=models.PROTECT)
+    # Immutable variant snapshots keep invoices and order history accurate
+    # even if the catalogue option is renamed or removed later.
+    variant_sku = models.CharField(max_length=100, blank=True, default='')
+    variant_name = models.CharField(max_length=150, blank=True, default='')
     quantity = models.PositiveIntegerField()
     price = models.DecimalField(max_digits=12, decimal_places=2, help_text="Unit price paid")
     tax_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, help_text="Total tax on these items")
@@ -259,3 +284,96 @@ class WebhookEvent(models.Model):
 
     def __str__(self):
         return f"{self.gateway} - {self.event_type} ({self.status})"
+
+
+class EmailDelivery(models.Model):
+    """Durable retry record for a transactional email that could not send."""
+
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending'),
+        ('SENT', 'Sent'),
+        ('FAILED', 'Failed'),
+        ('DLQ', 'Dead Letter Queue'),
+    ]
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    event = models.CharField(max_length=40, db_index=True)
+    region = models.ForeignKey(Region, on_delete=models.SET_NULL, null=True, blank=True)
+    recipient_email = models.EmailField()
+    context = models.JSONField(default=dict)
+    audit_target_type = models.CharField(max_length=100, default='Order')
+    audit_target_id = models.CharField(max_length=100, blank=True, default='')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='PENDING', db_index=True)
+    attempts = models.PositiveIntegerField(default=0)
+    last_attempt_at = models.DateTimeField(null=True, blank=True)
+    next_attempt_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    error_message = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    'event', 'recipient_email', 'audit_target_type',
+                    'audit_target_id',
+                ],
+                condition=models.Q(status__in=['PENDING', 'FAILED']),
+                name='unique_outstanding_email_delivery',
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=['status', 'next_attempt_at'],
+                name='orders_ema_status_8cf2c5_idx',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.event} to {self.recipient_email} ({self.status})'
+
+
+class CronJobRun(models.Model):
+    """One execution of a scheduled job.
+
+    Scheduled work fails quietly by nature — nobody is watching when it runs at
+    03:00. Every run is recorded here so the admin can see what ran, what it
+    did, and what broke, and retry a failed job rather than discover a week of
+    missing emails later.
+    """
+    STATUS = [
+        ('RUNNING', 'Running'),
+        ('SUCCESS', 'Success'),
+        ('FAILED', 'Failed'),
+    ]
+    job_name = models.CharField(max_length=100, db_index=True)
+    status = models.CharField(max_length=10, choices=STATUS, default='RUNNING', db_index=True)
+    started_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    duration_ms = models.PositiveIntegerField(null=True, blank=True)
+    processed = models.PositiveIntegerField(default=0, help_text="Items acted on, e.g. emails sent.")
+    failed = models.PositiveIntegerField(default=0, help_text="Items that errored but did not stop the run.")
+    message = models.TextField(blank=True, default='')
+    error = models.TextField(blank=True, default='')
+
+    class Meta:
+        ordering = ['-started_at']
+        indexes = [
+            models.Index(fields=['job_name', '-started_at']),
+            models.Index(fields=['status', '-started_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.job_name} {self.status} @ {self.started_at:%Y-%m-%d %H:%M}"
+
+
+class SchedulerLease(models.Model):
+    """Renewable database lease ensuring only one scheduler is active."""
+
+    name = models.CharField(max_length=50, unique=True, default='primary')
+    owner = models.CharField(max_length=64)
+    expires_at = models.DateTimeField(db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'{self.name}: {self.owner} until {self.expires_at.isoformat()}'

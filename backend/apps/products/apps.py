@@ -5,5 +5,4 @@ class ProductsConfig(AppConfig):
     name = 'apps.products'
 
     def ready(self):
-        import apps.products.signals
-
+        import apps.products.signals  # noqa: F401 - registers signal handlers

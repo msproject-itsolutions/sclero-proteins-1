@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { getApiUrl } from '../lib/api';
+import { getApiUrl, postJson } from '../lib/api';
 
 export const fetchCart = createAsyncThunk(
   'cart/fetchCart',
@@ -21,14 +21,11 @@ export const fetchCart = createAsyncThunk(
 
 export const addToCart = createAsyncThunk(
   'cart/addToCart',
-  async ({ session_id, region, product_id, quantity }, { rejectWithValue }) => {
+  async ({ session_id, region, product_id, quantity, metadata, variant_sku }, { rejectWithValue }) => {
     try {
-      const response = await fetch(getApiUrl('/api/cart/add/'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id, region, product_id, quantity }),
+      const { response, data } = await postJson('/api/cart/add/', {
+        session_id, region, product_id, quantity, metadata, variant_sku,
       });
-      const data = await response.json();
       if (!response.ok) {
         throw new Error(data.error || 'Failed to add item to cart');
       }
@@ -41,14 +38,11 @@ export const addToCart = createAsyncThunk(
 
 export const updateCartItem = createAsyncThunk(
   'cart/updateCartItem',
-  async ({ session_id, region, product_id, quantity }, { rejectWithValue }) => {
+  async ({ session_id, region, cart_item_id, product_id, variant_sku, quantity }, { rejectWithValue }) => {
     try {
-      const response = await fetch(getApiUrl('/api/cart/update/'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id, region, product_id, quantity }),
+      const { response, data } = await postJson('/api/cart/update/', {
+        session_id, region, cart_item_id, product_id, variant_sku, quantity,
       });
-      const data = await response.json();
       if (!response.ok) {
         throw new Error(data.error || 'Failed to update item quantity');
       }
@@ -61,14 +55,11 @@ export const updateCartItem = createAsyncThunk(
 
 export const removeFromCart = createAsyncThunk(
   'cart/removeFromCart',
-  async ({ session_id, region, product_id }, { rejectWithValue }) => {
+  async ({ session_id, region, cart_item_id, product_id, variant_sku }, { rejectWithValue }) => {
     try {
-      const response = await fetch(getApiUrl('/api/cart/remove/'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id, region, product_id }),
+      const { response, data } = await postJson('/api/cart/remove/', {
+        session_id, region, cart_item_id, product_id, variant_sku,
       });
-      const data = await response.json();
       if (!response.ok) {
         throw new Error(data.error || 'Failed to remove item');
       }

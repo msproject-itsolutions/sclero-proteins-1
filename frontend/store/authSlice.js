@@ -2,52 +2,30 @@ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { getApiUrl } from '../lib/api';
 import { authenticatedFetch } from '../lib/authFetch';
 
-const ACCESS_KEY = 'sclero_access';
-const REFRESH_KEY = 'sclero_refresh';
-
-// All localStorage access is wrapped: some browsers/privacy modes (e.g. Edge
-// "Tracking prevention", Safari private mode) throw when storage is blocked.
-// A blocked store must never crash login — the session still works in-memory.
-function loadTokens() {
-  if (typeof window === 'undefined') return { access: null, refresh: null };
-  try {
-    return {
-      access: window.localStorage.getItem(ACCESS_KEY),
-      refresh: window.localStorage.getItem(REFRESH_KEY),
-    };
-  } catch {
-    return { access: null, refresh: null };
-  }
-}
-
-function persistTokens(access, refresh) {
-  if (typeof window === 'undefined') return;
-  try {
-    if (access) window.localStorage.setItem(ACCESS_KEY, access);
-    if (refresh) window.localStorage.setItem(REFRESH_KEY, refresh);
-  } catch {
-    /* storage blocked — session stays in Redux for this tab */
-  }
-}
-
-function clearTokens() {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.removeItem(ACCESS_KEY);
-    window.localStorage.removeItem(REFRESH_KEY);
-  } catch {
-    /* ignore */
-  }
-}
+const authRequest = (path, options = {}) => fetch(getApiUrl(path), {
+  ...options,
+  credentials: 'include',
+  headers: {
+    'X-Sclero-Client': 'storefront',
+    ...(options.headers || {}),
+  },
+});
 
 // Register a new customer. Backend returns { user, tokens }.
 export const register = createAsyncThunk(
   'auth/register',
   async ({ email, password, first_name, last_name, phone_number }, { rejectWithValue }) => {
-    const res = await fetch(getApiUrl('/api/auth/register/'), {
+    const cleanedEmail = String(email || '').trim().toLowerCase();
+    const res = await authRequest('/api/auth/register/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, first_name, last_name, phone_number }),
+      body: JSON.stringify({
+        email: cleanedEmail,
+        password,
+        first_name: String(first_name || '').trim(),
+        last_name: String(last_name || '').trim(),
+        phone_number: String(phone_number || '').trim(),
+      }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -56,7 +34,6 @@ export const register = createAsyncThunk(
         data.email?.[0] || data.password?.[0] || data.detail || 'Registration failed';
       return rejectWithValue(msg);
     }
-    persistTokens(data.tokens.access, data.tokens.refresh);
     return data;
   }
 );
@@ -67,10 +44,11 @@ export const register = createAsyncThunk(
 export const login = createAsyncThunk(
   'auth/login',
   async ({ email, password }, { dispatch, rejectWithValue }) => {
-    const res = await fetch(getApiUrl('/api/auth/login/'), {
+    const cleanedEmail = String(email || '').trim().toLowerCase();
+    const res = await authRequest('/api/auth/login/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email: cleanedEmail, password }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -78,16 +56,13 @@ export const login = createAsyncThunk(
     }
     // Staff TOTP challenge — do NOT persist tokens.
     if (data.otp_required) {
-      return { otpRequired: true, email, password };
+      return { otpRequired: true, email: cleanedEmail, password };
     }
     // Legacy email-OTP path (kept for backward compat).
     if (data.two_factor_required) {
       return { tokens: data, user: null };
     }
-    if (data.access) {
-      persistTokens(data.access, data.refresh);
-    }
-    const profile = await dispatch(fetchProfile(data.access)).unwrap().catch(() => null);
+    const profile = data.user || await dispatch(fetchProfile()).unwrap().catch(() => null);
     return { tokens: data, user: profile };
   }
 );
@@ -98,15 +73,14 @@ export const login = createAsyncThunk(
 export const googleLogin = createAsyncThunk(
   'auth/googleLogin',
   async ({ credential, email, googleId, firstName, lastName }, { rejectWithValue }) => {
-    const res = await fetch(getApiUrl('/api/auth/google/'), {
+    const res = await authRequest('/api/auth/google/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ credential, email, googleId, firstName, lastName }),
     });
     const data = await res.json();
     if (!res.ok) return rejectWithValue(data.error || 'Google sign-in failed');
-    persistTokens(data.tokens.access, data.tokens.refresh);
-    return data; // { user, tokens }
+    return data;
   }
 );
 
@@ -118,7 +92,7 @@ export const completeLogin = createAsyncThunk(
     if (!pendingEmail || !pendingPassword) {
       return rejectWithValue('Login session expired. Please log in again.');
     }
-    const res = await fetch(getApiUrl('/api/auth/login/'), {
+    const res = await authRequest('/api/auth/login/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -134,8 +108,7 @@ export const completeLogin = createAsyncThunk(
     if (data.otp_required) {
       return rejectWithValue('Authenticator code required.');
     }
-    persistTokens(data.access, data.refresh);
-    const profile = await dispatch(fetchProfile(data.access)).unwrap().catch(() => null);
+    const profile = data.user || await dispatch(fetchProfile()).unwrap().catch(() => null);
     return { tokens: data, user: profile };
   }
 );
@@ -143,11 +116,10 @@ export const completeLogin = createAsyncThunk(
 // --- TOTP (authenticator app) management ----------------------------------
 export const fetch2faStatus = createAsyncThunk(
   'auth/fetch2faStatus',
-  async (_, { getState, rejectWithValue }) => {
+  async (_, { rejectWithValue }) => {
     const res = await authenticatedFetch(
       '/api/auth/2fa/status/',
       {},
-      getState().auth.access,
     );
     if (!res.ok) return rejectWithValue('Could not load 2FA status');
     return res.json();
@@ -156,11 +128,11 @@ export const fetch2faStatus = createAsyncThunk(
 
 export const setup2fa = createAsyncThunk(
   'auth/setup2fa',
-  async (_, { getState, rejectWithValue }) => {
+  async (_, { rejectWithValue }) => {
     const res = await authenticatedFetch('/api/auth/2fa/setup/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-    }, getState().auth.access);
+    });
     const data = await res.json();
     if (!res.ok) return rejectWithValue(data.detail || 'Could not start 2FA setup');
     return data; // { secret, provisioning_uri, qr_data_url }
@@ -169,12 +141,12 @@ export const setup2fa = createAsyncThunk(
 
 export const verify2fa = createAsyncThunk(
   'auth/verify2fa',
-  async ({ code }, { getState, rejectWithValue }) => {
+  async ({ code }, { rejectWithValue }) => {
     const res = await authenticatedFetch('/api/auth/2fa/verify/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code }),
-    }, getState().auth.access);
+    });
     const data = await res.json();
     if (!res.ok) return rejectWithValue(data.detail || 'Invalid code');
     return data; // { enabled, backup_codes: [...] }
@@ -183,12 +155,12 @@ export const verify2fa = createAsyncThunk(
 
 export const disable2fa = createAsyncThunk(
   'auth/disable2fa',
-  async ({ password, code }, { getState, rejectWithValue }) => {
+  async ({ password, code }, { rejectWithValue }) => {
     const res = await authenticatedFetch('/api/auth/2fa/disable/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password, code }),
-    }, getState().auth.access);
+    });
     const data = await res.json();
     if (!res.ok) return rejectWithValue(data.detail || 'Could not disable 2FA');
     return data;
@@ -200,10 +172,11 @@ export const disable2fa = createAsyncThunk(
 export const sendOtp = createAsyncThunk(
   'auth/sendOtp',
   async ({ identifier }, { rejectWithValue }) => {
-    const res = await fetch(getApiUrl('/api/auth/otp/send/'), {
+    const cleanedIdentifier = String(identifier || '').trim().toLowerCase();
+    const res = await authRequest('/api/auth/otp/send/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ identifier }),
+      body: JSON.stringify({ identifier: cleanedIdentifier }),
     });
     const data = await res.json();
     if (!res.ok) return rejectWithValue(data.error || 'Could not send code');
@@ -215,11 +188,12 @@ export const sendOtp = createAsyncThunk(
 export const requestMagicLink = createAsyncThunk(
   'auth/requestMagicLink',
   async ({ email }, { rejectWithValue }) => {
-    const res = await fetch(getApiUrl('/api/auth/magic-link/request/'), {
+    const cleanedEmail = String(email || '').trim().toLowerCase();
+    const res = await authRequest('/api/auth/magic-link/request/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        email,
+        email: cleanedEmail,
         origin: typeof window !== 'undefined' ? window.location.origin : '',
       }),
     });
@@ -233,14 +207,13 @@ export const requestMagicLink = createAsyncThunk(
 export const verifyMagicLink = createAsyncThunk(
   'auth/verifyMagicLink',
   async ({ token }, { rejectWithValue }) => {
-    const res = await fetch(getApiUrl('/api/auth/magic-link/verify/'), {
+    const res = await authRequest('/api/auth/magic-link/verify/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token }),
     });
     const data = await res.json();
     if (!res.ok) return rejectWithValue(data.error || 'Invalid sign-in link');
-    persistTokens(data.tokens.access, data.tokens.refresh);
     return data;
   }
 );
@@ -249,14 +222,16 @@ export const verifyMagicLink = createAsyncThunk(
 export const verifyOtp = createAsyncThunk(
   'auth/verifyOtp',
   async ({ identifier, otp }, { rejectWithValue }) => {
-    const res = await fetch(getApiUrl('/api/auth/otp/verify/'), {
+    const res = await authRequest('/api/auth/otp/verify/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ identifier, otp }),
+      body: JSON.stringify({
+        identifier: String(identifier || '').trim().toLowerCase(),
+        otp: String(otp || '').trim(),
+      }),
     });
     const data = await res.json();
     if (!res.ok) return rejectWithValue(data.error || 'Invalid code');
-    persistTokens(data.tokens.access, data.tokens.refresh);
     return data;
   }
 );
@@ -264,26 +239,19 @@ export const verifyOtp = createAsyncThunk(
 // Fetch the authenticated user's profile using the stored access token.
 export const fetchProfile = createAsyncThunk(
   'auth/fetchProfile',
-  async (tokenArg, { getState, rejectWithValue }) => {
-    // Accept an explicit token (used right after login, before state/storage are
-    // updated and so it works even if localStorage is blocked).
-    const access = (typeof tokenArg === 'string' && tokenArg)
-      || getState().auth.access || loadTokens().access;
-    if (!access) return rejectWithValue('Not authenticated');
-    const res = await authenticatedFetch('/api/auth/profile/', {}, access);
+  async (_, { rejectWithValue }) => {
+    const res = await authenticatedFetch('/api/auth/profile/');
     if (!res.ok) return rejectWithValue('Session expired');
     return res.json();
   }
 );
 
-const initial = loadTokens();
-
 const authSlice = createSlice({
   name: 'auth',
   initialState: {
     user: null,
-    access: initial.access,
-    refresh: initial.refresh,
+    isAuthenticated: false,
+    sessionChecked: false,
     status: 'idle', // idle | loading | succeeded | failed
     error: null,
     twoFactorRequired: false,
@@ -295,11 +263,10 @@ const authSlice = createSlice({
     pendingPassword: '',
   },
   reducers: {
-    logout(state) {
-      clearTokens();
+    clearSession(state) {
       state.user = null;
-      state.access = null;
-      state.refresh = null;
+      state.isAuthenticated = false;
+      state.sessionChecked = true;
       state.status = 'idle';
       state.error = null;
       state.twoFactorRequired = false;
@@ -328,8 +295,8 @@ const authSlice = createSlice({
       .addCase(register.fulfilled, (state, action) => {
         state.status = 'succeeded';
         state.user = action.payload.user;
-        state.access = action.payload.tokens.access;
-        state.refresh = action.payload.tokens.refresh;
+        state.isAuthenticated = true;
+        state.sessionChecked = true;
       })
       .addCase(register.rejected, rejected)
 
@@ -348,9 +315,9 @@ const authSlice = createSlice({
           state.twoFactorEmail = action.payload.tokens.email;
           state.sandboxOtp = action.payload.tokens.otp_preview_for_sandbox || '';
         } else if (action.payload.tokens) {
-          state.access = action.payload.tokens.access;
-          state.refresh = action.payload.tokens.refresh;
           if (action.payload.user) state.user = action.payload.user;
+          state.isAuthenticated = true;
+          state.sessionChecked = true;
           state.twoFactorRequired = false;
           state.twoFactorEmail = '';
           state.sandboxOtp = '';
@@ -362,17 +329,17 @@ const authSlice = createSlice({
       .addCase(googleLogin.fulfilled, (state, action) => {
         state.status = 'succeeded';
         state.user = action.payload.user;
-        state.access = action.payload.tokens.access;
-        state.refresh = action.payload.tokens.refresh;
+        state.isAuthenticated = true;
+        state.sessionChecked = true;
       })
       .addCase(googleLogin.rejected, rejected)
 
       .addCase(completeLogin.pending, pending)
       .addCase(completeLogin.fulfilled, (state, action) => {
         state.status = 'succeeded';
-        state.access = action.payload.tokens.access;
-        state.refresh = action.payload.tokens.refresh;
         if (action.payload.user) state.user = action.payload.user;
+        state.isAuthenticated = true;
+        state.sessionChecked = true;
         state.requiresTotp = false;
         state.pendingEmail = '';
         state.pendingPassword = '';
@@ -383,8 +350,8 @@ const authSlice = createSlice({
       .addCase(verifyOtp.fulfilled, (state, action) => {
         state.status = 'succeeded';
         state.user = action.payload.user;
-        state.access = action.payload.tokens.access;
-        state.refresh = action.payload.tokens.refresh;
+        state.isAuthenticated = true;
+        state.sessionChecked = true;
         state.twoFactorRequired = false;
         state.twoFactorEmail = '';
         state.sandboxOtp = '';
@@ -395,23 +362,27 @@ const authSlice = createSlice({
       .addCase(verifyMagicLink.fulfilled, (state, action) => {
         state.status = 'succeeded';
         state.user = action.payload.user;
-        state.access = action.payload.tokens.access;
-        state.refresh = action.payload.tokens.refresh;
+        state.isAuthenticated = true;
+        state.sessionChecked = true;
       })
       .addCase(verifyMagicLink.rejected, rejected)
 
       .addCase(fetchProfile.fulfilled, (state, action) => {
         state.user = action.payload;
+        state.isAuthenticated = true;
+        state.sessionChecked = true;
       })
       .addCase(fetchProfile.rejected, (state) => {
-        // Token invalid/expired — drop it so the UI shows logged-out.
-        clearTokens();
         state.user = null;
-        state.access = null;
-        state.refresh = null;
+        state.isAuthenticated = false;
+        state.sessionChecked = true;
       });
   },
 });
 
-export const { logout, clearAuthError } = authSlice.actions;
+export const { clearSession, clearAuthError } = authSlice.actions;
+export const logout = () => (dispatch) => {
+  authRequest('/api/auth/logout/', { method: 'POST' }).catch(() => {});
+  dispatch(clearSession());
+};
 export default authSlice.reducer;

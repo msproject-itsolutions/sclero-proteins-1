@@ -17,8 +17,8 @@ export default function FAQPage() {
     <StoreShell>
       <main>
         {/* Banner Section */}
-        <section className="border-b border-edge bg-surface py-16 md:py-24">
-          <div className="mx-auto max-w-5xl px-4 text-center sm:px-6 lg:px-8">
+        <section className="border-b border-edge bg-surface section">
+          <div className="container-page text-center">
             <p className="kicker mb-4">Support Hub</p>
             <h1 className="text-display mx-auto max-w-3xl">
               Frequently Asked <em className="text-italic-accent">Questions</em>
@@ -30,13 +30,15 @@ export default function FAQPage() {
         </section>
 
         {/* FAQs List Section */}
-        <section className="reveal mx-auto max-w-5xl px-4 py-16 sm:px-6 md:py-24 lg:px-8">
-          <GeneralFAQModule />
+        <section className="reveal section">
+          <div className="container-page">
+            <GeneralFAQModule />
+          </div>
         </section>
 
         {/* CTA Section */}
-        <section className="reveal border-t border-edge bg-surface-muted py-16 md:py-24">
-          <div className="mx-auto max-w-5xl px-4 text-center sm:px-6 lg:px-8 space-y-4">
+        <section className="reveal border-t border-edge bg-surface-muted section">
+          <div className="container-page space-y-4 text-center">
             <h2 className="text-heading-1">Still need help?</h2>
             <p className="mx-auto max-w-lg text-[15px] leading-[1.75] text-ink-secondary">
               If you couldn't find the answer you were looking for, our friendly support team is here to assist you with order tracing, dosage recommendations, or account changes.

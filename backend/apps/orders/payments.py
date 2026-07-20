@@ -18,7 +18,7 @@ import json
 import os
 import time
 import logging
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 import requests
 from django.conf import settings
@@ -29,6 +29,29 @@ logger = logging.getLogger(__name__)
 
 class PaymentError(Exception):
     """Raised for routing/validation/charge failures. Carries an HTTP-friendly message."""
+
+
+# Stripe quotes amounts in a currency's smallest unit. Most currencies have 100
+# of them (£1.00 -> 100), but these do not — sending 100 for ¥1 would overcharge
+# a customer 100x. https://docs.stripe.com/currencies#special-cases
+ZERO_DECIMAL_CURRENCIES = {
+    'BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KMF', 'KRW', 'MGA',
+    'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF',
+}
+# Charged in thousandths, but Stripe requires the last digit to be 0.
+THREE_DECIMAL_CURRENCIES = {'BHD', 'JOD', 'KWD', 'OMR', 'TND'}
+
+
+def to_minor_units(amount, currency_code: str) -> int:
+    """Convert a decimal amount to the integer minor units Stripe expects."""
+    code = (currency_code or '').upper()
+    amount = Decimal(str(amount))
+    if code in ZERO_DECIMAL_CURRENCIES:
+        return int(amount.to_integral_value(rounding=ROUND_HALF_UP))
+    if code in THREE_DECIMAL_CURRENCIES:
+        units = int((amount * Decimal('1000')).to_integral_value(rounding=ROUND_HALF_UP))
+        return units - (units % 10)  # Stripe rejects thousandths not ending in 0
+    return int((amount * Decimal('100')).to_integral_value(rounding=ROUND_HALF_UP))
 
 
 def _sandbox_payments_allowed() -> bool:
@@ -107,6 +130,15 @@ class BaseGatewayAdapter:
             )
         return self._sandbox_refund(order, amount, reason)
 
+    def create_intent(self, amount, currency_code, metadata=None):
+        """Open a payment with the provider so the browser SDK can collect it.
+
+        Returns a dict the frontend hands to the gateway's JS SDK, e.g.
+        {"client_secret": ..., "publishable_key": ...} for Stripe. Amount is
+        always supplied by the server, never by the client.
+        """
+        raise NotImplementedError(f"{self.code} has no browser payment collection.")
+
     def verify_webhook_signature(self, raw_body: bytes, headers: dict, secret: str) -> bool:
         """
         Gateway-specific verification of the webhook request.
@@ -138,6 +170,152 @@ class BaseGatewayAdapter:
 
 class RazorpayAdapter(BaseGatewayAdapter):
     code = "RAZORPAY"
+    supports_live = True
+
+    API_BASE = "https://api.razorpay.com/v1"
+    TIMEOUT = 20
+
+    def _auth(self):
+        # Razorpay authenticates with key_id:key_secret basic auth.
+        return (self.gateway.publishable_key or "", self.gateway.secret_key or "")
+
+    def _request(self, method, path, data=None):
+        try:
+            resp = requests.request(
+                method, f"{self.API_BASE}{path}",
+                auth=self._auth(), data=data, timeout=self.TIMEOUT,
+            )
+        except requests.RequestException as exc:
+            logger.exception("Razorpay %s %s failed to connect", method, path)
+            raise PaymentError("Could not reach Razorpay. No money has been taken; please try again.") from exc
+
+        try:
+            body = resp.json()
+        except ValueError:
+            logger.error("Razorpay %s %s returned non-JSON (HTTP %s)", method, path, resp.status_code)
+            raise PaymentError("Razorpay returned an unreadable response.")
+
+        if resp.status_code >= 400:
+            err = (body.get("error") or {})
+            logger.error(
+                "Razorpay %s %s -> HTTP %s code=%s: %s",
+                method, path, resp.status_code, err.get("code"), err.get("description"),
+            )
+            raise PaymentError(err.get("description") or "Razorpay rejected the payment.")
+        return body
+
+    def create_intent(self, amount, currency_code, metadata=None):
+        if not self._is_live:
+            return {"sandbox": True, "razorpay_order_id": None,
+                    "publishable_key": self.gateway.publishable_key or ""}
+
+        data = {
+            "amount": to_minor_units(amount, currency_code),
+            "currency": (currency_code or "").upper(),
+        }
+        for key, value in (metadata or {}).items():
+            data[f"notes[{key}]"] = str(value)
+
+        rzp_order = self._request("POST", "/orders", data=data)
+        return {
+            "razorpay_order_id": rzp_order.get("id"),
+            "publishable_key": self.gateway.publishable_key or "",
+        }
+
+    def _verify_handshake(self, payload):
+        """Verify the browser callback really came from Razorpay.
+
+        Signature = HMAC_SHA256("<razorpay_order_id>|<razorpay_payment_id>", key_secret).
+        """
+        rzp_order_id = (payload or {}).get("razorpay_order_id")
+        signature = (payload or {}).get("razorpay_signature")
+        payment_id = (payload or {}).get("payment_id")
+        if not (rzp_order_id and signature):
+            # No handshake supplied — the authoritative API fetch below still
+            # gates the charge, so this is a warning rather than a hard failure.
+            logger.warning("Razorpay charge for %s arrived without an order id/signature", payment_id)
+            return
+        expected_body = f"{rzp_order_id}|{payment_id}".encode()
+        if not verify_razorpay_signature(expected_body, signature, self.gateway.secret_key):
+            logger.error("Razorpay signature mismatch for payment %s", payment_id)
+            raise PaymentError("Payment verification failed. Please contact support before retrying.")
+
+    def charge(self, order, payload):
+        if not self._is_live:
+            return self._sandbox_charge(order, payload)
+
+        payment_id = (payload or {}).get("payment_id") or ""
+        if not payment_id.startswith("pay_"):
+            raise PaymentError("A valid Razorpay payment reference is required.")
+
+        self._verify_handshake(payload)
+
+        payment = self._request("GET", f"/payments/{payment_id}")
+
+        expected_minor = to_minor_units(order.total, order.currency_code)
+        paid_minor = int(payment.get("amount") or 0)
+        payment_currency = (payment.get("currency") or "").upper()
+
+        if payment_currency != (order.currency_code or "").upper():
+            logger.error(
+                "Razorpay currency mismatch on order %s: got %s, expected %s",
+                order.id, payment_currency, order.currency_code,
+            )
+            raise PaymentError("The payment currency does not match the order.")
+        if paid_minor != expected_minor:
+            logger.error(
+                "Razorpay amount mismatch on order %s: got %s, expected %s",
+                order.id, paid_minor, expected_minor,
+            )
+            raise PaymentError("The amount paid does not match the order total.")
+
+        state = payment.get("status")
+        if state == "authorized":
+            # Funds are held but not taken; capture or they auto-void.
+            payment = self._request(
+                "POST", f"/payments/{payment_id}/capture",
+                data={"amount": expected_minor, "currency": payment_currency},
+            )
+            state = payment.get("status")
+
+        if state != "captured":
+            logger.warning("Razorpay payment %s not captured (status=%s)", payment_id, state)
+            raise PaymentError(f"Payment was not completed (status: {state}).")
+
+        return {
+            "status": "SUCCESS",
+            "transaction_id": payment_id,
+            "raw": {
+                "gateway": self.code,
+                "mode": "LIVE",
+                "amount": paid_minor,
+                "currency": payment_currency,
+                "method": payment.get("method"),
+            },
+        }
+
+    def refund(self, order, amount, reason=""):
+        if not (self.gateway and self.gateway.supports_refunds):
+            raise PaymentError(f"{self.code} does not support refunds.")
+        if not self._is_live:
+            return self._sandbox_refund(order, amount, reason)
+
+        if not (order.payment_id or "").startswith("pay_"):
+            raise PaymentError("This order has no Razorpay payment to refund against.")
+
+        minor = to_minor_units(amount, order.currency_code)
+        # NOTE: unlike Stripe, Razorpay's refund API has no idempotency key, so a
+        # retry after a timeout can issue a second refund. The caller records the
+        # refund row; reconcile in the Razorpay dashboard before re-running one.
+        body = self._request(
+            "POST", f"/payments/{order.payment_id}/refund",
+            data={"amount": minor, "notes[order_id]": str(order.id), "notes[reason]": (reason or "")[:255]},
+        )
+        return {
+            "status": "REFUNDED" if body.get("status") in ("processed", "pending") else "FAILED",
+            "refund_id": body.get("id"),
+            "raw": {"gateway": self.code, "mode": "LIVE", "razorpay_status": body.get("status")},
+        }
 
     def verify_webhook_signature(self, raw_body: bytes, headers: dict, secret: str) -> bool:
         sig_header = headers.get('HTTP_X_RAZORPAY_SIGNATURE', '')
@@ -145,7 +323,10 @@ class RazorpayAdapter(BaseGatewayAdapter):
 
     def parse_webhook_event(self, payload: dict) -> dict:
         event_type = payload.get('event', '')
-        payment_entity = payload.get('payload', {}).get('payment', {}).get('entity', {})
+        payload_entities = payload.get('payload', {})
+        payment_entity = payload_entities.get('payment', {}).get('entity', {})
+        refund_entity = payload_entities.get('refund', {}).get('entity', {})
+        entity = payment_entity or refund_entity
         
         normalized_event = 'unknown'
         if event_type in ('payment.captured', 'order.paid'):
@@ -155,25 +336,181 @@ class RazorpayAdapter(BaseGatewayAdapter):
         elif event_type == 'refund.processed':
             normalized_event = 'refund.processed'
 
-        payment_id = payment_entity.get('order_id') or payment_entity.get('id') or ''
-        notes = payment_entity.get('notes', {})
+        payment_id = payment_entity.get('id') or refund_entity.get('payment_id') or ''
+        notes = entity.get('notes', {})
         order_id = notes.get('order_id')
 
         amount = Decimal('0.00')
-        if payment_entity.get('amount'):
-            amount = Decimal(str(payment_entity.get('amount'))) / Decimal('100.00')
+        if entity.get('amount'):
+            amount = Decimal(str(entity.get('amount'))) / Decimal('100.00')
 
         return {
             'event_type': normalized_event,
             'payment_id': payment_id,
             'order_id': order_id,
             'amount': amount,
-            'status': payment_entity.get('status', '')
+            'status': entity.get('status', ''),
+            'currency': entity.get('currency', ''),
         }
 
 
 class StripeAdapter(BaseGatewayAdapter):
     code = "STRIPE"
+    supports_live = True
+
+    API_BASE = "https://api.stripe.com/v1"
+    TIMEOUT = 20
+
+    def _request(self, method, path, data=None):
+        """Call the Stripe REST API with the gateway's secret key.
+
+        Uses `requests` rather than the stripe SDK to stay consistent with the
+        PayPal adapter and avoid a new runtime dependency.
+        """
+        try:
+            resp = requests.request(
+                method,
+                f"{self.API_BASE}{path}",
+                auth=(self.gateway.secret_key, ""),
+                data=data,
+                timeout=self.TIMEOUT,
+            )
+        except requests.RequestException as exc:
+            logger.exception("Stripe %s %s failed to connect", method, path)
+            raise PaymentError("Could not reach Stripe. No money has been taken; please try again.") from exc
+
+        try:
+            body = resp.json()
+        except ValueError:
+            logger.error("Stripe %s %s returned non-JSON (HTTP %s)", method, path, resp.status_code)
+            raise PaymentError("Stripe returned an unreadable response.")
+
+        if resp.status_code >= 400:
+            err = (body.get("error") or {})
+            logger.error(
+                "Stripe %s %s -> HTTP %s type=%s code=%s: %s",
+                method, path, resp.status_code, err.get("type"), err.get("code"), err.get("message"),
+            )
+            # Surface Stripe's own decline text — it is written for shoppers.
+            raise PaymentError(err.get("message") or "Stripe rejected the payment.")
+        return body
+
+    def create_intent(self, amount, currency_code, metadata=None):
+        if not self._is_live:
+            # Keeps the sandbox checkout flow working without Stripe credentials.
+            return {"sandbox": True, "client_secret": None,
+                    "publishable_key": self.gateway.publishable_key or ""}
+
+        data = {
+            "amount": to_minor_units(amount, currency_code),
+            "currency": (currency_code or "").lower(),
+            "automatic_payment_methods[enabled]": "true",
+        }
+        for key, value in (metadata or {}).items():
+            data[f"metadata[{key}]"] = str(value)
+
+        intent = self._request("POST", "/payment_intents", data=data)
+        return {
+            "intent_id": intent.get("id"),
+            "client_secret": intent.get("client_secret"),
+            "publishable_key": self.gateway.publishable_key or "",
+        }
+
+    def charge(self, order, payload):
+        """Verify a PaymentIntent the client already confirmed.
+
+        The client confirms the PaymentIntent in the browser; this only reads it
+        back and checks it really succeeded, for the right amount, in the right
+        currency. Never trust the client's word that payment happened.
+        """
+        if not self._is_live:
+            return self._sandbox_charge(order, payload)
+
+        intent_id = (payload or {}).get("payment_id") or ""
+        if not intent_id.startswith("pi_"):
+            raise PaymentError("A valid Stripe PaymentIntent reference is required.")
+
+        intent = self._request("GET", f"/payment_intents/{intent_id}")
+
+        status_ = intent.get("status")
+        if status_ != "succeeded":
+            logger.warning("Stripe intent %s not succeeded (status=%s)", intent_id, status_)
+            raise PaymentError(f"Payment was not completed (status: {status_}).")
+
+        # Guard against a tampered client confirming a cheap intent for a costly
+        # order, or paying in a weaker currency.
+        expected_minor = to_minor_units(order.total, order.currency_code)
+        received_minor = int(intent.get("amount_received") or 0)
+        if received_minor != expected_minor:
+            logger.error(
+                "Stripe amount mismatch on order %s: got %s, expected %s",
+                order.id, received_minor, expected_minor,
+            )
+            raise PaymentError("The amount paid does not match the order total.")
+
+        intent_currency = (intent.get("currency") or "").upper()
+        if intent_currency != (order.currency_code or "").upper():
+            logger.error(
+                "Stripe currency mismatch on order %s: got %s, expected %s",
+                order.id, intent_currency, order.currency_code,
+            )
+            raise PaymentError("The payment currency does not match the order.")
+
+        return {
+            "status": "SUCCESS",
+            "transaction_id": intent_id,
+            "raw": {
+                "gateway": self.code,
+                "mode": "LIVE",
+                "amount_received": received_minor,
+                "currency": intent_currency,
+                "latest_charge": intent.get("latest_charge"),
+            },
+        }
+
+    def refund(self, order, amount, reason=""):
+        if not (self.gateway and self.gateway.supports_refunds):
+            raise PaymentError(f"{self.code} does not support refunds.")
+        if not self._is_live:
+            return self._sandbox_refund(order, amount, reason)
+
+        if not (order.payment_id or "").startswith("pi_"):
+            raise PaymentError("This order has no Stripe PaymentIntent to refund against.")
+
+        data = {
+            "payment_intent": order.payment_id,
+            "amount": to_minor_units(amount, order.currency_code),
+            "metadata[order_id]": str(order.id),
+        }
+        if reason:
+            data["metadata[reason]"] = reason[:500]
+
+        # Stripe dedupes retries of the same refund for 24h via this key, so a
+        # timeout-and-retry cannot pay the customer twice.
+        headers_key = f"refund_{order.id}_{to_minor_units(amount, order.currency_code)}"
+        try:
+            resp = requests.post(
+                f"{self.API_BASE}/refunds",
+                auth=(self.gateway.secret_key, ""),
+                data=data,
+                headers={"Idempotency-Key": headers_key},
+                timeout=self.TIMEOUT,
+            )
+            body = resp.json()
+        except (requests.RequestException, ValueError) as exc:
+            logger.exception("Stripe refund failed for order %s", order.id)
+            raise PaymentError("Could not reach Stripe to issue the refund.") from exc
+
+        if resp.status_code >= 400:
+            err = (body.get("error") or {})
+            logger.error("Stripe refund error for order %s: %s", order.id, err.get("message"))
+            raise PaymentError(err.get("message") or "Stripe rejected the refund.")
+
+        return {
+            "status": "REFUNDED" if body.get("status") in ("succeeded", "pending") else "FAILED",
+            "refund_id": body.get("id"),
+            "raw": {"gateway": self.code, "mode": "LIVE", "stripe_status": body.get("status")},
+        }
 
     def verify_webhook_signature(self, raw_body: bytes, headers: dict, secret: str) -> bool:
         sig_header = headers.get('HTTP_STRIPE_SIGNATURE', '')
@@ -191,7 +528,7 @@ class StripeAdapter(BaseGatewayAdapter):
         elif event_type in ('charge.refunded',):
             normalized_event = 'refund.processed'
 
-        payment_id = data_obj.get('id') or data_obj.get('payment_intent') or ''
+        payment_id = data_obj.get('payment_intent') or data_obj.get('id') or ''
         metadata = data_obj.get('metadata', {})
         order_id = metadata.get('order_id') or data_obj.get('client_reference_id')
 
@@ -205,7 +542,8 @@ class StripeAdapter(BaseGatewayAdapter):
             'payment_id': payment_id,
             'order_id': order_id,
             'amount': amount,
-            'status': data_obj.get('status', '')
+            'status': data_obj.get('status', ''),
+            'currency': data_obj.get('currency', ''),
         }
 
 
@@ -245,7 +583,8 @@ class PayPalAdapter(BaseGatewayAdapter):
             'payment_id': payment_id,
             'order_id': order_id,
             'amount': amount,
-            'status': resource.get('status', '')
+            'status': resource.get('status', ''),
+            'currency': amt_struct.get('currency_code', ''),
         }
 
 
