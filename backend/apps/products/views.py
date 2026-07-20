@@ -6,21 +6,60 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
-from django.shortcuts import get_object_or_404
-from django.db.models import Q, Count
+from rest_framework.views import APIView
+from rest_framework.parsers import MultiPartParser, FormParser
+from django.core.files.storage import default_storage
+from django.db.models import Q, Count, Sum, Prefetch, OuterRef, Subquery, IntegerField, Value
+from django.db.models.functions import Coalesce
+from apps.inventory.models import StockLevel
 from apps.regions.models import Region
 from apps.users.permissions import require_permission
+from .pricing import resolve_price, sellable_in
 from .models import (
-    Product, ProductReview, Category, ProductRegionConfig, ProductMedia, ProductLandingPage,
-    Bundle,
+    Product, ProductReview, ProductVariant, Category, ProductRegionConfig,
+    ProductMedia, ProductLandingPage, Bundle,
 )
 from .serializers import (
     ProductListSerializer, ProductDetailSerializer,
     ProductReviewSerializer, ProductReviewAdminSerializer,
     CategorySerializer, ProductAdminSerializer, ProductAdminCreateUpdateSerializer,
     ProductRegionConfigSerializer, ProductMediaAdminSerializer, ProductLandingPageSerializer,
-    BundleSerializer, BundleAdminSerializer, BundleAdminCreateUpdateSerializer,
+    BundleAdminSerializer, BundleAdminCreateUpdateSerializer,
 )
+
+
+def _with_public_product_relations(queryset, region):
+    """Load all card/detail relations in a fixed number of queries."""
+    return queryset.prefetch_related(
+        'categories',
+        Prefetch(
+            'regional_configs',
+            queryset=ProductRegionConfig.objects.filter(region=region),
+            to_attr='_public_region_configs',
+        ),
+        Prefetch(
+            'stocks',
+            queryset=StockLevel.objects.filter(
+                warehouse__region=region, warehouse__is_active=True,
+            ),
+            to_attr='_public_region_stock',
+        ),
+        Prefetch(
+            'reviews',
+            queryset=ProductReview.objects.filter(is_approved=True).order_by('-created_at'),
+            to_attr='_public_reviews',
+        ),
+        Prefetch(
+            'media',
+            queryset=ProductMedia.objects.filter(media_type='IMAGE').order_by('display_order', 'id'),
+            to_attr='_public_images',
+        ),
+        Prefetch(
+            'variants',
+            queryset=ProductVariant.objects.filter(is_active=True).order_by('sort_order', 'id'),
+            to_attr='_public_variants',
+        ),
+    )
 
 class ProductViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Product.objects.filter(is_active=True, is_archived=False)
@@ -42,11 +81,12 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         if not region:
             return Response({"error": "A valid and active region parameter is required."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Filter products visible in this region
-        queryset = self.queryset.filter(
-            regional_configs__region=region,
-            regional_configs__is_visible=True
-        ).distinct()
+        # Products sellable in this region: an explicit price, or a base price
+        # this market can convert. Mirrors resolve_price() so the catalogue and
+        # checkout never disagree about what's for sale.
+        queryset = _with_public_product_relations(
+            self.queryset.filter(sellable_in(region)).distinct(), region,
+        )
 
         # Synonym and Typo-tolerant search
         TYPO_MAP = {
@@ -131,7 +171,14 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         # Sorting. Price sorts are resolved in Python because price is regional
         # and lives on ProductRegionConfig rather than Product.
         sort = request.query_params.get('sort', '')
-        if sort == 'newest':
+        if sort in ('popularity', 'bestseller'):
+            queryset = queryset.annotate(
+                units_sold=Sum(
+                    'orderitem__quantity',
+                    filter=Q(orderitem__order__region=region) & ~Q(orderitem__order__status__in=['CANCELLED', 'REFUNDED'])
+                )
+            ).order_by('-units_sold', 'name')
+        elif sort == 'newest':
             queryset = queryset.order_by('-created_at')
         elif sort == 'name':
             queryset = queryset.order_by('name')
@@ -155,16 +202,20 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         region = self.get_region()
         qs = Category.objects.filter(is_active=True)
         if region:
+            visible_products = (
+                Product.objects.filter(
+                    categories=OuterRef('pk'), is_active=True, is_archived=False,
+                )
+                .filter(sellable_in(region))
+                .order_by()
+                .values('categories')
+                .annotate(total=Count('pk', distinct=True))
+                .values('total')[:1]
+            )
             qs = qs.annotate(
-                product_count=Count(
-                    'products',
-                    filter=Q(
-                        products__regional_configs__region=region,
-                        products__regional_configs__is_visible=True,
-                        products__is_active=True,
-                        products__is_archived=False,
-                    ),
-                    distinct=True,
+                product_count=Coalesce(
+                    Subquery(visible_products, output_field=IntegerField()),
+                    Value(0),
                 )
             )
         else:
@@ -176,11 +227,15 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         if not region:
             return Response({"error": "A valid and active region parameter is required."}, status=status.HTTP_400_BAD_REQUEST)
             
-        product = self.get_object()
+        product = _with_public_product_relations(
+            self.queryset.filter(sku=self.kwargs[self.lookup_field]), region,
+        ).first()
+        if product is None:
+            return Response({"error": "Product not found."}, status=status.HTTP_404_NOT_FOUND)
         
         # Verify visibility in this region
-        is_visible = product.regional_configs.filter(region=region, is_visible=True).exists()
-        if not is_visible:
+        config = product._public_region_configs[0] if product._public_region_configs else None
+        if resolve_price(product, region, config=config)[0] is None:
             return Response({"error": "Product not available in this region."}, status=status.HTTP_404_NOT_FOUND)
 
         serializer = ProductDetailSerializer(product, context={'region': region})
@@ -196,10 +251,9 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({"error": "region is required"}, status=status.HTTP_400_BAD_REQUEST)
         product = self.get_object()
         category_ids = list(product.categories.values_list('id', flat=True))
-        base = (Product.objects.filter(is_active=True, is_archived=False,
-                                       regional_configs__region=region,
-                                       regional_configs__is_visible=True)
-                .exclude(pk=product.pk).distinct())
+        base = Product.objects.filter(
+            is_active=True, is_archived=False,
+        ).filter(sellable_in(region)).exclude(pk=product.pk).distinct()
         related = list(base.filter(categories__in=category_ids).distinct()[:4]) if category_ids else []
         if len(related) < 4:
             seen = {p.pk for p in related}
@@ -208,6 +262,11 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         # List serializer: card-shaped payload including `thumbnail`, which the
         # storefront ProductCard renders. The detail serializer has no
         # thumbnail field, which left the "Recommended Products" grid imageless.
+        related_ids = [item.pk for item in related]
+        related = list(_with_public_product_relations(
+            Product.objects.filter(pk__in=related_ids), region,
+        ))
+        related.sort(key=lambda item: related_ids.index(item.pk))
         ser = ProductListSerializer(related, many=True, context={'region': region})
         return Response(ser.data)
 
@@ -336,8 +395,16 @@ class ProductAdminViewSet(viewsets.ModelViewSet):
 
         # regional_configs is a reverse FK → prefetch (not select_related).
         return queryset.prefetch_related(
-            'regional_configs__region', 'media', 'categories', 'reviews'
+            'regional_configs__region', 'media', 'categories', 'reviews',
+            'variants', 'stocks__warehouse',
         )
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['active_regions'] = list(
+            Region.objects.filter(is_active=True).order_by('code')
+        )
+        return context
 
     def get_serializer_class(self):
         if self.action in ['create', 'update', 'partial_update']:
@@ -446,10 +513,6 @@ class BundleAdminViewSet(viewsets.ModelViewSet):
             return BundleAdminCreateUpdateSerializer
         return BundleAdminSerializer
 
-
-from rest_framework.views import APIView
-from rest_framework.parsers import MultiPartParser, FormParser
-from django.core.files.storage import default_storage
 
 class MediaUploadView(APIView):
     """

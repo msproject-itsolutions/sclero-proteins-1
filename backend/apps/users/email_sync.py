@@ -3,9 +3,40 @@ import email
 from email.header import decode_header
 import os
 import re
-from django.conf import settings
 from django.contrib.auth import get_user_model
+from apps.admin_dashboard.models import SystemSetting
 from apps.users.models import SupportTicket
+
+
+def _as_bool(value, default=False):
+    if value is None:
+        return default
+    return str(value).strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+def _get_imap_config():
+    """Use admin-managed IMAP settings when present, then environment values."""
+    configured = {}
+    try:
+        row = SystemSetting.objects.filter(key='IMAP_SETTINGS').first()
+        if row and isinstance(row.value, dict):
+            configured = dict(row.value)
+    except Exception:
+        configured = {}
+
+    def get(name, default=''):
+        value = configured.get(name)
+        return value if value not in (None, '') else os.getenv(name, default)
+
+    user = get('IMAP_USER')
+    password = get('IMAP_PASSWORD')
+    return {
+        'enabled': _as_bool(get('IMAP_ENABLED', None), bool(user and password)),
+        'host': get('IMAP_HOST', 'outlook.office365.com'),
+        'port': int(get('IMAP_PORT', '993')),
+        'user': user,
+        'password': password,
+    }
 
 def clean_header(value):
     if not value:
@@ -35,19 +66,18 @@ def sync_support_emails():
     Connect to Microsoft 365 / GoDaddy IMAP server, fetch unseen emails,
     and convert them to CRM SupportTickets.
     """
-    imap_host = os.getenv('IMAP_HOST', 'outlook.office365.com')
-    imap_port = int(os.getenv('IMAP_PORT', '993'))
-    imap_user = os.getenv('IMAP_USER', 'support@scleroproteins.co.uk')
-    imap_password = os.getenv('IMAP_PASSWORD', 'Scleroproteins1')
+    config = _get_imap_config()
+    if not config['enabled']:
+        return {'status': 'disabled', 'message': 'IMAP support inbox sync is disabled.'}
 
-    if not imap_user or not imap_password:
-        return {"status": "error", "message": "IMAP credentials not configured."}
+    if not config['user'] or not config['password']:
+        raise RuntimeError('IMAP_USER and IMAP_PASSWORD must be configured before email sync can run.')
 
     tickets_created = 0
     try:
         # Initialize secure connection to Microsoft 365
-        mail = imaplib.IMAP4_SSL(imap_host, imap_port)
-        mail.login(imap_user, imap_password)
+        mail = imaplib.IMAP4_SSL(config['host'], config['port'], timeout=20)
+        mail.login(config['user'], config['password'])
         mail.select("inbox")
 
         # Search for unseen (unread) emails in INBOX
@@ -71,6 +101,11 @@ def sync_support_emails():
                     subject = clean_header(msg.get("Subject", "No Subject"))
                     from_val = clean_header(msg.get("From", ""))
                     sender_email = parse_sender_email(from_val)
+                    external_message_id = clean_header(msg.get('Message-ID', '')).strip()[:255] or None
+
+                    if external_message_id and SupportTicket.objects.filter(external_message_id=external_message_id).exists():
+                        mail.store(msg_id, "+FLAGS", "\\Seen")
+                        continue
 
                     # Extract body content (prefer plain text)
                     body = ""
@@ -108,6 +143,7 @@ def sync_support_emails():
                     # Save new SupportTicket to database
                     SupportTicket.objects.create(
                         email=sender_email,
+                        external_message_id=external_message_id,
                         user=user,
                         subject=subject,
                         message=body,

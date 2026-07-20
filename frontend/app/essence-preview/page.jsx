@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import EssenceNewsletterForm from './EssenceNewsletterForm';
+import FooterCredit from '../../components/FooterCredit';
 
 export const metadata = {
   title: 'Essence Preview | Sclero Proteins',
@@ -249,16 +251,7 @@ export default function EssencePreviewPage() {
           <p className="mt-4 text-[14.5px]" style={{ color: 'var(--e-ink-2)' }}>
             One thoughtful email a month. New formulas, batch reports, no marketing noise.
           </p>
-          <form className="mt-8 flex items-stretch max-w-md mx-auto gap-2" action="#" method="get">
-            <input
-              type="email"
-              required
-              placeholder="you@example.com"
-              className="flex-1 px-4 py-3 text-[14px] bg-white outline-none"
-              style={{ border: '1px solid var(--e-edge-strong)', borderRadius: '4px' }}
-            />
-            <button type="submit" className="e-btn !px-5">Subscribe</button>
-          </form>
+          <EssenceNewsletterForm />
         </div>
       </section>
 
@@ -286,7 +279,7 @@ export default function EssencePreviewPage() {
         </div>
         <div className="border-t" style={{ borderColor: '#2B2B2B' }}>
           <div className="max-w-[1200px] mx-auto px-6 lg:px-10 py-6 flex flex-wrap items-center justify-between gap-4 text-[12px]" style={{ color: '#8F8A80' }}>
-            <p>© {new Date().getFullYear()} Sclero Proteins Ltd. All rights reserved.</p>
+            <FooterCredit />
             <p>Registered in England &amp; Wales. VAT-registered.</p>
           </div>
         </div>

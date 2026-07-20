@@ -4,7 +4,7 @@ from django.utils import timezone
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import AllowAny, IsAdminUser
+from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 from apps.users.permissions import require_permission
 from apps.regions.models import Region
@@ -27,6 +27,16 @@ from .serializers import (
     BlogPostSerializer,
     ApprovalRequestSerializer,
 )
+from django.http import HttpResponse
+from .reporting import generate_pdf_report
+from apps.users.models import User, CustomerActivity
+from decimal import Decimal
+from django.db import transaction
+from apps.orders.models import Order, Refund, PaymentLog
+from apps.orders.payments import refund_payment, PaymentError
+from apps.regions.models import Warehouse
+from apps.inventory.models import StockLevel
+from apps.products.models import Product, ProductRegionConfig
 
 
 class StoreConfigView(APIView):
@@ -402,9 +412,16 @@ class MarketingIntegrationViewSet(viewsets.ModelViewSet):
 
 
 class ContentPageViewSet(viewsets.ModelViewSet):
+    """Existing storefront pages: list, read, edit, delete — but not create.
+
+    The storefront's pages are a fixed set; new ones need a matching route and
+    template, so creating them from the admin produced pages that could not be
+    reached. Seed commands still create pages via the ORM, which is unaffected.
+    """
     queryset = ContentPage.objects.all().order_by('-created_at')
     serializer_class = ContentPageSerializer
     permission_classes = [require_permission('settings.manage')]
+    http_method_names = ['get', 'put', 'patch', 'delete', 'head', 'options']
 
     def get_queryset(self):
         qs = self.queryset
@@ -501,7 +518,7 @@ class PublishedBlogPostDetailView(APIView):
 class PublicSiteSettingView(APIView):
     """Public, whitelisted settings used to reflect CMS menu/footer changes."""
     permission_classes = [AllowAny]
-    ALLOWED_KEYS = {'NAVIGATION_MENUS', 'FOOTER_SETTINGS', 'THEME_BRANDING', 'COMPANY_INFO', 'SOCIAL_LINKS', 'SEO_SETTINGS'}
+    ALLOWED_KEYS = {'NAVIGATION_MENUS', 'FOOTER_SETTINGS', 'THEME_BRANDING', 'COMPANY_INFO', 'SOCIAL_LINKS', 'SEO_SETTINGS', 'HOMEPAGE_SETTINGS'}
 
 
     def get(self, request, key):
@@ -513,13 +530,6 @@ class PublicSiteSettingView(APIView):
             return Response({"key": key, "value": None})
         return Response({"key": setting.key, "value": setting.value, "updated_at": setting.updated_at})
 
-
-from rest_framework.views import APIView
-from django.http import HttpResponse
-import csv
-from .reporting import generate_pdf_report
-from apps.orders.models import Order
-from apps.users.models import User, CustomerActivity
 
 class ReportAnalyticsView(APIView):
     permission_classes = [require_permission('settings.manage')]
@@ -652,13 +662,6 @@ class ReportAnalyticsView(APIView):
         })
 
 
-from decimal import Decimal
-from django.db import transaction
-from apps.orders.models import Order, Refund, PaymentLog
-from apps.orders.payments import refund_payment, PaymentError
-from apps.regions.models import Warehouse
-from apps.inventory.models import StockLevel
-from apps.products.models import Product, ProductRegionConfig
 
 class ApprovalRequestViewSet(viewsets.ModelViewSet):
     queryset = ApprovalRequest.objects.all()
@@ -795,7 +798,7 @@ class ApprovalRequestViewSet(viewsets.ModelViewSet):
             user_to_delete = get_object_or_404(User, id=user_id)
             
             # Anonymize User model
-            user_to_delete.email = f"anonymized_{user_to_delete.id}@scleroproteins.co.uk"
+            user_to_delete.email = f"anonymized_{user_to_delete.id}@deleted.invalid"
             user_to_delete.first_name = "Anonymized"
             user_to_delete.last_name = "User"
             user_to_delete.phone_number = None
@@ -812,7 +815,7 @@ class ApprovalRequestViewSet(viewsets.ModelViewSet):
             # Update corresponding Order shipping details to placeholder/anonymized values
             orders = Order.objects.filter(user=user_to_delete)
             for o in orders:
-                o.email = f"anonymized_{user_to_delete.id}@scleroproteins.co.uk"
+                o.email = f"anonymized_{user_to_delete.id}@deleted.invalid"
                 o.shipping_name = "Anonymized Customer"
                 o.shipping_phone = "0000000000"
                 o.shipping_address_line1 = "Anonymized Line 1"

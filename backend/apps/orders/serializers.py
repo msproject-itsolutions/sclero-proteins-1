@@ -8,7 +8,10 @@ class CartItemSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CartItem
-        fields = ['id', 'product', 'product_id', 'quantity']
+        fields = [
+            'id', 'product', 'product_id', 'variant_sku', 'variant_name',
+            'quantity',
+        ]
 
 
 class CartSerializer(serializers.ModelSerializer):
@@ -23,10 +26,14 @@ class CartSerializer(serializers.ModelSerializer):
 class OrderItemSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product.name', read_only=True)
     product_sku = serializers.CharField(source='product.sku', read_only=True)
+    hsn_code = serializers.CharField(source='product.hsn_code', read_only=True, default='')
 
     class Meta:
         model = OrderItem
-        fields = ['id', 'product_name', 'product_sku', 'quantity', 'price', 'tax_amount']
+        fields = [
+            'id', 'product_name', 'product_sku', 'variant_sku', 'variant_name',
+            'hsn_code', 'quantity', 'price', 'tax_amount',
+        ]
 
 
 class InvoiceSerializer(serializers.ModelSerializer):
@@ -64,7 +71,8 @@ class OrderSerializer(serializers.ModelSerializer):
             'shipping_address_line1', 'shipping_address_line2', 'shipping_city',
             'shipping_state', 'shipping_postal_code', 'shipping_country',
             'currency_code', 'subtotal', 'tax_rate', 'tax_amount',
-            'shipping_cost', 'total', 'payment_method', 'payment_id',
+            'shipping_cost', 'shipping_method', 'shipping_rate_name',
+            'shipping_estimated_days', 'total', 'payment_method', 'payment_id',
             'payment_status', 'payment_capture_mode', 'payment_authorized_amount',
             'payment_captured_amount',
             'items', 'invoice', 'refunds', 'created_at'
@@ -91,7 +99,8 @@ class OrderAdminSerializer(serializers.ModelSerializer):
             'shipping_address_line1', 'shipping_address_line2', 'shipping_city',
             'shipping_state', 'shipping_postal_code', 'shipping_country',
             'currency_code', 'subtotal', 'tax_rate', 'tax_amount',
-            'shipping_cost', 'total', 'payment_method', 'payment_id',
+            'shipping_cost', 'shipping_method', 'shipping_rate_name',
+            'shipping_estimated_days', 'staff_notes', 'total', 'payment_method', 'payment_id',
             'payment_status', 'payment_capture_mode', 'payment_authorized_amount',
             'payment_captured_amount',
             'items', 'invoice', 'refunds', 'payment_logs', 'created_at', 'updated_at'
@@ -99,8 +108,9 @@ class OrderAdminSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
 
     def get_payment_logs(self, obj):
-        from .models import PaymentLog
-        logs = PaymentLog.objects.filter(order=obj).order_by('-created_at')[:5]
+        logs = sorted(
+            obj.payment_logs.all(), key=lambda log: log.created_at, reverse=True,
+        )[:5]
         return [
             {
                 'transaction_id': log.transaction_id,

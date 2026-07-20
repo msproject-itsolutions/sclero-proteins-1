@@ -5,8 +5,10 @@ import { useRouter } from 'next/navigation';
 import { useSelector, useDispatch } from 'react-redux';
 import Link from 'next/link';
 import {
-  Star, Heart, ArrowLeft, ShieldCheck, ChevronDown, Info,
-  Sparkles, ShieldAlert, Award, Calendar, Share2, ShoppingCart, Truck
+  Heart, ArrowLeft, ArrowRight, ShieldCheck, Info,
+  ShoppingCart, Plus, Minus,
+  Sparkles, HeartHandshake, Leaf, Check, FlaskConical, BadgeCheck,
+  Rabbit, CandyOff, WheatOff
 } from 'lucide-react';
 import StoreShell from '../../../components/StoreShell';
 import ProductCard from '../../../components/ProductCard';
@@ -17,11 +19,43 @@ import { fetchWishlistOnce, invalidateWishlistCache } from '../../../lib/wishlis
 import { jsonLdScriptProps } from '../../../lib/jsonLd';
 import { trackEvent } from '../../../utils/analytics';
 
+// Benefits arrive in two shapes across the catalogue:
+//   "Beauty — a, b, c. Health — d, e."   -> labelled groups
+//   "does a; does b; does c"             -> a flat list
+// Anything unrecognised falls back to a single unlabelled group so the
+// section still renders rather than disappearing.
+function parseBenefits(raw) {
+  const text = String(raw || '').trim();
+  if (!text) return [];
+
+  const groups = [];
+  const groupRe = /([A-Za-z][A-Za-z\s&'-]{1,28}?)\s*[—–]\s*([^.]+?)(?=\.\s*[A-Za-z][A-Za-z\s&'-]{1,28}?\s*[—–]|\.\s*$|$)/g;
+  let m;
+  let firstIndex = -1;
+  while ((m = groupRe.exec(text)) !== null) {
+    if (firstIndex === -1) firstIndex = m.index;
+    const items = m[2].split(/,\s*|;\s*/).map((s) => s.trim()).filter(Boolean);
+    if (items.length) groups.push({ label: m[1].trim(), items });
+  }
+  // Only treat this as the labelled format when the text actually opens with a
+  // label. Otherwise a trailing aside like "...chemical free — no herbicides"
+  // would hijack the parse and swallow the real semicolon list before it.
+  if (groups.length >= 2 && firstIndex === 0) return groups;
+
+  const items = text
+    .split(/;\s*|\.\s+/)
+    .map((s) => s.replace(/\.$/, '').trim())
+    .filter(Boolean);
+  return items.length ? [{ label: null, items }] : [];
+}
+
+const BENEFIT_ICONS = [Sparkles, HeartHandshake, Leaf, ShieldCheck];
+
 export default function ProductDetailClient({ sku }) {
   const router = useRouter();
   const dispatch = useDispatch();
   const { currentRegion, currencySymbol, session_id } = useSelector((s) => s.region);
-  const accessToken = useSelector((s) => s.auth?.access);
+  const isAuthenticated = useSelector((s) => s.auth?.isAuthenticated);
 
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -30,7 +64,6 @@ export default function ProductDetailClient({ sku }) {
   // Selection states
   const [quantity, setQuantity] = useState(1);
   const [activeImage, setActiveImage] = useState(0);
-  const [activeTab, setActiveTab] = useState('description');
   const [expandedFaq, setExpandedFaq] = useState(null);
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [wishlistItemId, setWishlistItemId] = useState(null);
@@ -85,13 +118,13 @@ export default function ProductDetailClient({ sku }) {
 
   // Check wishlist status on load or login change
   useEffect(() => {
-    if (!product || !accessToken) {
+    if (!product || !isAuthenticated) {
       setIsWishlisted(false);
       setWishlistItemId(null);
       return;
     }
 
-    fetchWishlistOnce(currentRegion, accessToken)
+    fetchWishlistOnce(currentRegion, isAuthenticated)
       .then((items) => {
         const found = items.find((item) => item.product_sku === product.sku);
         if (found) {
@@ -103,11 +136,11 @@ export default function ProductDetailClient({ sku }) {
         }
       })
       .catch(() => {});
-  }, [product, accessToken, currentRegion]);
+  }, [product, isAuthenticated, currentRegion]);
 
   // Wishlist toggle handler
   const handleWishlistToggle = async () => {
-    if (!accessToken) {
+    if (!isAuthenticated) {
       router.push('/account');
       return;
     }
@@ -119,7 +152,7 @@ export default function ProductDetailClient({ sku }) {
         // Remove from wishlist
         const res = await authenticatedFetch(`/api/wishlist/${wishlistItemId}/`, {
           method: 'DELETE',
-        }, accessToken);
+        });
         if (res.ok) {
           setIsWishlisted(false);
           setWishlistItemId(null);
@@ -133,7 +166,7 @@ export default function ProductDetailClient({ sku }) {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({ product_id: product.id, region: currentRegion })
-        }, accessToken);
+        });
         if (res.ok) {
           const data = await res.json();
           setIsWishlisted(true);
@@ -150,7 +183,6 @@ export default function ProductDetailClient({ sku }) {
 
   const handleAddToCart = async (openCheckout = false) => {
     if (!product) return;
-    if (product.price === null || product.price === undefined) return; // not sold in this region
 
     const basePrice = promoVal || priceVal;
     const finalPrice = basePrice;
@@ -161,13 +193,13 @@ export default function ProductDetailClient({ sku }) {
         region: currentRegion,
         product_id: product.id,
         quantity,
-        metadata: null
+        metadata: selectedVariant ? { variant_sku: selectedVariant.sku, variant_name: selectedVariant.name } : null
       })
     ).unwrap().catch(() => null);
 
     // Track analytics event
     trackEvent('AddToCart', {
-      content_ids: [product.sku],
+      content_ids: [selectedVariant?.sku || product.sku],
       value: finalPrice,
       currency: currentRegion === 'IN' ? 'INR' : 'GBP',
       quantity,
@@ -207,32 +239,57 @@ export default function ProductDetailClient({ sku }) {
     handleAddToCart(true);
   };
 
+  const [selectedVariant, setSelectedVariant] = useState(null);
+
+  useEffect(() => {
+    if (product?.variants?.length > 0) {
+      setSelectedVariant(product.variants[0]);
+    }
+  }, [product]);
+
   const images = (product?.media || []).filter((m) => m.media_type === 'IMAGE');
   const videos = (product?.media || []).filter((m) => m.media_type === 'VIDEO');
-  const unavailable = !!product && (product.price === null || product.price === undefined);
-  const priceVal = product?.price ? parseFloat(product.price) : 0;
+
+  const displayPrice = selectedVariant
+    ? selectedVariant.price ?? product?.price
+    : product?.price;
+
+  const priceVal = displayPrice !== null && displayPrice !== undefined ? parseFloat(displayPrice) : 0;
   const promoVal = product?.promotional_price ? parseFloat(product.promotional_price) : null;
   const basePrice = promoVal || priceVal;
   
   const effectivePrice = basePrice;
   const discount = promoVal && priceVal ? Math.round(((priceVal - promoVal) / priceVal) * 100) : 0;
-  const stock = product?.stock_available || 0;
+  const stock = selectedVariant ? (selectedVariant.stock_qty ?? product?.stock_available ?? 100) : (product?.stock_available ?? 100);
+  const unavailable = !product || (displayPrice === null && displayPrice === undefined && (!product?.price && product?.price !== 0));
   const nutrition = product?.nutrition_facts || {};
   const nutritionRows = Object.entries(nutrition).filter(
     ([k, v]) => !k.startsWith('_') && (typeof v === 'string' || typeof v === 'number')
   );
   
+  const benefitGroups = parseBenefits(product?.benefits);
+
+  // Only the ingestible products carry a serving size. The soil/turf lines do
+  // not, and the usage + science copy below is written for supplements — so it
+  // is gated rather than shown as false claims on a soil conditioner.
+  const servingSize = nutrition['Serving Size'];
+  const isSupplement = Boolean(servingSize);
+  const usageSteps = isSupplement
+    ? [
+        `Take ${String(servingSize).toLowerCase()}, at a consistent time each day.`,
+        'Swallow with water, or add to your beverage of choice and stir for 30 seconds.',
+        'Stay consistent — structural proteins rebuild gradually, not overnight.',
+      ]
+    : [];
+
   const rawReviews = product?.reviews || [];
   const reviews = rawReviews;
 
   const totalReviews = reviews.length;
-  const averageRating = totalReviews > 0 ? (reviews.reduce((acc, r) => acc + r.rating, 0) / totalReviews).toFixed(1) : Number(product?.average_rating || 0).toFixed(1);
-  const ratingCounts = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
-  reviews.forEach((r) => { if (ratingCounts[r.rating] !== undefined) ratingCounts[r.rating]++; });
 
   const productUrl = (typeof window !== 'undefined' && product)
     ? `${window.location.origin}/products/${product.sku}`
-    : (product ? `https://scleroproteins.co.uk/products/${product.sku}` : '');
+    : (product ? `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/products/${product.sku}` : '');
   const currencyCode = currentRegion === 'IN' ? 'INR' : 'GBP';
   const primaryCategory = product?.categories && product.categories.length > 0
     ? (product.categories[0].name || product.categories[0])
@@ -272,9 +329,9 @@ export default function ProductDetailClient({ sku }) {
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
     'itemListElement': [
-      { '@type': 'ListItem', 'position': 1, 'name': 'Home', 'item': 'https://scleroproteins.co.uk/' },
-      { '@type': 'ListItem', 'position': 2, 'name': 'Products', 'item': 'https://scleroproteins.co.uk/products' },
-      ...(primaryCategory ? [{ '@type': 'ListItem', 'position': 3, 'name': primaryCategory, 'item': `https://scleroproteins.co.uk/products?category=${encodeURIComponent(primaryCategory)}` }] : []),
+      { '@type': 'ListItem', 'position': 1, 'name': 'Home', 'item': `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/` },
+      { '@type': 'ListItem', 'position': 2, 'name': 'Products', 'item': `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/products` },
+      ...(primaryCategory ? [{ '@type': 'ListItem', 'position': 3, 'name': primaryCategory, 'item': `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/products?category=${encodeURIComponent(primaryCategory)}` }] : []),
       { '@type': 'ListItem', 'position': primaryCategory ? 4 : 3, 'name': product.name, 'item': productUrl },
     ],
   } : null;
@@ -383,40 +440,62 @@ export default function ProductDetailClient({ sku }) {
               <div className="lg:col-span-6 space-y-6">
                 <div>
                   <div className="mb-3 flex items-center gap-4">
-                    <span className="kicker !text-ink-accent">
-                      Verified GMP
-                    </span>
                     <span className="kicker !text-ink-success">
                       Third-Party Tested
                     </span>
                   </div>
                   <h1 className="font-display text-[34px] md:text-[42px] font-medium leading-[1.1] text-ink-primary">{product.name}</h1>
                   
-                  {/* Reviews Summary */}
-                  <div className="mt-2.5 flex items-center gap-2">
-                    <div className="flex">
-                      {[...Array(5)].map((_, i) => (
-                        <Star
-                          key={i}
-                          className={`h-4 w-4 ${
-                            i < Math.round(Number(averageRating))
-                              ? 'fill-brand-accent text-brand-accent'
-                              : 'text-edge'
-                          }`}
-                        />
-                      ))}
-                    </div>
-                    <span className="text-xs font-semibold text-ink-primary">{averageRating}</span>
-                    <span className="text-[11px] text-ink-muted">({totalReviews} verified reviews)</span>
-                  </div>
+                  {totalReviews > 0 && (
+                    <p className="mt-3 text-sm text-ink-muted">{totalReviews} customer reviews available below.</p>
+                  )}
                 </div>
 
-                <p className="text-xs md:text-sm leading-relaxed text-ink-secondary">{product.description}</p>
+                <p className="max-w-2xl text-sm leading-[1.9] text-ink-secondary">{product.description}</p>
+
+                {/* Shopify-Style Variant Selector */}
+                {product.variants && product.variants.length > 0 && (
+                  <div className="rounded-[24px] border border-edge bg-surface p-5 shadow-card space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-semibold uppercase tracking-luxe text-ink-muted">
+                        Select {product.variants[0]?.option_name || 'Size / Option'}
+                      </span>
+                      {selectedVariant && (
+                        <span className="text-xs font-mono text-ink-subtle">SKU: {selectedVariant.sku}</span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2.5">
+                      {product.variants.map((v) => {
+                        const isSelected = (selectedVariant?.id === v.id) || (!selectedVariant && v.sku === product.sku);
+                        const vPrice = v.price;
+                        return (
+                          <button
+                            key={v.id || v.sku}
+                            type="button"
+                            onClick={() => setSelectedVariant(v)}
+                            className={`px-4 py-2.5 text-xs font-semibold rounded-xl border transition-all cursor-pointer flex items-center gap-2 ${
+                              isSelected
+                                ? 'border-ink-primary bg-ink-primary text-white shadow-md'
+                                : 'border-edge bg-white text-ink-primary hover:border-edge-strong hover:bg-surface-subtle'
+                            }`}
+                          >
+                            <span>{v.name || v.option_value}</span>
+                            {vPrice && (
+                              <span className={`text-[11px] font-mono ${isSelected ? 'text-white/80' : 'text-ink-subtle'}`}>
+                                ({currencySymbol}{parseFloat(vPrice).toFixed(2)})
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {/* Price Display */}
-                <div className="border border-edge rounded-md p-5 bg-surface space-y-2 shadow-card">
+                <div className="rounded-[24px] border border-edge bg-surface p-5 shadow-card">
                   <div className="flex items-center justify-between">
-                    <span className="kicker">Price</span>
+                    <span className="text-[11px] font-medium uppercase tracking-luxe text-ink-muted">Price</span>
                     <div className="text-right">
                       {unavailable ? (
                         <span className="text-sm font-medium text-brand-warning">Not available in your region</span>
@@ -439,10 +518,10 @@ export default function ProductDetailClient({ sku }) {
                 </div>
 
                 {/* Quantity + CTAs */}
-                <div className="space-y-3.5">
-                  <div className="flex items-center gap-3">
-                    <span className="kicker">Quantity:</span>
-                    <div className="flex items-center border border-edge rounded-sm bg-surface">
+                <div id="buy" className="scroll-mt-28 space-y-4 rounded-[24px] border border-edge bg-brand-bg p-5">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-[11px] font-medium uppercase tracking-luxe text-ink-muted">Quantity</span>
+                    <div className="flex items-center rounded-full border border-edge bg-surface">
                       <button
                         type="button"
                         onClick={() => setQuantity((q) => Math.max(1, q - 1))}
@@ -461,7 +540,7 @@ export default function ProductDetailClient({ sku }) {
                         +
                       </button>
                     </div>
-                    <span className="text-[10px] text-ink-muted">
+                    <span className="text-xs text-ink-muted">
                       {stock > 0 ? `${stock} canisters available` : 'Out of stock'}
                     </span>
                   </div>
@@ -489,28 +568,10 @@ export default function ProductDetailClient({ sku }) {
                       onClick={handleWishlistToggle}
                       disabled={wishlistLoading}
                       aria-label={isWishlisted ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`}
-                      className="rounded-sm border border-edge bg-surface p-3.5 hover:border-ink-primary transition-colors text-ink-muted hover:text-ink-accent shrink-0"
+                      className="rounded-full border border-edge bg-surface p-3.5 hover:border-ink-primary transition-colors text-ink-muted hover:text-ink-accent shrink-0"
                     >
                       <Heart className={`h-5 w-5 ${isWishlisted ? 'fill-brand-accent text-brand-accent' : ''}`} />
                     </button>
-                  </div>
-                </div>
-
-                {/* Trust Signifiers list */}
-                <div className="grid grid-cols-2 gap-3 border-t border-edge-subtle pt-5">
-                  <div className="flex items-start gap-2 text-xs">
-                    <ShieldCheck className="h-5 w-5 text-brand-success shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-semibold text-ink-primary">30-Day Refund Guarantee</p>
-                      <p className="text-[10px] text-ink-muted">Risk-free purchase satisfaction assurance.</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2 text-xs">
-                    <Award className="h-5 w-5 text-brand-accent shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-semibold text-ink-primary">GMP Certified Facilities</p>
-                      <p className="text-[10px] text-ink-muted">Manufactured under pharmaceutical controls.</p>
-                    </div>
                   </div>
                 </div>
 
@@ -518,138 +579,252 @@ export default function ProductDetailClient({ sku }) {
             </div>
           </div>
 
-          {/* Product Information tabs */}
-          <section className="border-t border-edge bg-brand-bg py-12">
-            <div className="container-page">
-
-              {/* Tab Header triggers */}
-              <div className="flex border-b border-edge overflow-x-auto gap-2 pb-px scrollbar-none">
-                {[
-                  { id: 'description', label: 'Description' },
-                  { id: 'benefits', label: 'Benefits' },
-                  { id: 'ingredients', label: 'Ingredients' },
-                  { id: 'how_to_use', label: 'How to Use' },
-                  { id: 'science', label: 'Science & Research' },
-                  { id: 'faqs', label: 'FAQs' },
-                  { id: 'shipping', label: 'Shipping & Tax' },
-                ].map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => setActiveTab(t.id)}
-                    className={`border-b-2 px-5 py-3 text-xs font-medium uppercase tracking-wider shrink-0 transition-colors ${
-                      activeTab === t.id
-                        ? 'border-ink-primary text-ink-primary'
-                        : 'border-transparent text-ink-muted hover:text-ink-primary'
-                    }`}
-                  >
-                    {t.label}
-                  </button>
-                ))}
+          {/* Label claims strip — mirrors the four marks printed on the pack */}
+          {isSupplement && (
+            <section className="border-y border-edge bg-surface-inverse py-6">
+              <div className="container-page">
+                <div className="grid grid-cols-2 gap-y-6 md:grid-cols-4">
+                  {[
+                    { icon: Rabbit, label: "We don't test on animals" },
+                    { icon: FlaskConical, label: 'Preservatives & Artificial Flavour Free' },
+                    { icon: CandyOff, label: 'No added Sugars or Sweeteners' },
+                    { icon: WheatOff, label: 'Gluten & Yeast Free' },
+                  ].map((t) => {
+                    const Icon = t.icon;
+                    return (
+                      <div key={t.label} className="flex flex-col items-center gap-3 px-3 text-center">
+                        <span className="flex h-11 w-11 items-center justify-center rounded-full border border-white/30 text-white/80">
+                          <Icon className="h-5 w-5" />
+                        </span>
+                        <p className="max-w-[150px] text-[11px] font-semibold leading-[1.45] text-white">{t.label}</p>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
+            </section>
+          )}
 
-              {/* Tab Content Panels */}
-              <div className="py-8 bg-surface border border-t-0 border-edge rounded-b-md p-6 lg:p-8">
-                
-                {activeTab === 'description' && (
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-medium uppercase tracking-wider text-ink-primary">Product Summary</h3>
-                    <p className="text-xs md:text-sm leading-relaxed text-ink-secondary">{product.description}</p>
-                    <div className="pt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {nutritionRows.length > 0 && (
-                        <div>
-                          <h4 className="text-xs font-semibold text-ink-primary mb-2">Supplement Facts</h4>
-                          <div className="overflow-hidden rounded-md border border-edge">
-                            {nutritionRows.map(([k, v], idx) => (
-                              <div key={idx} className="flex justify-between px-3.5 py-2 text-xs border-b border-edge-subtle last:border-b-0">
-                                <span className="text-ink-muted">{k}</span>
-                                <span className="font-medium text-ink-primary">{String(v)}</span>
-                              </div>
-                            ))}
-                          </div>
+          {/* Description — the pitch */}
+          <section id="description" className="scroll-mt-24 bg-surface section">
+            <div className="container-page">
+              <div className="grid gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
+                <div>
+                  <span className="kicker">The Product</span>
+                  <h2 className="text-heading-1 mt-3 max-w-xl">{product.short_benefit || 'Built for people who read the label.'}</h2>
+                  <p className="mt-5 max-w-xl text-[15px] leading-[1.9] text-ink-secondary">{product.description}</p>
+                  {!unavailable && (
+                    <a href="#buy" className="btn-primary mt-7 inline-flex px-6 py-3 text-sm">
+                      <ShoppingCart className="h-4 w-4" /> Add to cart — {currencySymbol}{effectivePrice.toFixed(2)}
+                    </a>
+                  )}
+                </div>
+
+                {nutritionRows.length > 0 && (
+                  <div className="rounded-[28px] border border-edge bg-surface-subtle p-7 shadow-card">
+                    <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-ink-accent">Supplement facts</p>
+                    <div className="mt-5 divide-y divide-edge-subtle">
+                      {nutritionRows.map(([k, v], idx) => (
+                        <div key={idx} className="flex items-baseline justify-between gap-6 py-3">
+                          <span className="text-xs text-ink-muted">{k}</span>
+                          <span className="text-right text-sm font-semibold text-ink-primary">{String(v)}</span>
                         </div>
-                      )}
+                      ))}
                     </div>
                   </div>
                 )}
-
-                {activeTab === 'benefits' && (
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-medium uppercase tracking-wider text-ink-primary">Primary Benefits</h3>
-                    <p className="text-xs md:text-sm leading-relaxed text-ink-secondary">{product.benefits}</p>
-                  </div>
-                )}
-
-                {activeTab === 'ingredients' && (
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-medium uppercase tracking-wider text-ink-primary">Active Ingredients</h3>
-                    <p className="text-xs md:text-sm leading-relaxed text-ink-secondary">{product.ingredients}</p>
-                  </div>
-                )}
-
-                {activeTab === 'how_to_use' && (
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-medium uppercase tracking-wider text-ink-primary">Usage Directions</h3>
-                    <p className="text-xs md:text-sm leading-relaxed text-ink-secondary">
-                      Add 1 level scoop (included inside the canister) daily to your beverage of choice (water, juice, smoothie, or tea). Stir vigorously for 30 seconds or use a shaker cup for optimal dissolution. For maximum joint matrix assimilation, take consistently at similar times daily.
-                    </p>
-                  </div>
-                )}
-
-                {activeTab === 'science' && (
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-medium uppercase tracking-wider text-ink-primary">Science &amp; Clinical Background</h3>
-                    <p className="text-xs md:text-sm leading-relaxed text-ink-secondary">
-                      Sclero Proteins products are formulated to target articular cartilage synthesis pathways. Independent clinical evaluations of bioactive matrices indicate key cofactors and collagen forms can support mobility and decrease everyday joint friction when maintained continuously as part of an active recovery program.
-                    </p>
-                  </div>
-                )}
-
-                {activeTab === 'shipping' && (
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-medium uppercase tracking-wider text-ink-primary">Fulfillment, Shipping &amp; Taxes</h3>
-                    <p className="text-xs md:text-sm leading-relaxed text-ink-secondary">
-                      We offer next-business-day shipping from our local Haywards Heath (UK) and Anand (India) logistics centers. Taxes (VAT for UK, GST for India) are completely inclusive in the listed price. Free shipping applies automatically above regional order limits (£50 for UK, ₹3,000 for India).
-                    </p>
-                  </div>
-                )}
-
-                {activeTab === 'faqs' && (
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-medium uppercase tracking-wider text-ink-primary">Product Frequently Asked Questions</h3>
-                    {product.faq && product.faq.length > 0 ? (
-                      <div className="space-y-3 mt-4">
-                        {product.faq.map((item, idx) => {
-                          const isOpen = expandedFaq === idx;
-                          return (
-                            <div key={idx} className="border border-edge rounded-lg overflow-hidden bg-white">
-                              <button
-                                type="button"
-                                onClick={() => setExpandedFaq(isOpen ? null : idx)}
-                                className="w-full flex justify-between items-center p-4 text-left font-semibold text-xs md:text-sm text-ink-primary hover:bg-surface-muted transition-colors"
-                              >
-                                <span>{item.q}</span>
-                                <ChevronDown className={`h-4 w-4 text-brand-muted shrink-0 transition-transform duration-300 ${isOpen ? 'rotate-180 text-ink-accent' : ''}`} />
-                              </button>
-                              <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isOpen ? 'max-h-96 border-t border-edge-subtle p-4 bg-surface-muted' : 'max-h-0'}`}>
-                                <p className="text-xs md:text-sm leading-relaxed text-ink-secondary">
-                                  {item.a}
-                                </p>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <p className="text-xs md:text-sm leading-relaxed text-brand-muted italic mt-2">
-                        No product-specific FAQs available for this item at this time.
-                      </p>
-                    )}
-                  </div>
-                )}
-
               </div>
+            </div>
+          </section>
 
+          {/* Benefits — the scannable payoff */}
+          {benefitGroups.length > 0 && (
+            <section id="benefits" className="scroll-mt-24 border-y border-edge bg-surface-subtle section">
+              <div className="container-page">
+                <div className="max-w-2xl">
+                  <span className="kicker">Why It Works</span>
+                  <h2 className="text-heading-1 mt-3">What you can expect from daily use.</h2>
+                </div>
+
+                <div className={`mt-10 grid gap-5 ${benefitGroups.length > 1 ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
+                  {benefitGroups.map((group, gIdx) => {
+                    const Icon = BENEFIT_ICONS[gIdx % BENEFIT_ICONS.length];
+                    return group.label ? (
+                      <article key={gIdx} className="rounded-[28px] border border-edge bg-white p-7 shadow-card">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-subtle text-ink-accent shadow-card">
+                          <Icon className="h-5 w-5" />
+                        </div>
+                        <h3 className="mt-5 text-xl font-bold capitalize text-ink-primary">{group.label}</h3>
+                        <ul className="mt-4 space-y-2.5">
+                          {group.items.map((item, i) => (
+                            <li key={i} className="flex gap-2.5 text-sm leading-[1.7] text-ink-secondary">
+                              <Check className="mt-1 h-3.5 w-3.5 shrink-0 text-brand-success" />
+                              <span className="first-letter:uppercase">{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </article>
+                    ) : (
+                      group.items.map((item, i) => (
+                        <div key={i} className="flex gap-3 rounded-[20px] border border-edge bg-white p-5 shadow-card">
+                          <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand-success" />
+                          <p className="text-sm leading-[1.7] text-ink-secondary first-letter:uppercase">{item}</p>
+                        </div>
+                      ))
+                    );
+                  })}
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* Ingredients */}
+          <section id="ingredients" className="scroll-mt-24 bg-surface section">
+            <div className="container-page">
+              <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+                {images.length > 0 && (
+                  <div className="overflow-hidden rounded-[32px] border border-edge bg-surface-muted shadow-elevated">
+                    <img src={images[0].file_url} alt={product.name} className="h-full max-h-[420px] w-full object-cover" loading="lazy" />
+                  </div>
+                )}
+                <div>
+                  <span className="kicker">What's Inside</span>
+                  <h2 className="text-heading-1 mt-3">Every ingredient, stated plainly.</h2>
+                  <p className="mt-5 text-[15px] leading-[1.9] text-ink-secondary">{product.ingredients}</p>
+                  {product.dietary_tags?.length > 0 && (
+                    <div className="mt-6 flex flex-wrap gap-2">
+                      {product.dietary_tags.map((tag) => (
+                        <span key={tag} className="inline-flex items-center gap-1.5 rounded-full border border-edge bg-surface-subtle px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-secondary">
+                          <BadgeCheck className="h-3.5 w-3.5 text-brand-success" />
+                          {String(tag).replace(/_/g, ' ')}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* How to use — numbered steps */}
+          {usageSteps.length > 0 && (
+            <section id="how-to-use" className="scroll-mt-24 border-y border-edge bg-surface-subtle section">
+              <div className="container-page">
+                <div className="max-w-2xl">
+                  <span className="kicker">How To Use</span>
+                  <h2 className="text-heading-1 mt-3">Three steps, once a day.</h2>
+                </div>
+                <div className="mt-10 grid gap-5 md:grid-cols-3">
+                  {usageSteps.map((step, i) => (
+                    <div key={i} className="rounded-[28px] border border-edge bg-white p-7 shadow-card">
+                      <span className="font-display text-[32px] font-medium leading-none text-ink-accent">0{i + 1}</span>
+                      <p className="mt-4 text-sm leading-[1.8] text-ink-secondary">{step}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* Science — dark band for gravitas */}
+          {isSupplement && (
+          <section id="science" className="scroll-mt-24 bg-surface-inverse section">
+            <div className="container-page">
+              <div className="mx-auto max-w-3xl text-center">
+                <FlaskConical className="mx-auto h-8 w-8 text-white/50" />
+                <span className="kicker mt-5 block !text-white/60">Science &amp; Research</span>
+                <h2 className="mt-3 font-display text-[28px] font-medium leading-[1.35] text-white md:text-[34px]">
+                  Formulated around the structural proteins your body already uses.
+                </h2>
+                <p className="mt-5 text-[15px] leading-[1.9] text-white/70">
+                  Sclero Proteins products are formulated to target articular cartilage synthesis pathways. Independent clinical evaluations of bioactive matrices indicate key cofactors and collagen forms can support mobility and decrease everyday joint friction when maintained continuously as part of an active recovery program.
+                </p>
+                <Link href="/knowledge-hub" className="mt-7 inline-flex items-center gap-2 text-sm font-semibold text-white transition-opacity hover:opacity-70">
+                  Read the science in our Knowledge Hub <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
+            </div>
+          </section>
+          )}
+
+          {/* FAQs */}
+          {product.faq?.length > 0 && (
+            <section id="faqs" className="scroll-mt-24 border-b border-edge bg-surface section">
+              <div className="container-page">
+                <div className="text-center">
+                  <h2 className="text-[40px] font-extrabold leading-[1.1] tracking-tight text-ink-primary sm:text-[52px]">Q&amp;A</h2>
+                  <p className="mx-auto mt-4 max-w-xl text-body">Everything people ask before their first order.</p>
+                </div>
+
+                <div className="mt-12 grid gap-x-8 gap-y-5 md:grid-cols-2 md:items-start">
+                  {product.faq.map((item, idx) => {
+                    const isOpen = expandedFaq === idx;
+                    return (
+                      <div key={idx} className="overflow-hidden rounded-[18px] bg-surface-subtle transition-colors hover:bg-surface-muted">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedFaq(isOpen ? null : idx)}
+                          aria-expanded={isOpen}
+                          className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left"
+                        >
+                          <span className="text-sm font-semibold uppercase leading-[1.5] tracking-[0.06em] text-ink-primary">{item.q}</span>
+                          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-ink-primary/40 text-ink-primary">
+                            {isOpen ? <Minus className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
+                          </span>
+                        </button>
+                        <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isOpen ? 'max-h-96' : 'max-h-0'}`}>
+                          <p className="px-6 pb-6 text-sm leading-[1.8] text-ink-secondary">{item.a}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* Closing CTA + shipping detail */}
+          <section id="shipping" className="scroll-mt-24 bg-surface-subtle section">
+            <div className="container-page">
+              <div className="grid gap-10 lg:grid-cols-[1fr_0.85fr] lg:items-center">
+                <div>
+                  <span className="kicker">Shipping &amp; Tax</span>
+                  <h2 className="text-heading-1 mt-3">No surprises at checkout.</h2>
+                  <ul className="mt-6 space-y-3.5">
+                    {[
+                      'Next-business-day dispatch from Haywards Heath (UK) and Anand (India).',
+                      'Taxes included in the listed price — VAT for the UK, GST for India.',
+                      'Free shipping above £50 in the UK and ₹3,000 in India.',
+                    ].map((line) => (
+                      <li key={line} className="flex gap-3 text-sm leading-[1.8] text-ink-secondary">
+                        <Check className="mt-1.5 h-3.5 w-3.5 shrink-0 text-brand-success" />
+                        <span>{line}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="rounded-[28px] border border-edge bg-white p-8 text-center shadow-elevated">
+                  <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-ink-accent">Ready when you are</p>
+                  <p className="mt-4 font-display text-[30px] font-medium text-ink-primary">{product.name}</p>
+                  {!unavailable && (
+                    <p className="mt-2 text-sm text-ink-muted">
+                      <span className="font-display text-[22px] text-ink-primary">{currencySymbol}{effectivePrice.toFixed(2)}</span>
+                      {promoVal && <span className="ml-2 text-xs line-through">{currencySymbol}{priceVal.toFixed(2)}</span>}
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleAddToCart(false)}
+                    disabled={stock === 0 || unavailable}
+                    className="btn-primary mt-6 w-full justify-center py-3.5 text-sm disabled:opacity-50"
+                  >
+                    <ShoppingCart className="h-4.5 w-4.5" />
+                    {unavailable ? 'Not available in your region' : stock === 0 ? 'Out of stock' : 'Add to Cart'}
+                  </button>
+                  <p className="mt-3 text-[11px] text-ink-muted">Secure checkout</p>
+                </div>
+              </div>
             </div>
           </section>
 
@@ -693,46 +868,9 @@ export default function ProductDetailClient({ sku }) {
           <section className="border-t border-edge bg-brand-bg py-12">
             <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
               <h2 className="mb-8 text-heading-2">Customer Reviews</h2>
-
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-8 mb-10 items-center">
-
-                {/* Score badge */}
-                <div className="md:col-span-4 text-center p-6 bg-surface border border-edge rounded-md shadow-card">
-                  <p className="font-display text-5xl font-medium text-ink-primary">{averageRating}</p>
-                  <div className="flex justify-center my-2">
-                    {[...Array(5)].map((_, i) => (
-                      <Star
-                        key={i}
-                        className={`h-4.5 w-4.5 ${
-                          i < Math.round(Number(averageRating))
-                            ? 'fill-brand-accent text-brand-accent'
-                            : 'text-edge'
-                        }`}
-                      />
-                    ))}
-                  </div>
-                  <p className="text-xs text-ink-muted">Based on {totalReviews} reviews</p>
-                </div>
-
-                {/* Bars breakdown */}
-                <div className="md:col-span-8 space-y-2 text-xs">
-                  {[5, 4, 3, 2, 1].map((stars) => {
-                    const count = ratingCounts[stars] || 0;
-                    const percent = totalReviews > 0 ? Math.round((count / totalReviews) * 100) : 0;
-                    return (
-                      <div key={stars} className="flex items-center gap-3 text-ink-primary">
-                        <span className="w-3 text-right font-medium">{stars}</span>
-                        <Star className="h-3.5 w-3.5 fill-brand-accent text-brand-accent shrink-0" />
-                        <div className="flex-1 h-2 bg-surface-muted rounded-pill overflow-hidden">
-                          <div className="h-full bg-brand-accent rounded-pill" style={{ width: `${percent}%` }} />
-                        </div>
-                        <span className="w-8 text-right text-ink-muted">{percent}%</span>
-                      </div>
-                    );
-                  })}
-                </div>
-
-              </div>
+              <p className="mb-8 text-sm leading-[1.8] text-ink-secondary">
+                Read feedback from customers who have already purchased this product.
+              </p>
 
               {/* Verified reviews listing */}
               <div className="space-y-4">
@@ -752,16 +890,7 @@ export default function ProductDetailClient({ sku }) {
                           </span>
                         )}
                       </div>
-                      <div className="flex">
-                        {[...Array(5)].map((_, j) => (
-                          <Star
-                            key={j}
-                            className={`h-3 w-3 ${
-                              j < r.rating ? 'fill-brand-accent text-brand-accent' : 'text-edge'
-                            }`}
-                          />
-                        ))}
-                      </div>
+                      <span className="text-[11px] uppercase tracking-luxe text-ink-muted">{r.rating}/5 rating</span>
                     </div>
                     <p className="text-xs md:text-sm leading-relaxed text-ink-secondary">{r.comment}</p>
                   </div>

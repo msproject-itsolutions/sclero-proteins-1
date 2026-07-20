@@ -1,20 +1,43 @@
 import React from 'react';
 import { getApiUrl } from '../lib/api';
 import HomePageClient from './HomePageClient';
+import { normalizeHomepageSettings } from '../lib/homepageContent';
 
-export const metadata = {
-  title: 'Sclero Proteins | Advanced Eggshell Collagen & Calcium Solutions',
-  description: 'Sclero Proteins — clinically-formulated bone, joint, and active-nutrition supplements. Lab-certified, label-transparent, shipped across the UK and India.',
-  alternates: {
-    canonical: '/',
-  },
-  openGraph: {
-    title: 'Sclero Proteins — clinically-formulated wellness',
-    description: 'Sclero Proteins — clinically-formulated bone, joint, and active-nutrition supplements.',
-    url: 'https://scleroproteins.co.uk',
-    type: 'website',
-  },
-};
+async function fetchHomepageSettings() {
+  try {
+    const res = await fetch(getApiUrl('/api/site-settings/HOMEPAGE_SETTINGS/'), {
+      next: { revalidate: 3600 },
+    });
+    if (!res.ok) return normalizeHomepageSettings();
+    const data = await res.json();
+    return normalizeHomepageSettings(data?.value);
+  } catch (e) {
+    return normalizeHomepageSettings();
+  }
+}
+
+export async function generateMetadata() {
+  const homepageSettings = await fetchHomepageSettings();
+  const seo = homepageSettings?.seo || {};
+  const title = seo.metaTitle || 'Premium Collagen, Joint Support & Wellness Supplements';
+  const description = seo.metaDescription || 'Shop Sclero Proteins for premium collagen, bone and joint support, and science-led wellness supplements.';
+  const keywords = seo.keywords || 'premium collagen supplements, joint support supplements, bone health supplements, Sclero Proteins';
+
+  return {
+    title,
+    description,
+    keywords,
+    alternates: {
+      canonical: '/',
+    },
+    openGraph: {
+      title,
+      description,
+      url: process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000',
+      type: 'website',
+    },
+  };
+}
 
 async function fetchBlogs() {
   try {
@@ -31,7 +54,10 @@ async function fetchBlogs() {
 }
 
 export default async function HomePage() {
-  const blogs = await fetchBlogs();
+  const [blogs, homepageSettings] = await Promise.all([
+    fetchBlogs(),
+    fetchHomepageSettings(),
+  ]);
 
-  return <HomePageClient initialBlogs={blogs} />;
+  return <HomePageClient initialBlogs={blogs} initialHomepageSettings={homepageSettings} />;
 }

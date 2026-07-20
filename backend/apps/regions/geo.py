@@ -12,7 +12,10 @@ Precedence (highest first):
 
 from __future__ import annotations
 
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 
 
 def _client_ip(request) -> str:
@@ -42,8 +45,11 @@ def _ipapi_country(ip: str) -> str:
     """Zero-setup IP-geolocation fallback (default ip-api.com). Disable by setting
     GEOIP_API_URL=''. Never raises. Prefer MaxMind (MAXMIND_DB_PATH) or Cloudflare
     to avoid a per-request third-party call."""
-    base = os.environ.get('GEOIP_API_URL', 'http://ip-api.com/json/').strip()
-    if not base or not _is_public_ip(ip):
+    # External IP lookup is opt-in: sending shopper IP addresses to a third
+    # party over plaintext HTTP is neither private nor production-safe. The
+    # normal deployment uses Cloudflare's country header or a local MaxMind DB.
+    base = os.environ.get('GEOIP_API_URL', '').strip()
+    if not base.startswith('https://') or not _is_public_ip(ip):
         return ''
     try:
         import requests
@@ -118,19 +124,43 @@ def detect_country_with_source(request) -> tuple[str, str]:
     return '', 'fallback'
 
 
-def map_country_to_region_code(country: str) -> str:
-    """
-    Map an ISO-2 country code to one of our supported region codes.
+def _default_region_code() -> str:
+    """The region for visitors whose country no region claims."""
+    from .models import Region
 
-    Intentionally narrow: only India (IN) routes to the IN region.
-    Cloudflare returns 'GB' for the UK; we map it to our 'UK' code.
-    Everything else (including unknown / empty) falls back to 'UK'.
+    fallback = Region.objects.filter(is_active=True, is_default=True).order_by('id').first()
+    if fallback:
+        return fallback.code
+    # No default configured — fail soft onto any active region rather than
+    # handing the caller an empty code.
+    any_region = Region.objects.filter(is_active=True).order_by('id').first()
+    return any_region.code if any_region else ''
+
+
+def map_country_to_region_code(country: str) -> str:
+    """Map an ISO-2 country code to a region code, using the DB.
+
+    Country->region is configured per Region (`Region.countries`) from the admin
+    panel, so opening a new market is data entry rather than a code change.
+    Visitors from an unclaimed country get the region flagged `is_default`.
     """
+    from .models import Region
+
     if not country:
-        return 'UK'
-    c = country.upper().strip()
-    if c == 'IN':
-        return 'IN'
-    if c in ('GB', 'UK'):
-        return 'UK'
-    return 'UK'
+        return _default_region_code()
+
+    code = country.upper().strip()
+    matches = [
+        region for region in Region.objects.filter(is_active=True).order_by('id')
+        if code in {str(c).upper().strip() for c in (region.countries or [])}
+    ]
+    if not matches:
+        return _default_region_code()
+    if len(matches) > 1:
+        # Ambiguous config: two regions claim the same country. Pick
+        # deterministically so behaviour is stable, but make it visible.
+        logger.warning(
+            "Country %s is claimed by multiple regions (%s); using %s.",
+            code, [r.code for r in matches], matches[0].code,
+        )
+    return matches[0].code

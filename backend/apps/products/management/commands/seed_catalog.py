@@ -340,16 +340,17 @@ PRODUCTS = [
         ],
     },
     # ---------------------------------------------------------------- SOILPRO
+    # ---------------------------------------------------------------- SOILPRO
     {
         "sku": "SOILPRO-1KG",
         "name": "SoilPro™ — Premium Natural Bio Mineral Soil Health Conditioner",
         "hsn_code": "31010099",
-        "short_benefit": "Powered by OvoMatrix™ · 1 kg pouch · chemical free",
+        "short_benefit": "Powered by OvoMatrix™ · Available in 1 kg, 5 kg, 25 kg · chemical free",
         "dietary_tags": [],
         "categories": ["soil-turf"],
         "description": (
             "SoilPro™ — a premium natural bio-mineral soil-health conditioner powered by "
-            "OvoMatrix™ (1 kg pouch). A calcium-rich, multi-component blend of natural mineral "
+            "OvoMatrix™. A calcium-rich, multi-component blend of natural mineral "
             "inputs, organic matter, plant-derived compounds and bioactive soil conditioners that "
             "improves soil structure, stimulates microbial activity, increases organic matter and "
             "strengthens plant resilience — without synthetic fertilisers, pesticides or "
@@ -368,7 +369,7 @@ PRODUCTS = [
             "activators. Natural mineral and organic components only."
         ),
         "nutrition_facts": {
-            "Format": "1 kg LDPE retail pouch",
+            "Format": "LDPE retail pouch & heavy-duty bulk bags",
             "Blend Type": "Natural bio-mineral soil conditioner",
             "Granularity": "Fine powder blend",
             "Shelf Life": "24 months",
@@ -384,31 +385,44 @@ PRODUCTS = [
              "development; organic matter strengthens soil health and microbial diversity."),
             ("Suggested use",
              "Lawns: 75 g/m² every 3–4 weeks (rake in, water). Garden beds: 120 g/m² every 4 weeks. "
-             "Pots/indoor: a 5–10 mm layer mixed in every 4–6 weeks. Trees: 150 g (young) to 300 g "
-             "(mature) around the drip line every 6–8 weeks. Farmland: 50–100 kg/acre broadcast and irrigated."),
+             "Pots/indoor: a 5–10 mm layer mixed in every 4–6 weeks."),
             ("Is SoilPro™ a fertiliser?",
              "No. It contains no NPK and is not classified as a fertiliser — it is a soil conditioner."),
-            ("Is it safe for pets and children?",
-             "Yes. It is 100% natural and safe for all home environments."),
-            ("Can it be used with chemical fertilisers?",
-             "Yes — it is compatible with all fertiliser programs."),
-            ("How long until results are visible?", "Typically within 2–4 weeks."),
-            ("Does it improve water retention?",
-             "Yes. Its natural components enhance water retention and moisture balance."),
-            ("Does it help with soil pH?", "Yes. Its mineral base gently buffers acidity."),
-            ("Is it suitable for organic gardening?",
-             "Yes. It aligns fully with natural and organic gardening principles."),
-            ("Can SoilPro™ be used year round?",
-             "Yes. It is suitable for all seasons and climates, and for all soil types."),
-            ("How is it different from LawnCal?",
-             "LawnCal is a multi-mineral turf conditioner; SoilPro is a multi-component soil "
-             "improver with organic matter and bioactives for beds, pots and nursery mixes."),
         ),
         "price_gbp": ("14.99", None),
         "price_inr": ("899.00", None),
-        "stock": 500,
+        "stock": 1050,
         "images": [
             "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=600",
+        ],
+        "variants": [
+            {
+                "sku": "SOILPRO-1KG",
+                "name": "1 kg Pouch",
+                "option_name": "Weight",
+                "option_value": "1 kg",
+                "price_gbp": 14.99,
+                "price_inr": 899.00,
+                "stock_qty": 500,
+            },
+            {
+                "sku": "SOILPRO-5KG",
+                "name": "5 kg Pouch",
+                "option_name": "Weight",
+                "option_value": "5 kg",
+                "price_gbp": 49.99,
+                "price_inr": 2999.00,
+                "stock_qty": 350,
+            },
+            {
+                "sku": "SOILPRO-25KG",
+                "name": "25 kg Bag",
+                "option_name": "Weight",
+                "option_value": "25 kg",
+                "price_gbp": 189.00,
+                "price_inr": 11499.00,
+                "stock_qty": 200,
+            },
         ],
     },
     # ---------------------------------------------------------------- LAWNCAL
@@ -654,6 +668,22 @@ class Command(BaseCommand):
                 ProductMedia.objects.create(
                     product=product, file_url=url, media_type="IMAGE", display_order=i + 1
                 )
+
+            if "variants" in p:
+                from apps.products.models import ProductVariant
+                product.variants.all().delete()
+                for idx, v in enumerate(p["variants"]):
+                    ProductVariant.objects.create(
+                        product=product,
+                        sku=v["sku"],
+                        name=v["name"],
+                        option_name=v.get("option_name", "Size"),
+                        option_value=v.get("option_value", v["name"]),
+                        price_gbp=v.get("price_gbp"),
+                        price_inr=v.get("price_inr"),
+                        stock_qty=v.get("stock_qty", 100),
+                        sort_order=idx,
+                    )
 
             self.stdout.write(self.style.SUCCESS(
                 f"{'Created' if created else 'Updated'} {p['sku']} — {p['name']}"))

@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   X, Plus, Minus, Search, User, UserPlus, Package, ShoppingCart,
-  ChevronRight, ChevronDown, Truck, Tag, FileText, DollarSign,
-  AlertCircle, Check, Loader2, ChevronLeft, Save, Eye
+  ChevronRight, Truck, FileText,
+  AlertCircle, Check, Loader2, ChevronLeft, Eye
 } from 'lucide-react';
+import { countryName } from '../../lib/isoGeo';
 
 const LABEL_CLS = 'kicker block mb-1';
 const INPUT_CLS = 'w-full rounded-sm border border-edge bg-white px-3 py-2.5 text-sm text-ink-primary placeholder:text-ink-subtle focus:outline-none focus:ring-2 focus:ring-edge-focus/30 focus:border-ink-primary transition';
@@ -36,19 +37,79 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
   const [productLoading, setProductLoading] = useState(false);
   const [lineItems, setLineItems] = useState([]);
 
+  /* ── Admin-managed regional configuration ── */
+  const [regions, setRegions] = useState([]);
+  const [paymentMethods, setPaymentMethods] = useState([]);
+  const [region, setRegion] = useState('');
+
   /* ── Shipping & extras ── */
   const [shipping, setShipping] = useState({
-    name: '', phone: '', address_line1: '', address_line2: '', city: '', state: '', postal_code: '', country: 'GB',
+    name: '', phone: '', address_line1: '', address_line2: '', city: '', state: '', postal_code: '', country: '',
   });
   const [shippingCost, setShippingCost] = useState('0');
   const [discountCode, setDiscountCode] = useState('');
   const [discountAmount, setDiscountAmount] = useState('0');
   const [discountType, setDiscountType] = useState('flat'); // flat | percent
-  const [taxRate, setTaxRate] = useState('20');
+  const [taxRate, setTaxRate] = useState('0');
   const [notes, setNotes] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('COD');
-  const [region, setRegion] = useState('GB');
   const [isDraft, setIsDraft] = useState(false);
+
+  const selectedRegion = regions.find((item) => item.code === region) || null;
+  const currencySymbol = selectedRegion?.currency_symbol || selectedRegion?.currency_code || '';
+  const regionCountries = selectedRegion?.countries || [];
+  const regionalConfigFor = useCallback((product) => (
+    product.regional_configs?.find((config) => config.region_code === region && config.is_visible !== false)
+  ), [region]);
+
+  useEffect(() => {
+    authFetch('/api/admin/regions/')
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Unable to load regions.');
+        const data = await response.json();
+        return (Array.isArray(data) ? data : data.results || []).filter((item) => item.is_active);
+      })
+      .then((items) => {
+        setRegions(items);
+        const initial = items.find((item) => item.is_default) || items[0];
+        if (initial) setRegion(initial.code);
+      })
+      .catch(() => setErr('Active regions could not be loaded. Configure a region before creating an order.'));
+  }, [authFetch]);
+
+  useEffect(() => {
+    if (!selectedRegion) return;
+    setTaxRate(String(selectedRegion.tax_rate ?? 0));
+    setShipping((current) => ({
+      ...current,
+      country: selectedRegion.countries?.includes(current.country)
+        ? current.country
+        : (selectedRegion.countries?.[0] || ''),
+    }));
+    setLineItems((items) => items.map((item) => {
+      const config = item.product?.regional_configs?.find(
+        (candidate) => candidate.region_code === selectedRegion.code && candidate.is_visible !== false,
+      );
+      return { ...item, price: config?.promotional_price || config?.price || '0' };
+    }));
+  }, [selectedRegion]);
+
+  useEffect(() => {
+    if (!region) return;
+    authFetch(`/api/admin/payment-gateways/available/?region=${encodeURIComponent(region)}`)
+      .then(async (response) => response.ok ? response.json() : [])
+      .then((items) => {
+        const methods = Array.isArray(items) ? items : [];
+        setPaymentMethods(methods);
+        setPaymentMethod((current) => methods.some((item) => item.code === current)
+          ? current
+          : (methods[0]?.code || ''));
+      })
+      .catch(() => {
+        setPaymentMethods([]);
+        setPaymentMethod('');
+      });
+  }, [authFetch, region]);
 
   /* ── Customer search ── */
   const searchCustomers = useCallback((q) => {
@@ -84,12 +145,16 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
 
   /* ── Line item helpers ── */
   const addProduct = (p) => {
+    const config = regionalConfigFor(p);
+    if (!config) {
+      setErr(`This product is not available in the ${selectedRegion?.name || region} region.`);
+      return;
+    }
     const exists = lineItems.findIndex(l => l.sku === p.sku);
     if (exists >= 0) {
       const items = [...lineItems]; items[exists].quantity += 1; setLineItems(items);
     } else {
-      // Pick first regional price
-      const price = p.regional_configs?.[0]?.promotional_price || p.regional_configs?.[0]?.price || '0';
+      const price = config.promotional_price || config.price || '0';
       setLineItems([...lineItems, { sku: p.sku, name: p.name, price, quantity: 1, product: p }]);
     }
     setProductSearch('');
@@ -115,7 +180,10 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
   const canNext = {
     customer: selectedCustomer !== null || (customerMode === 'new' && newCustomer.email),
     items: lineItems.length > 0,
-    shipping: true,
+    shipping: Boolean(
+      selectedRegion && paymentMethod && shipping.name && shipping.phone
+      && shipping.address_line1 && shipping.city && shipping.postal_code && shipping.country
+    ),
     review: true,
   };
 
@@ -170,7 +238,7 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
         payment_method: paymentMethod,
         region_code: region,
         status: isDraft ? 'PENDING' : 'PROCESSING',
-        currency_code: 'GBP',
+        currency_code: selectedRegion?.currency_code,
       };
 
       const r = await authFetch('/api/admin/orders/', { method: 'POST', body: JSON.stringify(payload) });
@@ -197,7 +265,7 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
             <ChevronLeft className="h-4 w-4" />
           </button>
           <div>
-            <p className="text-xs font-semibold uppercase text-ink-subtle tracking-wide">Orders</p>
+            <p className="text-sm font-semibold uppercase text-ink-subtle tracking-wide">Orders</p>
             <h2 className="text-base font-semibold text-ink-primary">Create Order</h2>
           </div>
         </div>
@@ -230,7 +298,7 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
       {err && (
         <div className="flex items-center gap-2 border-b border-red-200 bg-red-50 px-6 py-2.5 flex-shrink-0">
           <AlertCircle className="h-4 w-4 text-ink-danger flex-shrink-0" />
-          <p className="text-xs text-ink-danger font-medium">{err}</p>
+          <p className="text-sm text-ink-danger font-medium">{err}</p>
         </div>
       )}
 
@@ -270,7 +338,7 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
                         </div>
                         <div>
                           <p className="text-sm font-semibold text-ink-primary">{selectedCustomer.first_name} {selectedCustomer.last_name}</p>
-                          <p className="text-xs text-ink-muted">{selectedCustomer.email}</p>
+                          <p className="text-sm text-ink-muted">{selectedCustomer.email}</p>
                         </div>
                       </div>
                       <button onClick={() => setSelectedCustomer(null)} type="button" className="text-ink-subtle hover:text-ink-danger transition">
@@ -289,7 +357,7 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
                           </div>
                           <div>
                             <p className="text-sm font-semibold text-ink-primary">{c.first_name} {c.last_name}</p>
-                            <p className="text-xs text-ink-subtle">{c.email}</p>
+                            <p className="text-sm text-ink-subtle">{c.email}</p>
                           </div>
                         </button>
                       ))}
@@ -342,7 +410,8 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
                   <div className="divide-y divide-edge-subtle rounded-md border border-edge overflow-hidden">
                     {productResults.slice(0, 6).map(p => (
                       <button key={p.id} onClick={() => addProduct(p)} type="button"
-                        className="flex w-full items-center gap-3 px-4 py-3 hover:bg-surface-muted transition text-left">
+                        disabled={!regionalConfigFor(p)}
+                        className="flex w-full items-center gap-3 px-4 py-3 hover:bg-surface-muted transition text-left disabled:cursor-not-allowed disabled:opacity-50">
                         <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-surface-muted overflow-hidden">
                           {p.media?.[0]?.file_url
                             ? <img src={p.media[0].file_url} alt="" className="h-full w-full object-cover" />
@@ -350,10 +419,10 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-semibold text-ink-primary truncate">{p.name}</p>
-                          <p className="text-xs text-ink-subtle font-mono">{p.sku}</p>
+                          <p className="text-sm text-ink-subtle font-mono">{p.sku}</p>
                         </div>
-                        <span className="text-xs font-semibold text-ink-accent">
-                          {p.regional_configs?.[0]?.promotional_price || p.regional_configs?.[0]?.price || '—'}
+                        <span className="text-sm font-semibold text-ink-accent">
+                          {currencySymbol}{regionalConfigFor(p)?.promotional_price || regionalConfigFor(p)?.price || 'Unavailable'}
                         </span>
                         <Plus className="h-4 w-4 text-ink-accent flex-shrink-0" />
                       </button>
@@ -366,7 +435,7 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
               {lineItems.length > 0 ? (
                 <div className="rounded-lg border border-edge bg-white shadow-card overflow-hidden">
                   <div className="border-b border-edge-subtle px-5 py-3 bg-surface-muted">
-                    <p className="text-xs font-semibold uppercase text-ink-muted tracking-wide">{lineItems.length} item(s)</p>
+                    <p className="text-sm font-semibold uppercase text-ink-muted tracking-wide">{lineItems.length} item(s)</p>
                   </div>
                   <div className="divide-y divide-edge-subtle">
                     {lineItems.map((item, i) => (
@@ -378,11 +447,11 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-semibold text-ink-primary truncate">{item.name}</p>
-                          <p className="text-xs font-mono text-ink-subtle">{item.sku}</p>
+                          <p className="text-sm font-mono text-ink-subtle">{item.sku}</p>
                         </div>
                         {/* Price override */}
                         <div className="flex items-center gap-1">
-                          <span className="text-xs text-ink-subtle">£</span>
+                          <span className="text-sm text-ink-subtle">{currencySymbol}</span>
                           <input value={item.price} onChange={e => updatePrice(i, e.target.value)}
                             className="w-20 rounded-sm border border-edge px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-edge-focus/30 focus:border-ink-primary" />
                         </div>
@@ -397,7 +466,7 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
                           </button>
                         </div>
                         <p className="w-16 text-right text-sm font-semibold text-ink-primary">
-                          £{(Number(item.price || 0) * item.quantity).toFixed(2)}
+                          {currencySymbol}{(Number(item.price || 0) * item.quantity).toFixed(2)}
                         </p>
                         <button onClick={() => removeItem(i)} type="button" className="text-ink-subtle hover:text-ink-danger transition">
                           <X className="h-4 w-4" />
@@ -457,8 +526,8 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
                   <div>
                     <label className={LABEL_CLS}>Country</label>
                     <select value={shipping.country} onChange={e => setShipping({ ...shipping, country: e.target.value })} className={INPUT_CLS}>
-                      {[['GB','United Kingdom'],['IN','India'],['US','United States'],['AU','Australia'],['CA','Canada'],['DE','Germany'],['FR','France']].map(([v, l]) =>
-                        <option key={v} value={v}>{l}</option>)}
+                      {regionCountries.map((code) =>
+                        <option key={code} value={code}>{countryName(code)}</option>)}
                     </select>
                   </div>
                 </div>
@@ -469,7 +538,7 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
                 <p className="text-sm font-semibold text-ink-primary">Charges &amp; Discounts</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className={LABEL_CLS}>Shipping Cost (£)</label>
+                    <label className={LABEL_CLS}>Shipping Cost ({selectedRegion?.currency_code || 'currency'})</label>
                     <input value={shippingCost} onChange={e => setShippingCost(e.target.value)} type="number" step="0.01" className={INPUT_CLS} placeholder="0.00" />
                   </div>
                   <div>
@@ -485,7 +554,7 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
                   <div>
                     <label className={LABEL_CLS}>Type</label>
                     <select value={discountType} onChange={e => setDiscountType(e.target.value)} className={INPUT_CLS}>
-                      <option value="flat">Fixed (£)</option>
+                      <option value="flat">Fixed ({selectedRegion?.currency_code || 'currency'})</option>
                       <option value="percent">Percent (%)</option>
                     </select>
                   </div>
@@ -503,15 +572,16 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
                   <div>
                     <label className={LABEL_CLS}>Payment Method</label>
                     <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} className={INPUT_CLS}>
-                      {['COD','Stripe','Razorpay','Bank Transfer','PayPal','BACS'].map(m =>
-                        <option key={m} value={m}>{m}</option>)}
+                      {paymentMethods.length === 0 && <option value="">No enabled gateway</option>}
+                      {paymentMethods.map((method) =>
+                        <option key={method.code} value={method.code}>{method.display_name}</option>)}
                     </select>
                   </div>
                   <div>
                     <label className={LABEL_CLS}>Region</label>
                     <select value={region} onChange={e => setRegion(e.target.value)} className={INPUT_CLS}>
-                      {[['GB','GB – United Kingdom'],['IN','IN – India'],['US','US – United States'],['AU','AU – Australia']].map(([v,l]) =>
-                        <option key={v} value={v}>{l}</option>)}
+                      {regions.map((item) =>
+                        <option key={item.id} value={item.code}>{item.code} – {item.name}</option>)}
                     </select>
                   </div>
                 </div>
@@ -529,7 +599,7 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
             <div className="space-y-4">
               {/* Customer summary */}
               <div className="rounded-lg border border-edge bg-white p-5 shadow-card">
-                <p className="text-xs font-semibold uppercase text-ink-subtle tracking-wide mb-3">Customer</p>
+                <p className="text-sm font-semibold uppercase text-ink-subtle tracking-wide mb-3">Customer</p>
                 {selectedCustomer ? (
                   <div className="flex items-center gap-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-full bg-surface-muted text-ink-accent font-semibold">
@@ -537,13 +607,13 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
                     </div>
                     <div>
                       <p className="text-sm font-semibold text-ink-primary">{selectedCustomer.first_name} {selectedCustomer.last_name}</p>
-                      <p className="text-xs text-ink-muted">{selectedCustomer.email}</p>
+                      <p className="text-sm text-ink-muted">{selectedCustomer.email}</p>
                     </div>
                   </div>
                 ) : (
                   <div>
                     <p className="text-sm font-semibold text-ink-primary">{newCustomer.first_name} {newCustomer.last_name}</p>
-                    <p className="text-xs text-ink-muted">{newCustomer.email} · New customer will be created</p>
+                    <p className="text-sm text-ink-muted">{newCustomer.email} · New customer will be created</p>
                   </div>
                 )}
               </div>
@@ -551,16 +621,16 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
               {/* Items summary */}
               <div className="rounded-lg border border-edge bg-white overflow-hidden shadow-card">
                 <div className="border-b border-edge-subtle px-5 py-3 bg-surface-muted">
-                  <p className="text-xs font-semibold uppercase text-ink-subtle tracking-wide">Order Items</p>
+                  <p className="text-sm font-semibold uppercase text-ink-subtle tracking-wide">Order Items</p>
                 </div>
                 <div className="divide-y divide-edge-subtle">
                   {lineItems.map((item, i) => (
                     <div key={i} className="flex items-center justify-between px-5 py-3">
                       <div>
                         <p className="text-sm font-semibold text-ink-primary">{item.name}</p>
-                        <p className="text-xs text-ink-subtle">{item.quantity} × £{Number(item.price).toFixed(2)}</p>
+                        <p className="text-sm text-ink-subtle">{item.quantity} × {currencySymbol}{Number(item.price).toFixed(2)}</p>
                       </div>
-                      <p className="text-sm font-semibold text-ink-primary">£{(Number(item.price) * item.quantity).toFixed(2)}</p>
+                      <p className="text-sm font-semibold text-ink-primary">{currencySymbol}{(Number(item.price) * item.quantity).toFixed(2)}</p>
                     </div>
                   ))}
                 </div>
@@ -568,29 +638,29 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
                 {/* Totals */}
                 <div className="border-t border-edge bg-surface-muted px-5 py-4 space-y-1.5">
                   <div className="flex justify-between text-sm text-ink-secondary">
-                    <span>Subtotal</span><span>£{subtotal.toFixed(2)}</span>
+                    <span>Subtotal</span><span>{currencySymbol}{subtotal.toFixed(2)}</span>
                   </div>
                   {discountValue > 0 && (
                     <div className="flex justify-between text-sm text-ink-success">
                       <span>Discount {discountCode ? `(${discountCode})` : ''}</span>
-                      <span>−£{discountValue.toFixed(2)}</span>
+                      <span>−{currencySymbol}{discountValue.toFixed(2)}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-sm text-ink-secondary">
-                    <span>Tax ({taxRate}%)</span><span>£{taxValue.toFixed(2)}</span>
+                    <span>Tax ({taxRate}%)</span><span>{currencySymbol}{taxValue.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-sm text-ink-secondary">
-                    <span>Shipping</span><span>£{Number(shippingCost).toFixed(2)}</span>
+                    <span>Shipping</span><span>{currencySymbol}{Number(shippingCost).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between border-t border-edge pt-2 text-base font-semibold text-ink-primary">
-                    <span>Total</span><span>£{total.toFixed(2)}</span>
+                    <span>Total</span><span>{currencySymbol}{total.toFixed(2)}</span>
                   </div>
                 </div>
               </div>
 
               {/* Shipping address */}
               <div className="rounded-lg border border-edge bg-white p-5 shadow-card">
-                <p className="text-xs font-semibold uppercase text-ink-subtle tracking-wide mb-2">Shipping Address</p>
+                <p className="text-sm font-semibold uppercase text-ink-subtle tracking-wide mb-2">Shipping Address</p>
                 <p className="text-sm text-ink-secondary">
                   {shipping.name}<br />
                   {shipping.address_line1}{shipping.address_line2 ? `, ${shipping.address_line2}` : ''}<br />
@@ -601,9 +671,9 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
 
               {/* Payment */}
               <div className="rounded-lg border border-edge bg-white p-5 shadow-card">
-                <p className="text-xs font-semibold uppercase text-ink-subtle tracking-wide mb-2">Payment</p>
+                <p className="text-sm font-semibold uppercase text-ink-subtle tracking-wide mb-2">Payment</p>
                 <p className="text-sm font-semibold text-ink-secondary">{paymentMethod} · Region: {region}</p>
-                {notes && <p className="mt-2 text-xs text-ink-muted italic">Note: {notes}</p>}
+                {notes && <p className="mt-2 text-sm text-ink-muted italic">Note: {notes}</p>}
               </div>
 
               {isDraft && (
@@ -628,7 +698,7 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
         {lineItems.length > 0 && (
           <div className="hidden sm:flex items-center gap-2 rounded-sm bg-surface-muted px-4 py-1.5">
             <ShoppingCart className="h-3.5 w-3.5 text-ink-muted" />
-            <span className="text-sm font-semibold text-ink-secondary">{lineItems.reduce((s, l) => s + l.quantity, 0)} items | £{total.toFixed(2)}</span>
+            <span className="text-sm font-semibold text-ink-secondary">{lineItems.reduce((s, l) => s + l.quantity, 0)} items | {currencySymbol}{total.toFixed(2)}</span>
           </div>
         )}
 

@@ -1,4 +1,3 @@
-from decimal import Decimal
 import requests
 from rest_framework import viewsets, status
 from rest_framework.decorators import api_view, action, permission_classes
@@ -9,7 +8,7 @@ from .geo import detect_country_with_source, map_country_to_region_code
 from .shipping import calculate_shipping
 from .models import Region, Warehouse, ShippingZone, ShippingRate
 from .serializers import (
-    RegionSerializer, ShippingZoneSerializer,
+    RegionSerializer,
     RegionAdminSerializer, WarehouseAdminSerializer,
     ShippingZoneAdminSerializer, ShippingRateAdminSerializer
 )
@@ -165,17 +164,46 @@ class ShippingCalculateView(APIView):
         region = Region.objects.filter(code=region_code, is_active=True).first()
         if not region:
             return Response({'error': 'Unknown region'}, status=status.HTTP_400_BAD_REQUEST)
-        cost = calculate_shipping(
-            region,
-            country=request.data.get('country', ''),
-            state=request.data.get('state', ''),
-            postcode=request.data.get('postcode', ''),
-            subtotal=request.data.get('subtotal', 0),
+        weight_g = request.data.get('weight_g', 0)
+        quantity = request.data.get('quantity', 0)
+        session_id = request.data.get('session_id')
+        if session_id:
+            from apps.orders.models import Cart
+            from apps.orders.pricing import cart_shipping_metrics
+            cart = Cart.objects.filter(session_id=session_id, region=region).prefetch_related('items__product').first()
+            if cart:
+                weight_g, quantity = cart_shipping_metrics(cart)
+
+        from .shipping import calculate_shipping_options
+        options = calculate_shipping_options(
+            region, country=request.data.get('country', ''), state=request.data.get('state', ''),
+            city=request.data.get('city', ''), postcode=request.data.get('postcode', ''),
+            subtotal=request.data.get('subtotal', 0), weight_g=weight_g, quantity=quantity,
         )
+        if not options:
+            return Response({
+                'error': 'Shipping is not available for this destination and order.',
+                'options': [], 'currency_code': region.currency_code,
+            }, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            option = calculate_shipping(
+                region, country=request.data.get('country', ''), state=request.data.get('state', ''),
+                city=request.data.get('city', ''), postcode=request.data.get('postcode', ''),
+                subtotal=request.data.get('subtotal', 0), weight_g=weight_g, quantity=quantity,
+                rate_id=request.data.get('shipping_rate_id'), return_option=True,
+            )
+        except ValueError as exc:
+            return Response({'error': str(exc), 'options': []}, status=status.HTTP_400_BAD_REQUEST)
         return Response({
-            'shipping_cost': str(cost),
+            'shipping_cost': str(option['cost']),
+            'selected_rate_id': option['rate_id'],
+            'method': option['method'],
+            'estimated_days': option['estimated_days'],
+            'options': [{**item, 'cost': str(item['cost'])} for item in options],
+            'weight_g': str(weight_g),
+            'quantity': quantity,
             'currency_code': region.currency_code,
-            'free': cost == Decimal('0.00'),
+            'free': option['free'],
         })
 
 

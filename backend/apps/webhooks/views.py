@@ -1,4 +1,5 @@
-import threading
+import secrets
+
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -12,7 +13,6 @@ from apps.webhooks.serializers import (
     WebhookDeliverySerializer,
     IncomingWebhookEventSerializer
 )
-from apps.webhooks.dispatcher import send_delivery_worker, send_delivery
 
 class WebhookSubscriptionViewSet(viewsets.ModelViewSet):
     queryset = WebhookSubscription.objects.all().order_by('-created_at')
@@ -36,19 +36,22 @@ class WebhookSubscriptionViewSet(viewsets.ModelViewSet):
             status='PENDING'
         )
 
-        # Trigger it asynchronously
-        thread = threading.Thread(
-            target=send_delivery_worker,
-            args=(delivery.id,)
-        )
-        thread.daemon = True
-        thread.start()
-
         return Response({
             'status': 'queued',
             'delivery_id': delivery.id,
             'message': 'Test ping webhook event triggered successfully.'
         }, status=status.HTTP_202_ACCEPTED)
+
+    @action(detail=True, methods=['post'])
+    def rotate_secret(self, request, pk=None):
+        """Rotate a signing secret and return the replacement exactly once."""
+        subscription = self.get_object()
+        subscription.secret = secrets.token_hex(32)
+        subscription.save(update_fields=['secret', 'updated_at'])
+        return Response({
+            'signing_secret': subscription.secret,
+            'message': 'Signing secret rotated. Store it now; it will not be shown again.',
+        })
 
 
 class WebhookDeliveryViewSet(viewsets.ReadOnlyModelViewSet):
@@ -75,14 +78,6 @@ class WebhookDeliveryViewSet(viewsets.ReadOnlyModelViewSet):
         delivery.status = 'PENDING'
         delivery.attempts = 0
         delivery.save()
-
-        # Run immediately in background thread
-        thread = threading.Thread(
-            target=send_delivery_worker,
-            args=(delivery.id,)
-        )
-        thread.daemon = True
-        thread.start()
 
         return Response({
             'status': 'queued',
@@ -114,18 +109,7 @@ class IncomingWebhookEventViewSet(viewsets.ReadOnlyModelViewSet):
         event.next_attempt_at = None
         event.save()
 
-        # Trigger processing using the process_webhooks command logic asynchronously
-        from apps.orders.management.commands.process_webhooks import Command as WebhookProcessorCommand
-        
-        def run_reprocessing():
-            cmd = WebhookProcessorCommand()
-            cmd.process_event(event)
-
-        thread = threading.Thread(target=run_reprocessing)
-        thread.daemon = True
-        thread.start()
-
         return Response({
-            'status': 'processing',
-            'message': 'Incoming webhook event is being reprocessed.'
+            'status': 'queued',
+            'message': 'Incoming webhook event was queued for reprocessing.'
         }, status=status.HTTP_202_ACCEPTED)

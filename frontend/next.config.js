@@ -1,3 +1,24 @@
+const isDevelopment = process.env.NODE_ENV === 'development';
+
+function configuredApiOrigin() {
+  const configuredUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
+  if (!configuredUrl) return null;
+
+  try {
+    const parsedUrl = new URL(configuredUrl);
+    return ['http:', 'https:'].includes(parsedUrl.protocol) ? parsedUrl.origin : null;
+  } catch {
+    // Invalid public API URLs are rejected instead of being interpolated into
+    // a security header. The application will surface the bad configuration.
+    return null;
+  }
+}
+
+const backendOrigins = [
+  configuredApiOrigin(),
+  ...(isDevelopment ? ['http://localhost:8000', 'http://127.0.0.1:8000'] : []),
+].filter((origin, index, origins) => origin && origins.indexOf(origin) === index);
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -23,7 +44,6 @@ const nextConfig = {
       { protocol: 'https', hostname: '**.scleroproteins.in' },
       { protocol: 'https', hostname: 'images.unsplash.com' },
       { protocol: 'https', hostname: 'i.ytimg.com' },
-      { protocol: 'https', hostname: 'via.placeholder.com' },
     ],
   },
 
@@ -43,18 +63,23 @@ const nextConfig = {
             value: 'camera=(), microphone=(), geolocation=(), payment=(self)',
           },
           {
-            key: 'Content-Security-Policy-Report-Only',
+            key: process.env.CSP_REPORT_ONLY === 'true'
+              ? 'Content-Security-Policy-Report-Only'
+              : 'Content-Security-Policy',
             value: [
               "default-src 'self'",
               "base-uri 'self'",
               "object-src 'none'",
               "frame-ancestors 'none'",
-              "img-src 'self' data: blob: https:",
+              `img-src 'self' data: blob: https: ${backendOrigins.join(' ')}`.trim(),
               "font-src 'self' data:",
               "style-src 'self' 'unsafe-inline'",
-              "script-src 'self' 'unsafe-inline' https://accounts.google.com https://apis.google.com https://www.googletagmanager.com https://connect.facebook.net https://analytics.tiktok.com https://widget.trustpilot.com https://js.stripe.com https://www.instagram.com https://platform.instagram.com",
-              "frame-src 'self' https://accounts.google.com https://www.google.com https://apis.google.com https://js.stripe.com https://hooks.stripe.com https://widget.trustpilot.com https://www.instagram.com https://www.facebook.com",
-              "connect-src 'self' https://accounts.google.com https://apis.google.com https://www.google-analytics.com https://graph.facebook.com https://analytics.tiktok.com https://widget.trustpilot.com https://api.stripe.com https://*.instagram.com",
+              "worker-src 'self'",
+              // React's development runtime uses eval to reconstruct debugging
+              // call stacks. Keep it development-only; production never allows it.
+              `script-src 'self' 'unsafe-inline'${isDevelopment ? " 'unsafe-eval'" : ''} https://accounts.google.com https://apis.google.com https://www.googletagmanager.com https://connect.facebook.net https://analytics.tiktok.com https://widget.trustpilot.com https://js.stripe.com https://www.instagram.com https://platform.instagram.com https://checkout.razorpay.com`,
+              "frame-src 'self' https://accounts.google.com https://www.google.com https://apis.google.com https://js.stripe.com https://hooks.stripe.com https://widget.trustpilot.com https://www.instagram.com https://www.facebook.com https://checkout.razorpay.com https://api.razorpay.com",
+              `connect-src 'self' ${backendOrigins.join(' ')} https://accounts.google.com https://apis.google.com https://www.google-analytics.com https://graph.facebook.com https://analytics.tiktok.com https://widget.trustpilot.com https://api.stripe.com https://*.instagram.com https://api.razorpay.com https://checkout.razorpay.com https://lumberjack.razorpay.com`,
               "form-action 'self'",
             ].join('; '),
           },

@@ -42,6 +42,15 @@ class Product(models.Model):
         help_text="One-line benefit shown on product cards (e.g. 'Joint care · 750mg per cap').",
     )
     categories = models.ManyToManyField(Category, related_name='products', blank=True)
+    base_price = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        help_text=(
+            "Price in GBP (£) — the store's base currency. Markets with automatic "
+            "pricing convert this using their exchange rate (the UK market's rate "
+            "stays 1.0). A market-specific price always overrides it. Leave empty "
+            "to sell only where a price is set explicitly."
+        ),
+    )
     is_active = models.BooleanField(default=True, db_index=True)
     is_archived = models.BooleanField(default=False, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -56,6 +65,31 @@ class Product(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.sku})"
+
+
+class ProductVariant(models.Model):
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="variants")
+    sku = models.CharField(max_length=100, unique=True, db_index=True)
+    name = models.CharField(max_length=150, help_text="Variant label e.g. 1 kg, 5 kg, 25 kg, 60 Caps")
+    option_name = models.CharField(max_length=100, default="Size", help_text="e.g. Weight, Size, Format")
+    option_value = models.CharField(max_length=100, default="Standard")
+    price_gbp = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    price_inr = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    stock_qty = models.PositiveIntegerField(default=100)
+    is_active = models.BooleanField(default=True, db_index=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['sort_order', 'id']
+        indexes = [
+            models.Index(fields=['product', 'is_active']),
+            models.Index(fields=['sku']),
+        ]
+
+    def __str__(self):
+        return f"{self.product.name} - {self.name} ({self.sku})"
 
 
 class ProductRegionConfig(models.Model):

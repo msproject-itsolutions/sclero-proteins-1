@@ -60,7 +60,7 @@ class Command(BaseCommand):
 
             ext = _EXT.get(mime, 'bin')
             sku = getattr(m.product, 'sku', 'product')
-            digest = hashlib.sha1(raw).hexdigest()[:12]
+            digest = hashlib.sha256(raw).hexdigest()[:12]
             fname = f'{sku}-{m.id}-{digest}.{ext}'
             new_url = f'{base}/media/products/{fname}'
             self.stdout.write(

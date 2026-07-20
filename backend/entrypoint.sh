@@ -16,11 +16,13 @@ if [ -n "$DB_HOST" ]; then
   done
 fi
 
-echo "Applying database migrations..."
-python manage.py migrate --noinput
+if [ "${SKIP_STARTUP_MAINTENANCE:-False}" != "True" ]; then
+  echo "Applying database migrations..."
+  python manage.py migrate --noinput
 
-# Re-run collectstatic at boot so a bad static manifest prevents an unhealthy
-# release from being marked ready.
-python manage.py collectstatic --noinput
+  # Re-run collectstatic at boot so a bad static manifest prevents an unhealthy
+  # release from being marked ready.
+  python manage.py collectstatic --noinput
+fi
 
 exec "$@"

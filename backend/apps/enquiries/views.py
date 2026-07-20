@@ -1,3 +1,5 @@
+import logging
+
 from rest_framework import viewsets, mixins, status, views
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
@@ -8,6 +10,9 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from apps.users.permissions import require_permission
 from .models import BulkEnquiry, NewsletterSubscriber
 from .serializers import BulkEnquirySerializer, BulkEnquiryAdminSerializer
+
+
+logger = logging.getLogger(__name__)
 
 
 class BulkEnquiryCreateView(mixins.CreateModelMixin, viewsets.GenericViewSet):
@@ -27,7 +32,7 @@ class BulkEnquiryCreateView(mixins.CreateModelMixin, viewsets.GenericViewSet):
             record_audit('enquiry.created', target_type='BulkEnquiry', target_id=enquiry.pk,
                          summary=f'{enquiry.get_enquiry_type_display()} enquiry from {enquiry.name} ({enquiry.email})')
         except Exception:
-            pass
+            logger.exception('Could not audit enquiry %s.', enquiry.pk)
 
         # Best-effort: notify the configured ops mailbox via the
         # contact_received EmailTemplate. Failures must not break submission.
@@ -42,6 +47,10 @@ class BulkEnquiryCreateView(mixins.CreateModelMixin, viewsets.GenericViewSet):
                 notify_email = row.value.get('email') or row.value.get('value') or ''
             elif row and isinstance(row.value, str):
                 notify_email = row.value
+            if not notify_email:
+                company = SystemSetting.objects.filter(key='COMPANY_INFO').first()
+                if company and isinstance(company.value, dict):
+                    notify_email = company.value.get('support') or company.value.get('email') or ''
             if not notify_email:
                 notify_email = getattr(dj_settings, 'DEFAULT_FROM_EMAIL', '')
 
@@ -58,7 +67,7 @@ class BulkEnquiryCreateView(mixins.CreateModelMixin, viewsets.GenericViewSet):
                     audit_target_type='BulkEnquiry', audit_target_id=enquiry.pk,
                 )
         except Exception:
-            pass
+            logger.exception('Could not schedule the notification for enquiry %s.', enquiry.pk)
 
         return Response(
             {'message': "Thank you — your enquiry has been received. Our team will be in touch shortly.",
@@ -98,7 +107,7 @@ class NewsletterSubscribeView(views.APIView):
         except DjangoValidationError:
             return Response({'error': 'A valid email is required.'}, status=status.HTTP_400_BAD_REQUEST)
         region = (request.data.get('region') or '').upper()
-        source = (request.data.get('source') or 'footer')[:40]
+        source = (request.data.get('source') or 'footer').strip()[:40] or 'footer'
         sub, created = NewsletterSubscriber.objects.get_or_create(
             email=email,
             defaults={'region_code': region, 'source': source, 'is_active': True},
@@ -113,7 +122,7 @@ class NewsletterSubscribeView(views.APIView):
                          target_id=sub.pk, summary=email,
                          changes={'region': region, 'source': source, 'created': created})
         except Exception:
-            pass
+            logger.exception('Could not audit newsletter subscription %s.', sub.pk)
         return Response({'message': 'Thanks for subscribing!', 'is_new': created},
                         status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 

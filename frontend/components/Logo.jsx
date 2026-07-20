@@ -16,6 +16,7 @@ export default function Logo({ className = 'h-8 w-8', alt = 'Sclero Proteins' })
       src={logoSrc}
       alt={alt}
       className={`${className} select-none object-contain`}
+      decoding="async"
       draggable={false}
     />
   );
@@ -35,10 +36,46 @@ export function LogoLockup({
   wordClass = 'h-5',
   inverse = false,
   alt = 'Sclero Proteins',
+  assetSrc = null,
+  showMarkWithAsset = false,
 }) {
   const branding = useSelector((state) => state.region.branding);
   const logoSrc = branding?.logoUrl || '/logo-mark.png';
-  const wordmarkSrc = branding?.logoWordmarkUrl || '/logo-wordmark.png';
+  const wordmarkSrc = branding?.logoHeaderWordmarkUrl || branding?.logoWordmarkUrl || '/logo-header-wordmark.png';
+
+  if (assetSrc) {
+    if (showMarkWithAsset) {
+      return (
+        <span className="flex items-center gap-3">
+          <img
+            src={logoSrc}
+            alt=""
+            aria-hidden="true"
+            className={`${markClass} shrink-0 select-none object-contain`}
+            decoding="async"
+            draggable={false}
+          />
+          <img
+            src={assetSrc}
+            alt={alt}
+            className={`${wordClass} w-auto max-w-none select-none object-contain ${inverse ? 'brightness-0 invert' : ''}`}
+            decoding="async"
+            draggable={false}
+          />
+        </span>
+      );
+    }
+
+    return (
+      <img
+        src={assetSrc}
+        alt={alt}
+        className={`${wordClass} w-auto max-w-none select-none object-contain ${inverse ? 'brightness-0 invert' : ''}`}
+        decoding="async"
+        draggable={false}
+      />
+    );
+  }
 
   return (
     <span className="flex items-center gap-2.5">
@@ -46,16 +83,17 @@ export function LogoLockup({
         src={logoSrc}
         alt=""
         aria-hidden="true"
-        className={`${markClass} select-none object-contain`}
+        className={`${markClass} shrink-0 select-none object-contain`}
+        decoding="async"
         draggable={false}
       />
       <img
         src={wordmarkSrc}
         alt={alt}
-        className={`${wordClass} w-auto select-none object-contain ${inverse ? 'brightness-0 invert' : ''}`}
+        className={`${wordClass} w-auto max-w-none select-none object-contain ${inverse ? 'brightness-0 invert' : ''}`}
+        decoding="async"
         draggable={false}
       />
     </span>
   );
 }
-

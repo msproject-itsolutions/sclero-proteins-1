@@ -7,30 +7,29 @@ import { X } from 'lucide-react';
 const STORAGE_KEY = 'sclero_promo_dismissed';
 
 export default function PromoBanner() {
-  const { currentRegion } = useSelector((s) => s.region);
+  const { currentRegion, branding } = useSelector((s) => s.region);
   const [mounted, setMounted] = useState(false);
   const [visible, setVisible] = useState(false);
+  const message = currentRegion === 'IN'
+    ? branding?.announcementIN
+    : branding?.announcementUK;
+  const enabled = branding?.announcementEnabled === true && Boolean(message?.trim());
 
   useEffect(() => {
     setMounted(true);
     try {
-      const dismissed = typeof window !== 'undefined' && localStorage.getItem(STORAGE_KEY);
-      if (!dismissed) setVisible(true);
+      setVisible(localStorage.getItem(STORAGE_KEY) !== message);
     } catch {
       setVisible(true);
     }
-  }, []);
+  }, [message]);
 
-  if (!mounted || !visible) return null;
+  if (!mounted || !visible || !enabled) return null;
 
   const dismiss = () => {
-    try { localStorage.setItem(STORAGE_KEY, '1'); } catch {}
+    try { localStorage.setItem(STORAGE_KEY, message); } catch {}
     setVisible(false);
   };
-
-  const message = currentRegion === 'IN'
-    ? 'Free delivery on Indian orders over ₹3,000 · GST included on every order'
-    : 'Free shipping on UK orders over £50 · Use code SCLERO10 for 10% off';
 
   return (
     <div

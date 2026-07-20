@@ -1,19 +1,19 @@
 import { authenticatedFetch } from './authFetch';
 
-// One shared wishlist fetch per (region, token) instead of one per product
+// One shared wishlist fetch per authenticated region instead of one per product
 // card — a catalog page with 12 cards used to fire 12 identical requests
 // (and 12 identical 401s when the stored token had expired).
 let cache = { key: null, promise: null };
 
-export function fetchWishlistOnce(region, accessToken) {
-  if (!accessToken) {
+export function fetchWishlistOnce(region, isAuthenticated) {
+  if (!isAuthenticated) {
     return Promise.resolve([]);
   }
-  const key = `${region}:${accessToken}`;
+  const key = region;
   if (cache.key !== key || !cache.promise) {
     cache = {
       key,
-      promise: authenticatedFetch(`/api/wishlist/?region=${region}`, {}, accessToken)
+      promise: authenticatedFetch(`/api/wishlist/?region=${region}`)
         .then((res) => (res.ok ? res.json() : []))
         .then((data) => (Array.isArray(data) ? data : data.results || []))
         .catch(() => []),

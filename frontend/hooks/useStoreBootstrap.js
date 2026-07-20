@@ -10,7 +10,7 @@ import { initTrackingScripts } from '../utils/analytics';
 
 const trackingSettings = {
   google_analytics_id: process.env.NEXT_PUBLIC_GA4_ID || '',
-  google_gtm_id: process.env.NEXT_PUBLIC_GTM_ID || 'GT-WBKDQ395',
+  google_gtm_id: process.env.NEXT_PUBLIC_GTM_ID || '',
   meta_pixel_id: process.env.NEXT_PUBLIC_META_PIXEL_ID || '',
   tiktok_pixel_id: process.env.NEXT_PUBLIC_TIKTOK_PIXEL_ID || '',
 };
@@ -66,8 +66,12 @@ export default function useStoreBootstrap() {
         if (cfg && typeof cfg.guest_checkout_enabled !== 'undefined') {
           dispatch(setGuestCheckoutEnabled(cfg.guest_checkout_enabled));
         }
-        if (cfg && cfg.branding) {
-          dispatch(setBranding(cfg.branding));
+        if (cfg) {
+          dispatch(setBranding({
+            ...(cfg.branding || {}),
+            companyInfo: cfg.company_info || {},
+            socialLinks: cfg.social_links || {},
+          }));
         }
 
         // Dynamically override tracking settings from DB if configured
@@ -75,8 +79,8 @@ export default function useStoreBootstrap() {
         const isIndia = hostRegion === 'IN' || (typeof window !== 'undefined' && window.location.hostname.endsWith('.in'));
         
         activeTrackingSettings = {
-          google_analytics_id: (isIndia ? seo.googleAnalyticsIN : seo.googleAnalytics) || process.env.NEXT_PUBLIC_GA4_ID || (isIndia ? 'G-1LXXS0E8KX' : 'G-SXFL6ENWL7'),
-          google_gtm_id: seo.gtm || process.env.NEXT_PUBLIC_GTM_ID || 'GT-WBKDQ395',
+          google_analytics_id: (isIndia ? seo.googleAnalyticsIN : seo.googleAnalytics) || process.env.NEXT_PUBLIC_GA4_ID || '',
+          google_gtm_id: seo.gtm || process.env.NEXT_PUBLIC_GTM_ID || '',
           meta_pixel_id: seo.fbPixel || process.env.NEXT_PUBLIC_META_PIXEL_ID || '',
           tiktok_pixel_id: process.env.NEXT_PUBLIC_TIKTOK_PIXEL_ID || '',
         };

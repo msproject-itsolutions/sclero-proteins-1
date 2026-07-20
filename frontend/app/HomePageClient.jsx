@@ -1,499 +1,597 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useSelector } from 'react-redux';
 import Link from 'next/link';
 import {
-  Check, Send, Sparkles, Star, ArrowRight,
-  Shield, Brain, Zap, Activity, Users, Instagram
+  ArrowRight,
+  BadgeCheck,
+  Check,
+  FlaskConical,
+  HeartHandshake,
+  Leaf,
+  Minus,
+  Plus,
+  Shield,
+  Send,
+  ShieldCheck,
+  Sparkles,
+  Truck,
+  X,
 } from 'lucide-react';
 import StoreShell from '../components/StoreShell';
 import HeroSection from '../components/HeroSection';
 import ProductCatalog from '../components/ProductCatalog';
 import QuizComponent from '../components/QuizComponent';
-import { GuaranteeBanner } from '../components/GuaranteeCard';
-import { getApiUrl } from '../lib/api';
+import { postJson } from '../lib/api';
+import { normalizeHomepageSettings } from '../lib/homepageContent';
+import { safePublicHref } from '../lib/safeUrl';
+import { firstApiError, validateEnquiry } from '../lib/formValidation';
 
-const SOCIAL_PROOF = {
-  customers: '12,000+',
-  servings: '50,000+',
-  rating: '4.8',
-  reviewCount: '1,200',
+const EDUCATION_FALLBACKS = [
+  {
+    title: 'Understanding joint mobility nutrition',
+    author: 'Sclero Advisory',
+    description: 'A practical guide to collagen, cartilage support, and the cofactors that help them work together.',
+  },
+  {
+    title: 'How to read supplement labels with confidence',
+    author: 'Clinical Education',
+    description: 'Learn how to spot filler-heavy formulas and compare active ingredient levels in minutes.',
+  },
+  {
+    title: 'Why low-heat processing matters',
+    author: 'Product Research',
+    description: 'See how ingredient handling can affect the integrity of delicate protein structures.',
+  },
+];
+
+const ICON_MAP = {
+  FlaskConical,
+  ShieldCheck,
+  Truck,
+  HeartHandshake,
+  Shield,
+  BadgeCheck,
+  Leaf,
+  Sparkles,
 };
 
-const HEALTH_GOALS = [
-  { name: 'Immunity', slug: 'immunity', icon: Shield, desc: 'Immune defence support' },
-  { name: 'Sleep & Relax', slug: 'sleep', icon: Brain, desc: 'Stress & sleep recovery' },
-  { name: 'Energy & Vitality', slug: 'energy', icon: Zap, desc: 'Mitigate daily fatigue' },
-  { name: 'Gut Health', slug: 'gut', icon: Activity, desc: 'Bioactive microbiome' },
-  { name: 'Men\'s Health', slug: 'men', icon: Users, desc: 'Hormonal & physical support' },
-  { name: 'Women\'s Health', slug: 'women', icon: Users, desc: 'Bone density & balance' },
-  { name: 'Skin & Hair', slug: 'collagen', icon: Sparkles, desc: 'Dermatological synthesis' },
-  { name: 'Fitness & Muscle', slug: 'fitness', icon: Activity, desc: 'Muscle synthesis & repair' },
-];
+function resolveIcon(iconName, fallback) {
+  return ICON_MAP[iconName] || fallback;
+}
 
-const TESTIMONIALS = [
-  { name: 'Sarah Jenkins', role: 'Verified UK Buyer', rating: 5, text: 'The BJC joint care has been a lifesaver for my daily runs. My knees feel highly lubricated and recovery times are cut in half.', product: 'BJC® Bone & Joint Care' },
-  { name: 'Rahul Mehta', role: 'Verified India Buyer', rating: 5, text: 'Absolutely love the label transparency. Unlike other brands in India, Sclero Proteins lists exact composition quantities.', product: 'OvoMatrix ESC' },
-  { name: 'James Foster', role: 'Amateur Athlete', rating: 5, text: 'Highest grade structural protein I have used. The single-ingredient membrane collagen makes a real difference in recovery and joint comfort.', product: 'OvoShell Collagen™' },
-];
-
-export default function HomePageClient({ initialBlogs = [] }) {
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      if (window.instgrm) {
-        window.instgrm.Embeds.process();
-      } else {
-        const script = document.createElement('script');
-        script.async = true;
-        script.src = 'https://www.instagram.com/embed.js';
-        document.body.appendChild(script);
-      }
-    }
-  }, []);
-
+export default function HomePageClient({ initialBlogs = [], initialHomepageSettings }) {
   const currentRegion = useSelector((state) => state.region.currentRegion);
   const branding = useSelector((state) => state.region.branding);
   const whatsappNumber = currentRegion === 'IN'
-    ? (branding?.whatsappNumberIN || '918047100000')
-    : (branding?.whatsappNumberUK || '442045740000');
+    ? branding?.whatsappNumberIN
+    : branding?.whatsappNumberUK;
+
+  const [quizOpen, setQuizOpen] = useState(false);
   const [inquiryName, setInquiryName] = useState('');
   const [inquiryEmail, setInquiryEmail] = useState('');
   const [inquiryMessage, setInquiryMessage] = useState('');
   const [inquirySent, setInquirySent] = useState(false);
+  const [inquiryError, setInquiryError] = useState('');
+  const [inquirySubmitting, setInquirySubmitting] = useState(false);
   const [cartOpenTrigger, setCartOpenTrigger] = useState(null);
+  const [expandedFaq, setExpandedFaq] = useState(0);
+  const homepageSettings = useMemo(
+    () => normalizeHomepageSettings(initialHomepageSettings),
+    [initialHomepageSettings]
+  );
+  const showcaseTabs = homepageSettings.productShowcase?.tabs || [];
+  const [activeShowcase, setActiveShowcase] = useState(showcaseTabs[0]?.key || 'bestsellers');
 
-  const handleInquirySubmit = (e) => {
+  const educationEntries = useMemo(
+    () => (initialBlogs.length > 0 ? initialBlogs : EDUCATION_FALLBACKS),
+    [initialBlogs]
+  );
+
+  const productShowcases = useMemo(
+    () => showcaseTabs.reduce((acc, item) => {
+      acc[item.key] = item;
+      return acc;
+    }, {}),
+    [showcaseTabs]
+  );
+
+  React.useEffect(() => {
+    if (!productShowcases[activeShowcase] && showcaseTabs[0]?.key) {
+      setActiveShowcase(showcaseTabs[0].key);
+    }
+  }, [activeShowcase, productShowcases, showcaseTabs]);
+
+  const handleInquirySubmit = async (e) => {
     e.preventDefault();
-    if (!(inquiryName && inquiryEmail && inquiryMessage)) return;
-    
-    fetch(getApiUrl('/api/enquiries/'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: inquiryName,
-        email: inquiryEmail,
-        message: inquiryMessage,
-        enquiry_type: 'DISTRIBUTOR',
-        product_interest: 'Wholesale / distribution',
-      }),
-    })
-      .catch(() => {})
-      .finally(() => {
-        setInquirySent(true);
-        setInquiryName('');
-        setInquiryEmail('');
-        setInquiryMessage('');
+    setInquiryError('');
+    const { cleaned, error } = validateEnquiry({
+      name: inquiryName,
+      email: inquiryEmail,
+      message: inquiryMessage,
+    });
+    if (error) {
+      setInquiryError(error);
+      return;
+    }
+    setInquirySubmitting(true);
+
+    try {
+      const { response, data } = await postJson('/api/enquiries/', {
+        ...cleaned,
+        enquiry_type: 'OTHER',
+        product_interest: 'Homepage enquiry',
       });
+      if (!response.ok) throw new Error(firstApiError(data, 'Could not send your message.'));
+      setInquirySent(true);
+      setInquiryName('');
+      setInquiryEmail('');
+      setInquiryMessage('');
+    } catch (error) {
+      setInquiryError(error.message || 'Could not send your message.');
+    } finally {
+      setInquirySubmitting(false);
+    }
   };
 
   return (
     <StoreShell cartOpenSignal={cartOpenTrigger}>
-      {/* Hero Section */}
       <HeroSection />
 
-      {/* Quiet stats ribbon */}
-      <div className="hairline border-b border-edge bg-brand-bg">
-        <div className="container-page grid grid-cols-2 gap-6 py-8 text-center md:grid-cols-4">
-          {[
-            [SOCIAL_PROOF.customers, 'Customers worldwide'],
-            [SOCIAL_PROOF.servings, 'Servings delivered'],
-            [`${SOCIAL_PROOF.rating} / 5`, 'Average rating'],
-            [`${SOCIAL_PROOF.reviewCount}+`, 'Verified reviews'],
-          ].map(([k, v]) => (
-            <div key={v}>
-              <div className="font-display text-[30px] font-medium leading-none text-ink-primary">{k}</div>
-              <div className="kicker mt-3">{v}</div>
+      {homepageSettings.trustSection.enabled !== false && (
+      <section className="border-b border-edge bg-white">
+        <div className="container-page py-10 md:py-12">
+          <div className="grid gap-8 lg:grid-cols-[0.92fr_1.08fr] lg:items-start lg:gap-10">
+            <div className="reveal max-w-[40rem] pt-1">
+              <span className="kicker">{homepageSettings.trustSection.kicker}</span>
+              <h2 className="mt-3 max-w-[11ch] text-[clamp(2.4rem,4vw,3.65rem)] font-bold leading-[0.98] tracking-[-0.04em] text-ink-primary">
+                {homepageSettings.trustSection.title}
+              </h2>
+              <p className="mt-4 max-w-[34rem] text-[1.02rem] leading-[1.8] text-ink-secondary md:text-[1.08rem]">
+                {homepageSettings.trustSection.description}
+              </p>
             </div>
-          ))}
-        </div>
-      </div>
 
-      {/* Shop by Goal Section */}
-      <section className="section bg-brand-bg">
+            <div className="grid gap-4 md:grid-cols-3 lg:self-start">
+              {homepageSettings.trustSection.cards.map((item) => {
+                const Icon = resolveIcon(item.icon, FlaskConical);
+                return (
+                  <div key={item.title} className="reveal rounded-[24px] border border-edge bg-surface-subtle p-5 shadow-card lg:min-h-[228px]">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-ink-accent shadow-card">
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <h3 className="mt-5 text-[1.12rem] font-bold leading-[1.2] text-ink-primary">{item.title}</h3>
+                    <p className="mt-3 text-[0.98rem] leading-[1.8] text-ink-secondary">{item.description}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </section>
+      )}
+
+      {homepageSettings.productShowcase.enabled !== false && (
+      <section className="section bg-white pb-16 pt-10 md:pb-20 md:pt-12">
         <div className="container-page">
-          <div className="reveal mb-12 text-center">
-            <span className="kicker">Targeted Actives</span>
-            <h2 className="text-heading-1 mt-3">Shop by health goal</h2>
-            <p className="mt-3 text-sm text-ink-secondary">Filter Sclero formulations to match your daily wellness goals</p>
+          <div className="reveal flex flex-wrap items-center gap-3">
+            {showcaseTabs.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveShowcase(tab.key)}
+                className={`rounded-full px-5 py-2.5 text-sm font-semibold transition-all duration-300 ${
+                  activeShowcase === tab.key
+                    ? 'bg-brand-gradient text-white shadow-card'
+                    : 'border border-edge bg-white text-ink-primary hover:border-edge-strong hover:bg-surface-subtle'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div key={activeShowcase} className="animate-fade-in">
+          <ProductCatalog
+            id={productShowcases[activeShowcase]?.key || 'bestsellers'}
+            title={productShowcases[activeShowcase]?.label}
+            subtitle={productShowcases[activeShowcase]?.subtitle}
+            limit={productShowcases[activeShowcase]?.limit || 4}
+            apiSort={productShowcases[activeShowcase]?.apiSort || 'bestseller'}
+            showRating={false}
+            className="pb-0 pt-8"
+            onOpenCart={() => setCartOpenTrigger(Date.now())}
+          />
+        </div>
+
+        <div className="container-page mt-10 flex justify-center md:mt-12">
+          <Link href={safePublicHref(homepageSettings.productShowcase.ctaUrl) || '/products'} className="btn-ghost px-8 py-3.5 text-sm">
+            {homepageSettings.productShowcase.ctaLabel} <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+      </section>
+      )}
+
+      {homepageSettings.quizSection.enabled !== false && (
+      <section className="section bg-surface-subtle">
+        <div className="container-page">
+          <div className="grid items-center gap-10 lg:grid-cols-[1.1fr_0.9fr]">
+            <div className="reveal max-w-2xl">
+              <span className="kicker">{homepageSettings.quizSection.kicker}</span>
+              <h2 className="text-heading-1 mt-3">{homepageSettings.quizSection.title}</h2>
+              <p className="mt-4 max-w-xl text-body">
+                {homepageSettings.quizSection.description}
+              </p>
+            </div>
+            <div className="reveal rounded-[28px] border border-edge bg-white p-8 shadow-card">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-gradient text-white shadow-card">
+                {React.createElement(resolveIcon(homepageSettings.quizSection.icon, HeartHandshake), { className: 'h-6 w-6' })}
+              </div>
+              <p className="mt-4 text-sm leading-[1.8] text-ink-secondary">
+                {homepageSettings.quizSection.cardDescription}
+              </p>
+              <button
+                type="button"
+                onClick={() => setQuizOpen(true)}
+                className="btn-primary mt-5 px-8 py-3.5 text-sm"
+              >
+                {homepageSettings.quizSection.buttonLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+      )}
+
+      {homepageSettings.chooseSection.enabled !== false && (
+      <section className="section bg-white">
+        <div className="container-page">
+          <div className="reveal max-w-2xl">
+            <span className="kicker">{homepageSettings.chooseSection.kicker}</span>
+            <h2 className="text-heading-1 mt-3">{homepageSettings.chooseSection.title}</h2>
+            <p className="mt-4 text-body">
+              {homepageSettings.chooseSection.description}
+            </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 md:gap-5">
-            {HEALTH_GOALS.map((goal, idx) => {
-              const Icon = goal.icon;
+          <div className="mt-10 grid gap-5 md:grid-cols-3">
+            {homepageSettings.chooseSection.cards.map((card) => {
+              const Icon = resolveIcon(card.icon, FlaskConical);
               return (
-                <Link
-                  key={idx}
-                  href={`/products?q=${goal.slug}`}
-                  className="reveal group flex h-36 flex-col justify-between rounded-md border border-edge bg-surface p-5 shadow-card transition-all duration-300 hover:-translate-y-1 hover:border-edge-strong hover:shadow-elevated"
-                >
-                  <div className="flex h-9 w-9 items-center justify-center rounded-sm bg-surface-muted text-ink-accent">
+                <div key={card.title} className="reveal rounded-[28px] border border-edge bg-white p-7 shadow-card">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-subtle text-ink-accent">
                     <Icon className="h-5 w-5" />
                   </div>
-                  <div>
-                    <h3 className="text-[11px] font-medium uppercase tracking-[0.14em] text-ink-primary transition-colors group-hover:text-ink-accent">
-                      {goal.name}
-                    </h3>
-                    <p className="mt-1.5 text-[11px] leading-snug text-ink-muted">{goal.desc}</p>
-                  </div>
-                </Link>
+                  <h3 className="mt-5 text-xl font-bold text-ink-primary">{card.title}</h3>
+                  <p className="mt-3 text-sm leading-[1.8] text-ink-secondary">{card.description}</p>
+                </div>
               );
             })}
           </div>
         </div>
       </section>
+      )}
 
-      {/* Quiz Section */}
-      <section className="section border-y border-edge bg-surface-muted">
-        <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
-          <div className="reveal mb-10 text-center">
-            <span className="kicker">Personalized Wellness</span>
-            <h2 className="text-heading-1 mt-3">Not sure where to start?</h2>
-            <p className="mt-3 text-sm text-ink-secondary">
-              Take our 4-question quiz to find the perfect collagen or supplement for your goals
+      {homepageSettings.comparisonSection.enabled !== false && (
+      <section className="section bg-surface-subtle">
+        <div className="container-page">
+          <div className="reveal text-center">
+            <span className="kicker">{homepageSettings.comparisonSection.kicker}</span>
+            <h2 className="text-heading-1 mt-3">{homepageSettings.comparisonSection.title}</h2>
+            <p className="mx-auto mt-4 max-w-3xl text-body">
+              {homepageSettings.comparisonSection.description}
             </p>
           </div>
 
-          <QuizComponent
-            onComplete={(result) => {
-              window.location.href = `/products/${result.recommendation.sku}`;
-            }}
-          />
-        </div>
-      </section>
-
-      {/* Science & Purity Section */}
-      <section className="section border-b border-edge bg-brand-bg">
-        <div className="container-page">
-          <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-2 lg:gap-16">
-            <div className="reveal space-y-6">
-              <div>
-                <span className="kicker">Scientific Integrity</span>
-                <h2 className="text-heading-1 mt-3 leading-tight">Advanced biochemistry for <em className="text-italic-accent">bio-active</em> absorption</h2>
-                <p className="mt-5 text-sm leading-[1.8] text-ink-secondary">
-                  Our formulations are constructed by molecular biologists to solve a core supplementation issue: bioavailability. By combining active proteins with essential co-factors, we ensure active ingredients cross cellular membranes efficiently instead of being degraded by digestive acids.
-                </p>
-              </div>
-
-              <div className="mt-8 grid grid-cols-2 gap-8">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-1.5 text-[12px] font-medium uppercase tracking-[0.14em] text-ink-primary">
-                    <span className="h-1.5 w-1.5 rounded-full bg-brand-accent" />
-                    Zero Fillers
-                  </div>
-                  <p className="text-xs leading-[1.7] text-ink-muted">No silica, stearates, or synthetic binders. Just 100% active, bio-available ingredients.</p>
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-1.5 text-[12px] font-medium uppercase tracking-[0.14em] text-ink-primary">
-                    <span className="h-1.5 w-1.5 rounded-full bg-brand-accent" />
-                    Lab Checked
-                  </div>
-                  <p className="text-xs leading-[1.7] text-ink-muted">Every batch undergoes rigorous independent analysis to guarantee purity and composition.</p>
-                </div>
-              </div>
+          <div className="reveal mt-10 overflow-hidden rounded-[32px] border border-edge bg-white shadow-elevated">
+            <div className="grid grid-cols-[1.1fr_1fr_1fr] border-b border-edge bg-surface-subtle">
+              <div className="px-5 py-5 text-sm font-semibold text-ink-primary sm:px-7">{homepageSettings.comparisonSection.headers.left}</div>
+              <div className="bg-brand-gradient px-5 py-5 text-sm font-bold text-white sm:px-7">{homepageSettings.comparisonSection.headers.middle}</div>
+              <div className="px-5 py-5 text-sm font-semibold text-ink-primary sm:px-7">{homepageSettings.comparisonSection.headers.right}</div>
             </div>
-            <div className="reveal group relative flex aspect-video items-center justify-center overflow-hidden rounded-lg border border-edge bg-surface-muted shadow-card lg:aspect-square">
-              <img
-                src="https://images.unsplash.com/photo-1584017911766-d451b3d0e843?w=800"
-                alt="Clinical laboratory research"
-                className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.03]"
-              />
-              <div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/70 via-black/15 to-transparent p-6">
-                <p className="text-xs font-medium leading-relaxed text-white/90">
-                  Tested by ISO-accredited third-party laboratories. Full certificates of analysis are published for public verification.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
 
-      {/* Risk Reversal Banner */}
-      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
-        <GuaranteeBanner />
-      </div>
-
-      {/* Sclero Standard Pillars Section */}
-      <section className="section border-b border-edge bg-surface-muted">
-        <div className="container-page">
-          <div className="reveal mb-14 text-center">
-            <span className="kicker">Core Pillars</span>
-            <h2 className="text-heading-1 mt-3">The Sclero <em className="text-italic-accent">standard.</em></h2>
-            <p className="mt-3 text-sm text-ink-secondary">Every supplement we release meets strict quality and safety thresholds</p>
-          </div>
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-            {[
-              { icon: Shield, h: 'GMP Certified Manufacturing', p: 'All products are synthesized in state-of-the-art certified facilities in the UK and Europe under strict pharmaceutical conditions.' },
-              { icon: Zap, h: 'Cold-Processed Peptides', p: 'We use low-temperature extraction technology to keep collagen and protein chains intact, preserving original active enzymes.' },
-              { icon: Check, h: 'Absolute Label Honesty', p: 'No proprietary blends with hidden ingredients. We disclose the exact milligram weight of every compound on the label.' },
-            ].map(({ icon: Icon, h, p }) => (
-              <div key={h} className="reveal group rounded-md border border-edge bg-surface p-8 text-center shadow-card transition-all duration-300 hover:-translate-y-1 hover:shadow-elevated">
-                <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-sm bg-surface-muted text-ink-accent transition-transform duration-300 group-hover:scale-110">
-                  <Icon className="h-6 w-6" />
-                </div>
-                <h3 className="mb-3 font-display text-[20px] font-semibold leading-tight text-ink-primary">{h}</h3>
-                <p className="text-xs leading-[1.75] text-ink-secondary">{p}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Best Sellers range */}
-      <ProductCatalog
-        id="products"
-        title="Best Sellers"
-        subtitle="Our most-requested bioactive joint formulations & active proteins."
-        limit={3}
-        onOpenCart={() => setCartOpenTrigger(Date.now())}
-      />
-
-      <div className="container-page pb-20 text-center">
-        <Link href="/products" className="btn-ghost px-8 py-3.5 text-sm">
-          Browse full catalog →
-        </Link>
-      </div>
-
-      {/* Social Proof (Customer Testimonials) */}
-      <section className="section border-y border-edge bg-brand-bg">
-        <div className="container-page">
-          <div className="reveal mb-14 text-center">
-            <span className="kicker">Customer Reviews</span>
-            <h2 className="text-heading-1 mt-3">Verified <em className="text-italic-accent">trust.</em></h2>
-            <p className="mt-3 text-sm text-ink-secondary">What our wellness community says about Sclero Proteins</p>
-          </div>
-
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-            {TESTIMONIALS.map((t, idx) => (
-              <blockquote key={idx} className="reveal flex flex-col justify-between rounded-md border border-edge bg-surface p-8 shadow-card">
-                <div>
-                  <div className="mb-4 flex">
-                    {[...Array(t.rating)].map((_, i) => (
-                      <Star key={i} className="h-4 w-4 fill-brand-accent text-brand-accent" />
-                    ))}
-                  </div>
-                  <p className="mb-6 font-display text-[18px] font-medium italic leading-[1.6] text-ink-primary">"{t.text}"</p>
-                </div>
-                <footer className="flex items-center justify-between border-t border-edge pt-4">
-                  <div>
-                    <h4 className="text-xs font-semibold text-ink-primary">{t.name}</h4>
-                    <p className="mt-0.5 text-[10px] uppercase tracking-[0.14em] text-ink-muted">{t.role}</p>
-                  </div>
-                  <span className="rounded-xs bg-surface-muted px-2.5 py-1 text-[9px] font-medium uppercase tracking-wide text-ink-accent">
-                    {t.product}
+            {homepageSettings.comparisonSection.rows.map((row, index) => (
+              <div
+                key={row.label}
+                className={`grid grid-cols-[1.1fr_1fr_1fr] ${index !== homepageSettings.comparisonSection.rows.length - 1 ? 'border-b border-edge' : ''}`}
+              >
+                <div className="px-5 py-5 text-sm font-semibold text-ink-primary sm:px-7">{row.label}</div>
+                <div className="bg-brand-gradient-soft px-5 py-5 text-sm leading-[1.75] text-ink-primary sm:px-7">
+                  <span className="inline-flex items-start gap-2">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-ink-accent" />
+                    {row.sclero}
                   </span>
-                </footer>
-              </blockquote>
+                </div>
+                <div className="px-5 py-5 text-sm leading-[1.75] text-ink-secondary sm:px-7">{row.others}</div>
+              </div>
             ))}
           </div>
         </div>
       </section>
+      )}
 
-      {/* Instagram Reels Section */}
-      <section className="section border-b border-edge bg-surface-muted">
+      {homepageSettings.ingredientsSection.enabled !== false && (
+      <section className="section bg-surface-subtle">
         <div className="container-page">
-          <div className="reveal mb-14 text-center">
-            <span className="kicker">Social Feed</span>
-            <h2 className="text-heading-1 mt-3">Latest from Instagram</h2>
-            <p className="mt-3 text-sm text-ink-secondary">Follow our community @scleroproteins for daily fitness and joint care insights</p>
-          </div>
-
-          <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-12">
-            {/* Live Instagram Feed Embed */}
-            <div className="reveal rounded-md border border-edge bg-white p-4 shadow-card lg:col-span-5">
-              <div style={{ minHeight: '15px' }}></div>
-              <div className="instagram-container" style={{ padding: '20px' }}>
-                <blockquote
-                  className="instagram-media"
-                  data-instgrm-permalink="https://www.instagram.com/scleroproteins"
-                  data-instgrm-version="13"
-                  style={{ width: '100%' }}
-                >
-                </blockquote>
-              </div>
-              <div style={{ minHeight: '15px' }}></div>
-            </div>
-
-            {/* Curated Reels Grid */}
-            <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {[
-                { title: 'Cold-processed whey vs heat-denatured proteins. Here is the science 🧪', url: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=500', plays: '12.4k' },
-                { title: 'Daily joint recovery routine using BJC active peptides 🏋️‍♂️', url: 'https://images.unsplash.com/photo-1579758629938-03607ccdbaba?w=500', plays: '9.8k' },
-                { title: 'The truth about proprietary supplement blends. Read labels carefully!', url: 'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=500', plays: '18.1k' },
-                { title: 'How eggshell membrane peptides support cartilage density naturally 🔬', url: 'https://images.unsplash.com/photo-1550572017-edd951b55104?w=500', plays: '15.6k' },
-              ].map((reel, idx) => (
-                <a
-                  key={idx}
-                  href="https://www.instagram.com/scleroproteins"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="reveal group relative block aspect-[4/5] overflow-hidden rounded-md border border-edge bg-[#1A1A1A]"
-                >
-                  <img
-                    src={reel.url}
-                    alt=""
-                    className="h-full w-full object-cover opacity-80 transition-all duration-500 ease-out group-hover:scale-[1.04] group-hover:opacity-60"
-                  />
-                  <div className="absolute inset-0 flex flex-col justify-between bg-gradient-to-t from-black/85 via-black/20 to-transparent p-5 text-white">
-                    <div className="self-end rounded-xs bg-white/15 px-2.5 py-1 text-[9px] font-medium uppercase tracking-luxe backdrop-blur-md">
-                      {reel.plays} views
-                    </div>
-                    <div className="space-y-1.5">
-                      <p className="text-xs font-medium leading-normal">{reel.title}</p>
-                      <span className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-luxe text-[#C89838]">
-                        <Instagram className="h-3.5 w-3.5" /> Watch reel
-                      </span>
-                    </div>
-                  </div>
-                </a>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Educational Blog Content */}
-      <section id="blog" className="section bg-brand-bg">
-        <div className="container-page">
-          <div className="reveal mb-14 text-center">
-            <span className="kicker">Science Library</span>
-            <h2 className="text-heading-1 mt-3">Educational center</h2>
-            <p className="mt-3 text-sm text-ink-secondary">Read clinical explanations and formulation insights on active nutrition</p>
-          </div>
-
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-            {initialBlogs.length > 0 ? (
-              initialBlogs.map((b) => (
-                <article key={b.slug} className="reveal group flex flex-col overflow-hidden rounded-md border border-edge bg-surface shadow-card transition-all duration-300 hover:-translate-y-1 hover:shadow-elevated">
-                  {b.cover_image_url && (
-                    <div className="h-44 overflow-hidden">
-                      <img src={b.cover_image_url} alt="" className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]" />
-                    </div>
-                  )}
-                  <div className="flex flex-1 flex-col justify-between space-y-3 p-6">
-                    <div>
-                      <h4 className="kicker !text-ink-accent">{b.author}</h4>
-                      <h3 className="mt-2 font-display text-[19px] font-semibold leading-tight text-ink-primary">{b.title}</h3>
-                      <p className="mt-2 text-xs leading-[1.7] text-ink-secondary line-clamp-3">{b.meta_description || b.content}</p>
-                    </div>
-                    <Link href={`/blog/${b.slug}`} className="flex items-center gap-1 text-[12px] font-medium text-ink-accent underline-offset-4 hover:underline">
-                      Read Full Article <ArrowRight className="h-3 w-3" />
-                    </Link>
-                  </div>
-                </article>
-              ))
-            ) : (
-              [
-                { title: 'Understanding joint mobility nutrition', author: 'Dr. Marcus Vance', desc: 'How eggshell membrane peptides, glucosamine, and targeted vitamins coordinate inside the cartilage matrix.' },
-                { title: 'Reading supplement labels with confidence', author: 'Sclero Advisory Board', desc: 'Identify fillers, decipher complex proprietary blends, and verify certificate of analysis tests.' },
-                { title: 'Why cold-processing matters in protein', author: 'Dr. Evelyn Carter', desc: 'How heat denatures amino structures and why premium cold-processing preserves original active chains.' }
-              ].map((b, idx) => (
-                <article key={idx} className="reveal flex flex-col justify-between rounded-md border border-edge bg-surface p-6 shadow-card transition-all duration-300 hover:-translate-y-1 hover:shadow-elevated">
-                  <div className="space-y-2">
-                    <span className="kicker !text-ink-accent">{b.author}</span>
-                    <h3 className="font-display text-[19px] font-semibold leading-tight text-ink-primary">{b.title}</h3>
-                    <p className="text-xs leading-[1.7] text-ink-secondary">{b.desc}</p>
-                  </div>
-                  <Link href="/blog" className="mt-4 flex items-center gap-1 text-[12px] font-medium text-ink-accent underline-offset-4 hover:underline">
-                    Read Article <ArrowRight className="h-3.5 w-3.5" />
-                  </Link>
-                </article>
-              ))
-            )}
-          </div>
-        </div>
-      </section>
-
-      {/* Wholesale & distributor inquiries */}
-      <section id="wholesale" className="mx-auto max-w-4xl px-4 py-16 sm:px-6 md:py-24 lg:px-8">
-        <div className="reveal relative overflow-hidden rounded-lg border border-edge bg-surface p-8 shadow-card md:p-10">
-          <div className="relative mb-8 text-center">
-            <span className="kicker">Partnerships</span>
-            <h3 className="mt-3 font-display text-[26px] font-medium leading-tight text-ink-primary md:text-[30px]">
-              Wholesale &amp; distributor inquiries
-            </h3>
-            <p className="mx-auto mt-2 max-w-md text-xs leading-[1.7] text-ink-secondary">
-              Partner with Sclero Proteins for regional retail and distribution.
-            </p>
-          </div>
-
-          {inquirySent ? (
-            <div className="rounded-md border border-brand-success/20 bg-brand-success/5 p-6 text-center">
-              <Check className="mx-auto mb-2 h-8 w-8 text-ink-success" />
-              <p className="text-xs font-medium text-ink-success">
-                Inquiry submitted — our team will follow up shortly.
-              </p>
-            </div>
-          ) : (
-            <form
-              onSubmit={handleInquirySubmit}
-              className="relative z-10 mx-auto max-w-md space-y-4"
-            >
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <label htmlFor="wholesale-name" className="sr-only">Your name</label>
-                  <input
-                    id="wholesale-name"
-                    type="text"
-                    placeholder="Your name"
-                    autoComplete="name"
-                    value={inquiryName}
-                    onChange={(e) => setInquiryName(e.target.value)}
-                    className="w-full rounded-sm border border-edge bg-surface p-3 text-xs text-ink-primary focus:border-ink-primary focus:outline-none"
-                    required
-                  />
-                </div>
-                <div>
-                  <label htmlFor="wholesale-email" className="sr-only">Business email</label>
-                  <input
-                    id="wholesale-email"
-                    type="email"
-                    placeholder="Business email"
-                    autoComplete="email"
-                    value={inquiryEmail}
-                    onChange={(e) => setInquiryEmail(e.target.value)}
-                    className="w-full rounded-sm border border-edge bg-surface p-3 text-xs text-ink-primary focus:border-ink-primary focus:outline-none"
-                    required
-                  />
-                </div>
-              </div>
-              <div>
-                <label htmlFor="wholesale-message" className="sr-only">Distribution request details</label>
-                <textarea
-                  id="wholesale-message"
-                  placeholder="Describe your distribution request..."
-                  value={inquiryMessage}
-                  onChange={(e) => setInquiryMessage(e.target.value)}
-                  rows={3}
-                  className="w-full rounded-sm border border-edge bg-surface p-3 text-xs text-ink-primary focus:border-ink-primary focus:outline-none"
-                  required
+          <div className="grid items-center gap-12 lg:grid-cols-[0.95fr_1.05fr] lg:gap-16">
+            <div className="reveal order-2 lg:order-1">
+              <div className="overflow-hidden rounded-[34px] border border-edge bg-white shadow-elevated">
+                <img
+                  src={homepageSettings.ingredientsSection.imageUrl}
+                  alt={homepageSettings.ingredientsSection.imageAlt}
+                  className="h-full min-h-[420px] w-full object-cover"
                 />
               </div>
-              <button type="submit" className="btn-primary w-full py-3.5 text-sm">
-                <Send className="h-4 w-4" />
-                Submit request
-              </button>
-            </form>
-          )}
+            </div>
+            <div className="reveal order-1 lg:order-2">
+              <span className="kicker">{homepageSettings.ingredientsSection.kicker}</span>
+              <h2 className="text-heading-1 mt-3">{homepageSettings.ingredientsSection.title}</h2>
+              <p className="mt-5 text-body">
+                {homepageSettings.ingredientsSection.description}
+              </p>
+              <div className="mt-8 space-y-4">
+                {homepageSettings.ingredientsSection.cards.map((item) => (
+                  <div key={item.title} className="rounded-[24px] border border-edge bg-white p-5 shadow-card">
+                    <div className="flex items-start gap-4">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-surface-subtle text-ink-accent">
+                        <Leaf className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-bold text-ink-primary">{item.title}</h3>
+                        <p className="mt-2 text-sm leading-[1.8] text-ink-secondary">{item.benefit}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </section>
+      )}
 
-      {/* Floating WhatsApp Button */}
+      {homepageSettings.conversionSection.enabled !== false && (
+      <section className="section bg-white">
+        <div className="container-page">
+          <div className="grid items-center gap-10 overflow-hidden rounded-[34px] border border-edge bg-[linear-gradient(90deg,#FFFFFF_0%,#F6F4FB_52%,#E8F5FF_100%)] p-8 shadow-elevated lg:grid-cols-[0.9fr_1.1fr] lg:p-10">
+            <div className="reveal">
+              <span className="kicker">{homepageSettings.conversionSection.kicker}</span>
+              <h2 className="text-heading-1 mt-3">{homepageSettings.conversionSection.title}</h2>
+              <p className="mt-4 max-w-xl text-body">
+                {homepageSettings.conversionSection.description}
+              </p>
+
+              <div className="mt-6 flex flex-wrap gap-3">
+                <Link href={homepageSettings.conversionSection.primaryCtaUrl} className="btn-primary px-7 py-3.5 text-sm">
+                  {homepageSettings.conversionSection.primaryCtaLabel}
+                </Link>
+                <Link href={homepageSettings.conversionSection.secondaryCtaUrl} className="btn-ghost px-7 py-3.5 text-sm">
+                  {homepageSettings.conversionSection.secondaryCtaLabel}
+                </Link>
+              </div>
+
+              <div className="mt-8 flex flex-wrap gap-3">
+                {homepageSettings.conversionSection.badges.map((badge) => {
+                  const Icon = resolveIcon(badge.icon, ShieldCheck);
+                  return (
+                    <div key={badge.title} className="inline-flex items-center gap-2 rounded-full border border-edge bg-white px-4 py-2 text-sm font-semibold text-ink-primary shadow-card">
+                      <Icon className="h-4 w-4 text-ink-accent" />
+                      {badge.title}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="reveal rounded-[28px] border border-white/60 bg-white/70 p-6 shadow-card backdrop-blur">
+              <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-ink-accent">{homepageSettings.conversionSection.proofLabel}</p>
+              <h3 className="mt-3 text-[36px] font-extrabold leading-[1.05] text-ink-primary">
+                {homepageSettings.conversionSection.quoteTitle}
+              </h3>
+              <p className="mt-4 text-sm font-semibold text-ink-primary">{homepageSettings.conversionSection.quoteBody}</p>
+              <div className="mt-6 rounded-[24px] border border-edge bg-white p-5">
+                <div className="flex items-center gap-2 text-sm font-semibold text-ink-accent">
+                  <Sparkles className="h-4 w-4" />
+                  Cleaner labels. Easier comparison. Stronger buying confidence.
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  {homepageSettings.conversionSection.proofHighlights.map((item) => (
+                    <div key={item.value} className="rounded-[20px] bg-surface-subtle p-4 text-center">
+                      <p className="text-2xl font-extrabold text-ink-primary">{item.value}</p>
+                      <p className="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted">{item.label}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      )}
+
+      {homepageSettings.faqSection.enabled !== false && (
+      <section className="section border-y border-edge bg-white">
+        <div className="container-page">
+          <div className="reveal text-center">
+            <h2 className="text-[40px] font-extrabold leading-[1.1] tracking-tight text-ink-primary sm:text-[52px]">
+              {homepageSettings.faqSection.kicker}
+            </h2>
+            <p className="mx-auto mt-4 max-w-xl text-body">{homepageSettings.faqSection.description}</p>
+          </div>
+
+          <div className="mt-12 grid gap-x-8 gap-y-5 md:grid-cols-2 md:items-start">
+            {homepageSettings.faqSection.items.map((faq, index) => {
+              const isOpen = expandedFaq === index;
+              return (
+                <div key={faq.question} className="reveal overflow-hidden rounded-[18px] bg-surface-subtle">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedFaq(isOpen ? null : index)}
+                    aria-expanded={isOpen}
+                    className="flex w-full items-center justify-between gap-4 px-6 py-6 text-left"
+                  >
+                    <span className="text-sm font-semibold uppercase tracking-[0.06em] leading-[1.5] text-ink-primary">
+                      {faq.question}
+                    </span>
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-ink-primary/40 text-ink-primary">
+                      {isOpen ? <Minus className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
+                    </span>
+                  </button>
+                  <div className={`overflow-hidden transition-all duration-300 ${isOpen ? 'max-h-64' : 'max-h-0'}`}>
+                    <p className="px-6 pb-6 text-sm leading-[1.8] text-ink-secondary">{faq.answer}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+      )}
+
+      {homepageSettings.educationSection.enabled !== false && (
+      <section id="blog" className="section bg-white">
+        <div className="container-page">
+          <div className="mb-12 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div className="reveal max-w-2xl">
+              <span className="kicker">{homepageSettings.educationSection.kicker}</span>
+              <h2 className="text-heading-1 mt-3">{homepageSettings.educationSection.title}</h2>
+              <p className="mt-4 text-body">
+                {homepageSettings.educationSection.description}
+              </p>
+            </div>
+            <Link href={safePublicHref(homepageSettings.educationSection.ctaUrl) || '/blog'} className="reveal inline-flex items-center gap-2 text-sm font-semibold text-ink-primary transition-colors hover:text-ink-accent">
+              {homepageSettings.educationSection.ctaLabel} <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+
+          <div className="grid gap-5 md:grid-cols-3">
+            {educationEntries.map((entry) => {
+              const href = entry.slug ? `/blog/${entry.slug}` : '/blog';
+              const excerpt = entry.meta_description || entry.content || entry.description;
+
+              return (
+                <article key={entry.slug || entry.title} className="reveal flex h-full flex-col rounded-[28px] border border-edge bg-surface-subtle p-7 shadow-card">
+                  <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-ink-accent">
+                    <FlaskConical className="h-3.5 w-3.5" /> {entry.author || 'Sclero Proteins'}
+                  </div>
+                  <h3 className="mt-5 text-[24px] font-bold leading-[1.15] text-ink-primary">{entry.title}</h3>
+                  <p className="mt-4 flex-1 text-sm leading-[1.8] text-ink-secondary line-clamp-4">{excerpt}</p>
+                  <Link href={href} className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-ink-primary transition-colors hover:text-ink-accent">
+                    Read guide <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </article>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+      )}
+
+      {homepageSettings.inquirySection.enabled !== false && (
+      <section className="section bg-surface-subtle">
+        <div className="container-page">
+          <div className="grid gap-8 rounded-[32px] border border-edge bg-white p-8 shadow-card md:p-10 lg:grid-cols-[0.9fr_1.1fr]">
+            <div className="reveal">
+              <span className="kicker">{homepageSettings.inquirySection.kicker}</span>
+              <h2 className="text-heading-1 mt-3">{homepageSettings.inquirySection.title}</h2>
+              <p className="mt-4 max-w-md text-body">
+                {homepageSettings.inquirySection.description}
+              </p>
+            </div>
+
+            <div className="reveal">
+              {inquirySent ? (
+                <div className="rounded-[28px] border border-edge bg-surface-subtle p-8 text-center">
+                  <Check className="mx-auto h-8 w-8 text-ink-accent" />
+                  <p className="mt-4 text-sm font-semibold text-ink-primary">
+                    {homepageSettings.inquirySection.successMessage}
+                  </p>
+                </div>
+              ) : (
+                <form onSubmit={handleInquirySubmit} className="space-y-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <input
+                      type="text"
+                      placeholder="Your name"
+                      autoComplete="name"
+                      value={inquiryName}
+                      onChange={(e) => setInquiryName(e.target.value)}
+                      className="input-base"
+                      required
+                    />
+                    <input
+                      type="email"
+                      placeholder="Email address"
+                      autoComplete="email"
+                      value={inquiryEmail}
+                      onChange={(e) => setInquiryEmail(e.target.value)}
+                      className="input-base"
+                      required
+                    />
+                  </div>
+                  <textarea
+                    placeholder="Tell us how we can help"
+                    value={inquiryMessage}
+                    onChange={(e) => setInquiryMessage(e.target.value)}
+                    rows={5}
+                    className="input-base resize-none"
+                    required
+                    minLength={10}
+                  />
+                  {inquiryError && (
+                    <p className="rounded-sm border border-ink-danger/20 bg-surface-muted px-3 py-2 text-xs font-semibold text-ink-danger">{inquiryError}</p>
+                  )}
+                  <button type="submit" disabled={inquirySubmitting} className="btn-primary w-full py-3 text-sm disabled:opacity-60">
+                    <Send className="h-4 w-4" />
+                    {inquirySubmitting ? 'Sending…' : homepageSettings.inquirySection.buttonLabel}
+                  </button>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+      )}
+
+      {quizOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
+          <div className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[32px] border border-edge bg-white p-4 shadow-overlay sm:p-6">
+            <button
+              type="button"
+              onClick={() => setQuizOpen(false)}
+              className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full border border-edge bg-surface text-ink-primary transition-colors hover:border-edge-strong"
+              aria-label="Close quiz"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <QuizComponent
+              onComplete={(result) => {
+                setQuizOpen(false);
+                window.location.href = `/products/${result.recommendation.sku}`;
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {whatsappNumber && (
       <a
-        href={`https://wa.me/${whatsappNumber.replace(/[^+\d]/g, '')}`}
+        href={`https://wa.me/${whatsappNumber.replace(/[^\d]/g, '')}`}
         target="_blank"
         rel="noreferrer"
         aria-label="Chat on WhatsApp"
-        className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg transition-transform hover:scale-110 active:scale-95 group focus:outline-none focus:ring-2 focus:ring-[#25D366]/50"
+        className="group fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-elevated transition-transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-[#25D366]/40"
       >
         <svg className="h-7 w-7 fill-white" viewBox="0 0 24 24">
-          <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.003 5.324 5.328 0 11.859 0c3.166.001 6.141 1.233 8.378 3.469 2.237 2.235 3.469 5.211 3.468 8.378-.003 6.534-5.328 11.858-11.86 11.858-2.001 0-3.968-.507-5.714-1.478L0 24zm6.577-3.472l.409.243c1.517.901 3.254 1.377 5.023 1.378 5.437 0 9.859-4.422 9.863-9.863.002-2.635-1.023-5.113-2.884-6.975C17.186 3.45 14.705 2.427 12.07 2.425c-5.441 0-9.863 4.42-9.867 9.863-.001 1.83.479 3.618 1.39 5.131l.267.443-1.002 3.66 3.774-.994zM16.14 13.12c-.27-.135-1.602-.79-1.85-.88-.25-.09-.43-.135-.61.135-.18.27-.69.88-.84 1.05-.15.17-.3.19-.57.06-.27-.135-1.14-.42-2.17-1.34-.8-.71-1.34-1.6-1.5-1.87-.16-.27-.02-.42.11-.55.12-.12.27-.3.4-.45.13-.15.18-.25.27-.41.09-.17.05-.31-.02-.45-.07-.14-.61-1.47-.84-2.01-.22-.53-.48-.46-.66-.47-.17-.01-.37-.01-.57-.01-.2 0-.52.075-.79.37-.27.3-1.04 1.02-1.04 2.48 0 1.47 1.07 2.89 1.22 3.09.15.2 2.1 3.2 5.09 4.49.71.3 1.27.49 1.7.63.72.22 1.37.19 1.88.11.57-.08 1.6-.66 1.83-1.28.23-.61.23-1.14.16-1.28-.07-.14-.25-.22-.52-.35z"/>
+          <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.003 5.324 5.328 0 11.859 0c3.166.001 6.141 1.233 8.378 3.469 2.237 2.235 3.469 5.211 3.468 8.378-.003 6.534-5.328 11.858-11.86 11.858-2.001 0-3.968-.507-5.714-1.478L0 24zm6.577-3.472l.409.243c1.517.901 3.254 1.377 5.023 1.378 5.437 0 9.859-4.422 9.863-9.863.002-2.635-1.023-5.113-2.884-6.975C17.186 3.45 14.705 2.427 12.07 2.425c-5.441 0-9.863 4.42-9.867 9.863-.001 1.83.479 3.618 1.39 5.131l.267.443-1.002 3.66 3.774-.994zM16.14 13.12c-.27-.135-1.602-.79-1.85-.88-.25-.09-.43-.135-.61.135-.18.27-.69.88-.84 1.05-.15.17-.3.19-.57.06-.27-.135-1.14-.42-2.17-1.34-.8-.71-1.34-1.6-1.5-1.87-.16-.27-.02-.42.11-.55.12-.12.27-.3.4-.45.13-.15.18-.25.27-.41.09-.17.05-.31-.02-.45-.07-.14-.61-1.47-.84-2.01-.22-.53-.48-.46-.66-.47-.17-.01-.37-.01-.57-.01-.2 0-.52.075-.79.37-.27.3-1.04 1.02-1.04 2.48 0 1.47 1.07 2.89 1.22 3.09.15.2 2.1 3.2 5.09 4.49.71.3 1.27.49 1.7.63.72.22 1.37.19 1.88.11.57-.08 1.6-.66 1.83-1.28.23-.61.23-1.14.16-1.28-.07-.14-.25-.22-.52-.35z" />
         </svg>
-        <span className="absolute right-16 scale-0 whitespace-nowrap rounded-sm bg-ink-primary px-3 py-1.5 text-[11px] font-medium text-white shadow-overlay transition-all group-hover:scale-100">
+        <span className="absolute right-16 scale-0 whitespace-nowrap rounded-full bg-[#101871] px-3 py-1.5 text-[11px] font-semibold text-white shadow-overlay transition-all group-hover:scale-100">
           Chat with us
         </span>
       </a>
-
+      )}
     </StoreShell>
   );
 }

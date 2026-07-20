@@ -5,5 +5,4 @@ class InventoryConfig(AppConfig):
     name = 'apps.inventory'
 
     def ready(self):
-        import apps.inventory.signals
-
+        import apps.inventory.signals  # noqa: F401 - registers signal handlers

@@ -1,14 +1,12 @@
-import json
 from unittest.mock import patch, MagicMock
 from django.test import TestCase
 from django.contrib.auth import get_user_model
-from django.utils import timezone
+from django.core.management import call_command
 from rest_framework.test import APITestCase
 from rest_framework import status
 
 from apps.webhooks.models import WebhookSubscription, WebhookDelivery
-from apps.webhooks.dispatcher import calculate_signature, dispatch_outgoing_webhook
-from apps.orders.models import WebhookEvent
+from apps.webhooks.dispatcher import calculate_signature, dispatch_outgoing_webhook, send_delivery
 
 User = get_user_model()
 
@@ -34,9 +32,24 @@ class WebhooksModelTest(TestCase):
 
 
 class WebhooksDispatcherTest(TestCase):
+    def test_disabled_subscription_is_not_called(self):
+        sub = WebhookSubscription.objects.create(
+            name='Disabled', url='https://hooks.example.com/receive',
+            events=['order.paid'], is_active=False,
+        )
+        delivery = WebhookDelivery.objects.create(
+            subscription=sub, event_type='order.paid', payload={'order_id': 1},
+        )
+        with patch('apps.webhooks.dispatcher.requests.post') as post:
+            send_delivery(delivery)
+        delivery.refresh_from_db()
+        post.assert_not_called()
+        self.assertEqual(delivery.status, 'DLQ')
+
+    @patch('apps.webhooks.dispatcher.validate_webhook_destination')
     @patch('apps.webhooks.dispatcher.requests.post')
-    def test_dispatch_outgoing_webhook(self, mock_post):
-        """Verify outgoing webhooks query subscriptions, log delivery, sign headers and post."""
+    def test_dispatch_outgoing_webhook(self, mock_post, _mock_validate):
+        """The dispatcher queues durably and the worker signs and delivers it."""
         # Setup mock response
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -53,19 +66,14 @@ class WebhooksDispatcherTest(TestCase):
 
         payload = {"order_id": 42, "total": "120.00"}
         
-        # Dispatch webhook (it spawns thread; we'll mock request to complete synchronously)
-        with patch('apps.webhooks.dispatcher.threading.Thread') as mock_thread:
-            # We mock the thread to execute synchronously for testing
-            instance = mock_thread.return_value
-            def mock_start():
-                mock_thread.call_args[1]['target'](*mock_thread.call_args[1]['args'])
-            instance.start = mock_start
-            
-            dispatch_outgoing_webhook("order.paid", payload)
+        dispatch_outgoing_webhook("order.paid", payload)
 
-        # Verify delivery record was created
+        # Request lifecycle only queues; the scheduler performs network I/O.
         delivery = WebhookDelivery.objects.first()
         self.assertIsNotNone(delivery)
+        self.assertEqual(delivery.status, 'PENDING')
+        call_command('process_outgoing_webhooks')
+        delivery.refresh_from_db()
         self.assertEqual(delivery.subscription, sub)
         self.assertEqual(delivery.status, 'SUCCESS')
         self.assertEqual(delivery.attempts, 1)
@@ -80,7 +88,7 @@ class WebhooksDispatcherTest(TestCase):
         self.assertEqual(headers['X-Sclero-Event'], "order.paid")
         self.assertEqual(headers['X-Sclero-Delivery'], str(delivery.id))
         self.assertTrue('X-Sclero-Signature' in headers)
-
+        self.assertFalse(kwargs['allow_redirects'])
 
 class WebhooksAPITest(APITestCase):
     def setUp(self):
@@ -116,8 +124,15 @@ class WebhooksAPITest(APITestCase):
         response = self.client.get('/api/admin/webhook-subscriptions/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-        # Test trigger
-        with patch('apps.webhooks.views.send_delivery_worker') as mock_worker:
-            response = self.client.post(f'/api/admin/webhook-subscriptions/{sub.id}/test_delivery/')
-            self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
-            mock_worker.assert_called_once()
+        # Test trigger creates a durable pending delivery for the scheduler.
+        response = self.client.post(f'/api/admin/webhook-subscriptions/{sub.id}/test_delivery/')
+        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
+        self.assertTrue(WebhookDelivery.objects.filter(subscription=sub, status='PENDING').exists())
+
+    def test_subscription_rejects_private_destination(self):
+        response = self.client.post('/api/admin/webhook-subscriptions/', {
+            'name': 'Unsafe',
+            'url': 'http://127.0.0.1:8000/internal',
+            'events': ['order.paid'],
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)

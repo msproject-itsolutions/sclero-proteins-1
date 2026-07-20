@@ -22,9 +22,17 @@ left in-place rather than crashing):
 """
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives, get_connection
+from django.core.serializers.json import DjangoJSONEncoder
+from django.db import IntegrityError, transaction
+
+import json
+import logging
 
 from apps.admin_dashboard.models import EmailTemplate, SystemSetting
 from apps.audit.recorder import record_audit
+
+
+logger = logging.getLogger(__name__)
 
 
 class SafeDict(dict):
@@ -32,6 +40,52 @@ class SafeDict(dict):
 
     def __missing__(self, key):
         return "{" + key + "}"
+
+
+def _queue_email_retry(event, region, recipient_email, context,
+                       audit_target_type, audit_target_id, error):
+    """Persist one retry record without ever breaking the caller's workflow."""
+    try:
+        from apps.orders.models import EmailDelivery
+
+        serializable_context = json.loads(json.dumps(context or {}, cls=DjangoJSONEncoder))
+        target_id = str(audit_target_id or '')
+        lookup = {
+            'event': event,
+            'recipient_email': recipient_email,
+            'audit_target_type': audit_target_type,
+            'audit_target_id': target_id,
+            'status__in': ['PENDING', 'FAILED'],
+        }
+        existing = EmailDelivery.objects.filter(**lookup).first()
+        if existing is None:
+            try:
+                with transaction.atomic():
+                    existing = EmailDelivery.objects.create(
+                        event=event,
+                        region=region,
+                        recipient_email=recipient_email,
+                        context=serializable_context,
+                        audit_target_type=audit_target_type,
+                        audit_target_id=target_id,
+                        error_message=str(error)[:2000],
+                    )
+            except IntegrityError:
+                # Another worker queued the same target between our read and
+                # insert. The conditional database constraint elects one row.
+                existing = EmailDelivery.objects.filter(**lookup).first()
+        if existing is not None:
+            existing.region = region
+            existing.context = serializable_context
+            existing.error_message = str(error)[:2000]
+            existing.save(update_fields=[
+                'region', 'context', 'error_message', 'updated_at',
+            ])
+    except Exception:
+        # Email delivery is best-effort at the business-operation boundary;
+        # audit logging still records the original failure if queueing is down.
+        logger.exception('Could not persist email retry for %s.', event)
+        return
 
 
 def _get_smtp_config():
@@ -53,13 +107,23 @@ def _get_smtp_config():
     else:
         use_tls = str(use_tls_raw).lower() in ('1', 'true', 'yes')
 
+    use_ssl_raw = cfg.get('EMAIL_USE_SSL')
+    if use_ssl_raw is None:
+        use_ssl = getattr(settings, 'EMAIL_USE_SSL', False)
+    else:
+        use_ssl = str(use_ssl_raw).lower() in ('1', 'true', 'yes')
+    if use_tls and use_ssl:
+        raise ValueError('EMAIL_USE_TLS and EMAIL_USE_SSL cannot both be enabled.')
+
     return {
         'host': _get('EMAIL_HOST', getattr(settings, 'EMAIL_HOST', 'localhost')),
         'port': int(_get('EMAIL_PORT', getattr(settings, 'EMAIL_PORT', 25))),
         'username': _get('EMAIL_HOST_USER', getattr(settings, 'EMAIL_HOST_USER', '')),
         'password': _get('EMAIL_HOST_PASSWORD', getattr(settings, 'EMAIL_HOST_PASSWORD', '')),
         'use_tls': use_tls,
-        'from_email': _get('DEFAULT_FROM_EMAIL', getattr(settings, 'DEFAULT_FROM_EMAIL', 'support@scleroproteins.co.uk')),
+        'use_ssl': use_ssl,
+        'timeout': int(_get('EMAIL_TIMEOUT', getattr(settings, 'EMAIL_TIMEOUT', 15))),
+        'from_email': _get('DEFAULT_FROM_EMAIL', getattr(settings, 'DEFAULT_FROM_EMAIL', '')),
     }
 
 
@@ -75,9 +139,10 @@ def _build_order_context(order, extra_context=None):
     try:
         for it in order.items.all():
             name = getattr(it.product, 'name', f'Product #{it.product_id}')
-            items_lines.append(f"{name} x {it.quantity} - {it.price}")
+            option = f" ({it.variant_name})" if getattr(it, 'variant_name', '') else ''
+            items_lines.append(f"{name}{option} x {it.quantity} - {it.price}")
     except Exception:
-        pass
+        logger.exception('Could not render order item rows for order %s.', order.pk)
     items_table = "\n".join(items_lines)
 
     tax_name = 'GST' if region_code == 'IN' else 'VAT'
@@ -131,7 +196,22 @@ def _wrap_branded_html(subject, body, raw_html_inside=False):
     newlines become <br>. Pre-rendered HTML is trusted (template author's
     responsibility) and inlined verbatim.
     """
-    site_url = getattr(settings, 'SITE_URL', '') or 'https://scleroproteins.co.uk'
+    site_url = getattr(settings, 'SITE_URL', '').rstrip('/')
+    # Email clients cannot load relative paths, so the logo needs an absolute
+    # URL. Admin-set branding wins; otherwise fall back to the shipped asset.
+    logo_url = ''
+    try:
+        from apps.admin_dashboard.models import SystemSetting
+        branding = SystemSetting.objects.filter(key='THEME_BRANDING').first()
+        if branding and isinstance(branding.value, dict):
+            logo_url = (branding.value.get('email_logo_url')
+                        or branding.value.get('logo_url') or '')
+    except Exception:
+        logo_url = ''
+    if not logo_url and site_url:
+        logo_url = f"{site_url}/logo-header-tagline-clean.png"
+    elif logo_url.startswith('/') and site_url:
+        logo_url = f"{site_url}{logo_url}"
     company_number = _escape(getattr(settings, 'COMPANY_REGISTRATION_NUMBER', ''))
     gstin = _escape(getattr(settings, 'IN_GSTIN', ''))
     inner = body if raw_html_inside else (
@@ -155,8 +235,10 @@ def _wrap_branded_html(subject, body, raw_html_inside=False):
       <tr>
         <td style="background:#1F2A44;padding:22px 28px;color:#FFFFFF;">
           <a href="{site_url}" style="color:#FFFFFF;text-decoration:none;display:inline-block;">
-            <span style="font-size:18px;font-weight:800;letter-spacing:-0.2px;">Sclero</span>
-            <span style="font-size:18px;font-weight:600;color:#B8AAFF;">&nbsp;Proteins</span>
+            <!-- Logo, with the wordmark as alt text: many clients block images
+                 by default, so the brand must still read without it. -->
+            <img src="{logo_url}" alt="Sclero Proteins" width="150"
+                 style="display:block;border:0;outline:none;text-decoration:none;height:auto;max-width:150px;" />
           </a>
         </td>
       </tr>
@@ -184,7 +266,8 @@ def _wrap_branded_html(subject, body, raw_html_inside=False):
 
 
 def send_templated_email(event, region, recipient_email, context,
-                          audit_target_type='Order', audit_target_id=None):
+                          audit_target_type='Order', audit_target_id=None,
+                          queue_on_failure=True):
     """Render and send an EmailTemplate for `event` to `recipient_email`.
 
     Looks up the region-specific template first, then a global (region=None)
@@ -221,6 +304,11 @@ def send_templated_email(event, region, recipient_email, context,
             changes={'event': event, 'to': recipient_email,
                      'success': False, 'error': 'no_template'},
         )
+        if queue_on_failure:
+            _queue_email_retry(
+                event, region, recipient_email, context,
+                audit_target_type, audit_target_id, 'no_template',
+            )
         return False
 
     safe_ctx = SafeDict(context or {})
@@ -236,6 +324,11 @@ def send_templated_email(event, region, recipient_email, context,
             changes={'event': event, 'to': recipient_email,
                      'success': False, 'error': f'render: {exc}'},
         )
+        if queue_on_failure:
+            _queue_email_retry(
+                event, region, recipient_email, context,
+                audit_target_type, audit_target_id, f'render: {exc}',
+            )
         return False
 
     is_html = '<' in body and '>' in body
@@ -246,7 +339,21 @@ def send_templated_email(event, region, recipient_email, context,
         plain_body = body
         html_body = _wrap_branded_html(subject, body, raw_html_inside=False)
 
-    smtp = _get_smtp_config()
+    try:
+        smtp = _get_smtp_config()
+    except Exception as exc:
+        record_audit(
+            'email.failed', target_type=audit_target_type,
+            target_id=audit_target_id or '', summary=f'SMTP config error for {event}',
+            changes={'event': event, 'to': recipient_email,
+                     'success': False, 'error': str(exc)},
+        )
+        if queue_on_failure:
+            _queue_email_retry(
+                event, region, recipient_email, context,
+                audit_target_type, audit_target_id, exc,
+            )
+        return False
 
     try:
         connection = get_connection(
@@ -255,6 +362,8 @@ def send_templated_email(event, region, recipient_email, context,
             username=smtp['username'],
             password=smtp['password'],
             use_tls=smtp['use_tls'],
+            use_ssl=smtp['use_ssl'],
+            timeout=smtp['timeout'],
         )
         msg = EmailMultiAlternatives(
             subject=subject,
@@ -274,6 +383,11 @@ def send_templated_email(event, region, recipient_email, context,
             changes={'event': event, 'to': recipient_email,
                      'success': False, 'error': str(exc)},
         )
+        if queue_on_failure:
+            _queue_email_retry(
+                event, region, recipient_email, context,
+                audit_target_type, audit_target_id, exc,
+            )
         return False
 
     record_audit(

@@ -1,10 +1,21 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
+import re
 from .models import UserAddress, Role, Wishlist, WishlistItem, CustomerSegment, CustomerActivity, SupportTicket
 from .permissions import get_user_permission_keys, PERMISSIONS
 
 User = get_user_model()
+
+PHONE_PATTERN = re.compile(r'^[+\d][\d\s().-]*$')
+
+
+def _validate_phone(value):
+    phone = str(value or '').strip()
+    digits = re.sub(r'\D', '', phone)
+    if not PHONE_PATTERN.fullmatch(phone) or not 7 <= len(digits) <= 15:
+        raise serializers.ValidationError('Enter a valid phone number with 7 to 15 digits.')
+    return phone
 
 class UserSerializer(serializers.ModelSerializer):
     permissions = serializers.SerializerMethodField()
@@ -33,6 +44,13 @@ class UserSerializer(serializers.ModelSerializer):
     def get_assigned_regions_codes(self, obj):
         return list(obj.assigned_regions.values_list('code', flat=True))
 
+    def validate_password(self, value):
+        if not self.instance and not value:
+            raise serializers.ValidationError('A password is required for new staff accounts.')
+        if value:
+            validate_password(value)
+        return value
+
 
 class RoleSerializer(serializers.ModelSerializer):
     class Meta:
@@ -50,18 +68,19 @@ class RoleSerializer(serializers.ModelSerializer):
 
 
 class StaffUserSerializer(serializers.ModelSerializer):
-    """Admin-facing serializer for assigning roles / staff status."""
+    """Admin-facing serializer for managing and creating staff members."""
     permissions = serializers.SerializerMethodField()
     assigned_regions_codes = serializers.SerializerMethodField(read_only=True)
+    password = serializers.CharField(write_only=True, required=False, allow_blank=True)
 
     class Meta:
         model = User
         fields = [
-            'id', 'email', 'first_name', 'last_name', 'is_staff', 'is_active', 
+            'id', 'email', 'password', 'first_name', 'last_name', 'is_staff', 'is_active',
             'roles', 'permissions', 'assigned_regions', 'assigned_regions_codes',
             'two_factor_enabled', 'allowed_ip_range', 'current_devices'
         ]
-        read_only_fields = ['email', 'permissions']
+        read_only_fields = ['permissions']
 
     def get_permissions(self, obj):
         return sorted(get_user_permission_keys(obj))
@@ -69,9 +88,41 @@ class StaffUserSerializer(serializers.ModelSerializer):
     def get_assigned_regions_codes(self, obj):
         return list(obj.assigned_regions.values_list('code', flat=True))
 
+    def validate_password(self, value):
+        if not self.instance and not value.strip():
+            raise serializers.ValidationError('A password is required for new staff accounts.')
+        if value:
+            validate_password(value, self.instance)
+        return value
+
+    def validate(self, attrs):
+        if 'email' in attrs:
+            attrs['email'] = attrs['email'].strip().lower()
+        for field in ('first_name', 'last_name'):
+            if field in attrs:
+                attrs[field] = attrs[field].strip()
+        return attrs
+
+    def create(self, validated_data):
+        roles = validated_data.pop('roles', [])
+        regions = validated_data.pop('assigned_regions', [])
+        password = validated_data.pop('password', None)
+        if not password:
+            raise serializers.ValidationError({'password': 'A password is required for new staff accounts.'})
+
+        validated_data.setdefault('is_staff', True)
+        user = User.objects.create_user(password=password, **validated_data)
+        if roles:
+            user.roles.set(roles)
+        if regions:
+            user.assigned_regions.set(regions)
+        return user
+
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
+    first_name = serializers.CharField(min_length=2, max_length=150, trim_whitespace=True)
+    last_name = serializers.CharField(min_length=2, max_length=150, trim_whitespace=True)
 
     class Meta:
         model = User
@@ -80,6 +131,14 @@ class RegisterSerializer(serializers.ModelSerializer):
     def validate_password(self, value):
         validate_password(value)
         return value
+
+    def validate(self, attrs):
+        attrs['email'] = attrs['email'].strip().lower()
+        attrs['first_name'] = attrs.get('first_name', '').strip()
+        attrs['last_name'] = attrs.get('last_name', '').strip()
+        if attrs.get('phone_number'):
+            attrs['phone_number'] = _validate_phone(attrs['phone_number'])
+        return attrs
 
     def create(self, validated_data):
         user = User.objects.create_user(
@@ -97,6 +156,18 @@ class UserAddressSerializer(serializers.ModelSerializer):
         model = UserAddress
         fields = '__all__'
         read_only_fields = ['user']
+
+    def validate(self, attrs):
+        required = ('full_name', 'phone_number', 'address_line1', 'city', 'state', 'postal_code', 'country')
+        for field in (*required, 'address_line2'):
+            if field in attrs and isinstance(attrs[field], str):
+                attrs[field] = attrs[field].strip()
+        errors = {field: 'This field may not be blank.' for field in required if not attrs.get(field)}
+        if errors:
+            raise serializers.ValidationError(errors)
+        attrs['phone_number'] = _validate_phone(attrs['phone_number'])
+        attrs['country'] = attrs['country'].upper()
+        return attrs
 
 
 class WishlistItemSerializer(serializers.ModelSerializer):

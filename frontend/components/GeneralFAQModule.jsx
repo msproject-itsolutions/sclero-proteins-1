@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Search, ChevronDown, HelpCircle, AlertCircle } from 'lucide-react';
+import { Search, Plus, Minus, HelpCircle, AlertCircle } from 'lucide-react';
 import { getApiUrl } from '../lib/api';
 
 export default function GeneralFAQModule() {
@@ -48,12 +48,10 @@ export default function GeneralFAQModule() {
 
   if (loading) {
     return (
-      <div className="space-y-4 max-w-4xl mx-auto py-8">
+      <div className="grid w-full gap-x-8 gap-y-5 py-8 md:grid-cols-2">
         {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="animate-pulse rounded-lg border border-edge bg-white p-5 space-y-3">
-            <div className="h-4 w-2/3 bg-surface-muted rounded-sm" />
-            <div className="h-3.5 w-full bg-surface-muted rounded-sm" />
-            <div className="h-3.5 w-5/6 bg-surface-muted rounded-sm" />
+          <div key={i} className="animate-pulse rounded-[18px] bg-surface-subtle px-6 py-6">
+            <div className="h-4 w-2/3 rounded-sm bg-surface-muted" />
           </div>
         ))}
       </div>
@@ -71,10 +69,10 @@ export default function GeneralFAQModule() {
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-6">
-      
+    <div className="w-full space-y-8">
+
       {/* Search & Category Filter Header */}
-      <div className="bg-white/80 border border-edge rounded-lg p-5 shadow-sm backdrop-blur-md space-y-4">
+      <div className="mx-auto max-w-3xl space-y-4">
         <div className="relative">
           <input
             type="text"
@@ -84,13 +82,13 @@ export default function GeneralFAQModule() {
               setSearch(e.target.value);
               setExpandedIndex(null);
             }}
-            className="w-full pl-10 pr-4 py-2.5 rounded-sm border border-edge text-xs md:text-sm text-ink-primary focus:outline-none focus:border-ink-accent focus:ring-1 focus:ring-ink-accent font-semibold"
+            className="w-full rounded-full border border-edge bg-white py-3 pl-11 pr-4 text-sm font-semibold text-ink-primary focus:border-ink-accent focus:outline-none focus:ring-1 focus:ring-ink-accent"
           />
-          <Search className="absolute left-3.5 top-3.5 h-4 w-4 text-brand-muted pointer-events-none" />
+          <Search className="pointer-events-none absolute left-4 top-3.5 h-4 w-4 text-brand-muted" />
         </div>
 
         {/* Category Pill Buttons */}
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none flex-wrap">
+        <div className="flex flex-wrap justify-center gap-2 pb-1">
           {categories.map((cat) => (
             <button
               key={cat}
@@ -111,38 +109,36 @@ export default function GeneralFAQModule() {
       </div>
 
       {/* Accordion List */}
-      <div className="space-y-3">
+      <div className="grid gap-x-8 gap-y-5 md:grid-cols-2 md:items-start">
         {filteredFaqs.map((faq, idx) => {
           const isOpen = expandedIndex === idx;
           const categoryName = faq.category || 'General';
           return (
             <div
               key={faq.id || idx}
-              className="border border-edge rounded-lg overflow-hidden bg-white hover:border-edge-strong shadow-xs transition-all duration-300"
+              className="overflow-hidden rounded-[18px] bg-surface-subtle transition-colors duration-300 hover:bg-surface-muted"
             >
               <button
                 type="button"
                 onClick={() => setExpandedIndex(isOpen ? null : idx)}
-                className="w-full flex justify-between items-start gap-4 p-4 md:p-5 text-left transition-colors hover:bg-surface-muted"
+                aria-expanded={isOpen}
+                className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left"
               >
-                <div className="space-y-1">
-                  <span className="inline-block text-[9px] font-bold uppercase tracking-wider text-brand-success bg-brand-success/10 px-2 py-0.5 rounded-sm">
+                <span className="space-y-1.5">
+                  <span className="block text-[9px] font-bold uppercase tracking-wider text-brand-muted">
                     {categoryName}
                   </span>
-                  <h4 className="font-semibold text-xs md:text-sm text-ink-primary flex gap-2 items-start pt-1">
-                    <HelpCircle className="h-4.5 w-4.5 text-ink-accent shrink-0 mt-0.5" />
-                    <span>{faq.question}</span>
-                  </h4>
-                </div>
-                <ChevronDown className={`h-4.5 w-4.5 text-brand-muted shrink-0 mt-3 transition-transform duration-300 ${isOpen ? 'rotate-180 text-ink-accent' : ''}`} />
+                  <span className="block text-sm font-semibold uppercase leading-[1.5] tracking-[0.06em] text-ink-primary">
+                    {faq.question}
+                  </span>
+                </span>
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-ink-primary/40 text-ink-primary">
+                  {isOpen ? <Minus className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
+                </span>
               </button>
 
-              <div
-                className={`transition-all duration-300 ease-in-out overflow-hidden ${
-                  isOpen ? 'max-h-96 border-t border-edge-subtle p-5 bg-surface-muted' : 'max-h-0'
-                }`}
-              >
-                <p className="text-xs md:text-sm leading-relaxed text-ink-secondary whitespace-pre-line">
+              <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isOpen ? 'max-h-96' : 'max-h-0'}`}>
+                <p className="whitespace-pre-line px-6 pb-6 text-sm leading-[1.8] text-ink-secondary">
                   {faq.answer}
                 </p>
               </div>
@@ -151,8 +147,8 @@ export default function GeneralFAQModule() {
         })}
 
         {filteredFaqs.length === 0 && (
-          <div className="text-center py-12 bg-white border border-edge rounded-lg text-brand-muted space-y-2">
-            <HelpCircle className="h-10 w-10 mx-auto text-edge-strong" />
+          <div className="space-y-2 rounded-[18px] bg-surface-subtle py-12 text-center text-brand-muted md:col-span-2">
+            <HelpCircle className="mx-auto h-10 w-10 text-edge-strong" />
             <p className="text-xs font-semibold">No questions matched your search criteria.</p>
           </div>
         )}

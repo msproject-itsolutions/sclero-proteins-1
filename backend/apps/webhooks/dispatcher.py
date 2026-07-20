@@ -2,10 +2,11 @@ import hmac
 import hashlib
 import json
 import logging
-import threading
 import requests
 from django.utils import timezone
 from datetime import timedelta
+
+from apps.webhooks.security import validate_webhook_destination
 
 logger = logging.getLogger(__name__)
 
@@ -53,37 +54,26 @@ def dispatch_outgoing_webhook(event_type, payload):
             status='PENDING'
         )
 
-        # Trigger delivery asynchronously in a background thread to avoid blocking request thread
-        thread = threading.Thread(
-            target=send_delivery_worker,
-            args=(delivery.id,)
-        )
-        thread.daemon = True
-        thread.start()
-
-def send_delivery_worker(delivery_id):
-    """Thread wrapper to fetch delivery and invoke send_delivery."""
-    from apps.webhooks.models import WebhookDelivery
-    try:
-        delivery = WebhookDelivery.objects.get(pk=delivery_id)
-        send_delivery(delivery)
-    except WebhookDelivery.DoesNotExist:
-        logger.error(f"WebhookDelivery {delivery_id} not found in background thread.")
-    except Exception as e:
-        logger.exception(f"Unhandled exception in webhook delivery worker: {e}")
+        logger.info('Queued webhook delivery %s for %s', delivery.id, sub.url)
 
 def send_delivery(delivery):
     """
     Synchronously execute HTTP POST request, verify response, and log details.
     Uses exponential backoff for scheduled retries on failure.
     """
-    from apps.webhooks.models import WebhookDelivery
     
+    sub = delivery.subscription
+    if not sub.is_active:
+        delivery.status = 'DLQ'
+        delivery.next_attempt_at = None
+        delivery.error_message = 'Subscription was disabled before delivery.'
+        delivery.save(update_fields=['status', 'next_attempt_at', 'error_message'])
+        return
+
     delivery.attempts += 1
     delivery.last_attempt_at = timezone.now()
-    sub = delivery.subscription
     
-    payload_str = json.dumps(delivery.payload)
+    payload_str = json.dumps(delivery.payload, separators=(',', ':'), sort_keys=True)
     signature = calculate_signature(payload_str, sub.secret)
 
     headers = {
@@ -95,11 +85,13 @@ def send_delivery(delivery):
     }
 
     try:
+        validate_webhook_destination(sub.url, resolve_dns=True)
         response = requests.post(
             sub.url,
             data=payload_str,
             headers=headers,
-            timeout=10
+            timeout=(3.05, 10),
+            allow_redirects=False,
         )
         delivery.response_status = response.status_code
         delivery.response_body = response.text[:5000] # Truncate large responses to keep DB clean
@@ -112,7 +104,9 @@ def send_delivery(delivery):
             raise requests.HTTPError(f"HTTP {response.status_code} returned.")
             
     except Exception as exc:
-        delivery.error_message = str(exc)
+        # Keep the administrator-visible error bounded; full exception details
+        # remain in application logs without storing arbitrary remote content.
+        delivery.error_message = str(exc)[:2000]
         
         # Exponential backoff schedule
         if delivery.attempts >= 7:

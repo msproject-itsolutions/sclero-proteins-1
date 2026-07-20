@@ -20,6 +20,8 @@ import {
 import { getApiUrl } from '../../lib/api';
 import { authenticatedFetch } from '../../lib/authFetch';
 import { addToCart } from '../../store/cartSlice';
+import PasswordInput from '../../components/PasswordInput';
+import { firstApiError, isValidEmail, isValidPhone, trimFormValues } from '../../lib/formValidation';
 
 function OtpLogin() {
   const dispatch = useDispatch();
@@ -28,17 +30,32 @@ function OtpLogin() {
   const [identifier, setIdentifier] = useState('');
   const [otp, setOtp] = useState('');
   const [sandboxCode, setSandboxCode] = useState('');
+  const [formError, setFormError] = useState('');
 
   const requestCode = (e) => {
     e.preventDefault();
-    dispatch(sendOtp({ identifier })).unwrap().then((d) => {
+    const cleanedIdentifier = identifier.trim().toLowerCase();
+    setFormError('');
+    if (!isValidEmail(cleanedIdentifier)) {
+      setFormError('Please enter a valid email address.');
+      return;
+    }
+    setIdentifier(cleanedIdentifier);
+    dispatch(sendOtp({ identifier: cleanedIdentifier })).unwrap().then((d) => {
       setStage('verify');
       if (d.otp_preview_for_sandbox) setSandboxCode(d.otp_preview_for_sandbox);
     }).catch(() => {});
   };
   const verify = (e) => {
     e.preventDefault();
-    dispatch(verifyOtp({ identifier, otp }));
+    const cleanedOtp = otp.trim();
+    setFormError('');
+    if (!/^\d{6}$/.test(cleanedOtp)) {
+      setFormError('Please enter the complete 6-digit code.');
+      return;
+    }
+    setOtp(cleanedOtp);
+    dispatch(verifyOtp({ identifier, otp: cleanedOtp }));
   };
 
   return stage === 'request' ? (
@@ -50,7 +67,7 @@ function OtpLogin() {
         onChange={(e) => setIdentifier(e.target.value)}
         className="w-full rounded-sm border border-edge bg-surface p-3 text-sm focus:border-ink-primary focus:outline-none"
       />
-      {error && <p className="rounded-sm bg-surface-muted px-3 py-2 text-xs font-semibold text-ink-danger">{error}</p>}
+      {(formError || error) && <p className="rounded-sm bg-surface-muted px-3 py-2 text-xs font-semibold text-ink-danger">{formError || error}</p>}
       <button type="submit" disabled={status === 'loading'}
         className="btn-primary w-full py-3 text-sm uppercase tracking-wider disabled:opacity-60">
         {status === 'loading' ? 'Sending…' : 'Email me a code'}
@@ -73,12 +90,12 @@ function OtpLogin() {
         onChange={(e) => setOtp(e.target.value)}
         className="w-full rounded-sm border border-edge bg-surface p-3 text-center text-lg tracking-[0.4em] focus:border-ink-primary focus:outline-none"
       />
-      {error && <p className="rounded-sm bg-surface-muted px-3 py-2 text-xs font-semibold text-ink-danger">{error}</p>}
+      {(formError || error) && <p className="rounded-sm bg-surface-muted px-3 py-2 text-xs font-semibold text-ink-danger">{formError || error}</p>}
       <button type="submit" disabled={status === 'loading'}
         className="btn-primary w-full py-3 text-sm uppercase tracking-wider disabled:opacity-60">
         {status === 'loading' ? 'Verifying…' : 'Verify & log in'}
       </button>
-      <button type="button" onClick={() => setStage('request')}
+      <button type="button" onClick={() => { setStage('request'); setFormError(''); setOtp(''); }}
         className="w-full text-xs font-semibold text-ink-secondary hover:text-ink-primary">
         Use a different email
       </button>
@@ -97,7 +114,13 @@ function MagicLinkLogin() {
   const send = (e) => {
     e.preventDefault();
     setErr('');
-    dispatch(requestMagicLink({ email })).unwrap().then((d) => {
+    const cleanedEmail = email.trim().toLowerCase();
+    if (!isValidEmail(cleanedEmail)) {
+      setErr('Please enter a valid email address.');
+      return;
+    }
+    setEmail(cleanedEmail);
+    dispatch(requestMagicLink({ email: cleanedEmail })).unwrap().then((d) => {
       setSent(true);
       if (d.magic_link_for_sandbox) setSandboxLink(d.magic_link_for_sandbox);
     }).catch((m) => setErr(typeof m === 'string' ? m : 'Could not send the link'));
@@ -151,28 +174,64 @@ function AuthForms() {
   const [totpCode, setTotpCode] = useState('');
   const [useBackup, setUseBackup] = useState(false);
   const [showMoreSignIn, setShowMoreSignIn] = useState(false);
+  const [formError, setFormError] = useState('');
 
   const update = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const submit = (e) => {
     e.preventDefault();
-    if (mode === 'login') dispatch(login({ email: form.email, password: form.password }));
-    else dispatch(register(form));
+    setFormError('');
+    const cleaned = {
+      ...form,
+      email: form.email.trim().toLowerCase(),
+      first_name: form.first_name.trim(),
+      last_name: form.last_name.trim(),
+    };
+    if (!isValidEmail(cleaned.email)) {
+      setFormError('Please enter a valid email address.');
+      return;
+    }
+    if (!cleaned.password.trim()) {
+      setFormError('Please enter your password.');
+      return;
+    }
+    if (mode === 'register' && (!cleaned.first_name || !cleaned.last_name)) {
+      setFormError('Please enter your first and last name.');
+      return;
+    }
+    setForm(cleaned);
+    if (mode === 'login') dispatch(login({ email: cleaned.email, password: cleaned.password }));
+    else dispatch(register(cleaned));
   };
 
   const submit2fa = (e) => {
     e.preventDefault();
-    dispatch(verifyOtp({ identifier: twoFactorEmail, otp }));
+    const cleanedOtp = otp.trim();
+    if (!/^\d{6}$/.test(cleanedOtp)) {
+      setFormError('Please enter the complete 6-digit code.');
+      return;
+    }
+    setFormError('');
+    setOtp(cleanedOtp);
+    dispatch(verifyOtp({ identifier: twoFactorEmail, otp: cleanedOtp }));
   };
 
   const submitTotp = (e) => {
     e.preventDefault();
-    dispatch(completeLogin({ totpCode }));
+    const cleanedCode = totpCode.trim();
+    if (!cleanedCode || (!useBackup && !/^\d{6}$/.test(cleanedCode))) {
+      setFormError(useBackup ? 'Please enter a backup code.' : 'Please enter the complete 6-digit code.');
+      return;
+    }
+    setFormError('');
+    setTotpCode(cleanedCode);
+    dispatch(completeLogin({ totpCode: cleanedCode }));
   };
 
   const switchMode = (m) => {
     setMode(m);
     setShowMoreSignIn(false);
+    setFormError('');
     dispatch(clearAuthError());
   };
 
@@ -201,7 +260,7 @@ function AuthForms() {
             onChange={(e) => setTotpCode(e.target.value)}
             className="w-full rounded-sm border border-edge bg-surface p-3 text-center text-lg tracking-[0.4em] focus:border-ink-primary focus:outline-none"
           />
-          {error && <p className="rounded-sm bg-surface-muted px-3 py-2 text-xs font-semibold text-ink-danger">{error}</p>}
+          {(formError || error) && <p className="rounded-sm bg-surface-muted px-3 py-2 text-xs font-semibold text-ink-danger">{formError || error}</p>}
           <button type="submit" disabled={status === 'loading'}
             className="btn-primary w-full py-3 text-sm uppercase tracking-wider disabled:opacity-60">
             {status === 'loading' ? 'Verifying…' : 'Verify code'}
@@ -245,7 +304,7 @@ function AuthForms() {
             onChange={(e) => setOtp(e.target.value)}
             className="w-full rounded-sm border border-edge bg-surface p-3 text-center text-lg tracking-[0.4em] focus:border-ink-primary focus:outline-none"
           />
-          {error && <p className="rounded-sm bg-surface-muted px-3 py-2 text-xs font-semibold text-ink-danger">{error}</p>}
+          {(formError || error) && <p className="rounded-sm bg-surface-muted px-3 py-2 text-xs font-semibold text-ink-danger">{formError || error}</p>}
           <button type="submit" disabled={status === 'loading'}
             className="btn-primary w-full py-3 text-sm uppercase tracking-wider disabled:opacity-60">
             {status === 'loading' ? 'Verifying…' : 'Verify & log in'}
@@ -296,13 +355,13 @@ function AuthForms() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label htmlFor="register-first-name" className="sr-only">First name</label>
-              <input id="register-first-name" type="text" autoComplete="given-name" placeholder="First name" value={form.first_name}
+              <input id="register-first-name" type="text" autoComplete="given-name" required placeholder="First name" value={form.first_name}
                 onChange={update('first_name')}
                 className="w-full rounded-sm border border-edge bg-surface p-3 text-sm focus:border-ink-primary focus:outline-none" />
             </div>
             <div>
               <label htmlFor="register-last-name" className="sr-only">Last name</label>
-              <input id="register-last-name" type="text" autoComplete="family-name" placeholder="Last name" value={form.last_name}
+              <input id="register-last-name" type="text" autoComplete="family-name" required placeholder="Last name" value={form.last_name}
                 onChange={update('last_name')}
                 className="w-full rounded-sm border border-edge bg-surface p-3 text-sm focus:border-ink-primary focus:outline-none" />
             </div>
@@ -316,13 +375,13 @@ function AuthForms() {
         </div>
         <div>
           <label htmlFor="auth-password" className="sr-only">Password</label>
-          <input id="auth-password" type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required placeholder="Password" value={form.password}
+          <PasswordInput id="auth-password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required placeholder="Password" value={form.password}
             onChange={update('password')}
             className="w-full rounded-sm border border-edge bg-surface p-3 text-sm focus:border-ink-primary focus:outline-none" />
         </div>
 
-        {error && (
-          <p className="rounded-sm bg-surface-muted px-3 py-2 text-xs font-semibold text-ink-danger">{error}</p>
+        {(formError || error) && (
+          <p className="rounded-sm bg-surface-muted px-3 py-2 text-xs font-semibold text-ink-danger">{formError || error}</p>
         )}
         <button type="submit" disabled={status === 'loading'}
           className="btn-primary w-full py-3 text-sm uppercase tracking-wider disabled:opacity-60">
@@ -380,6 +439,7 @@ function AddressesTab({ authFetch }) {
     city: '', state: '', postal_code: '', country: 'GB', address_type: 'SHIPPING',
   };
   const [form, setForm] = useState(blank);
+  const [formError, setFormError] = useState('');
 
   const load = useCallback(() => {
     setLoading(true);
@@ -392,11 +452,39 @@ function AddressesTab({ authFetch }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const add = (e) => {
+  const add = async (e) => {
     e.preventDefault();
-    authFetch('/api/addresses/', { method: 'POST', body: JSON.stringify(form) })
-      .then((r) => r.json())
-      .then(() => { setShowForm(false); setForm(blank); load(); });
+    setFormError('');
+    const cleaned = trimFormValues(form);
+    const required = [
+      ['full_name', 'full name'], ['phone_number', 'phone number'],
+      ['address_line1', 'street address'], ['city', 'city'], ['state', 'state or region'],
+      ['postal_code', 'postal code'], ['country', 'country code'],
+    ];
+    const missing = required.find(([field]) => !cleaned[field]);
+    if (missing) {
+      setFormError(`Please enter your ${missing[1]}.`);
+      return;
+    }
+    if (!isValidPhone(cleaned.phone_number)) {
+      setFormError('Please enter a valid phone number with 7 to 15 digits.');
+      return;
+    }
+    if (!/^[A-Za-z]{2}$/.test(cleaned.country)) {
+      setFormError('Please enter a valid two-letter country code, such as GB or IN.');
+      return;
+    }
+    cleaned.country = cleaned.country.toUpperCase();
+    try {
+      const response = await authFetch('/api/addresses/', { method: 'POST', body: JSON.stringify(cleaned) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(firstApiError(data, 'Could not save this address.'));
+      setShowForm(false);
+      setForm(blank);
+      load();
+    } catch (error) {
+      setFormError(error.message || 'Could not save this address.');
+    }
   };
 
   const remove = (id) => {
@@ -434,7 +522,7 @@ function AddressesTab({ authFetch }) {
         <form onSubmit={add} className="space-y-3 rounded-md border border-edge bg-surface p-4 shadow-card">
           <div className="grid grid-cols-2 gap-3">
             <input required autoComplete="name" placeholder="Full name" value={form.full_name} onChange={upd('full_name')} className="rounded-sm border border-edge bg-surface p-2.5 text-sm text-ink-primary" />
-            <input required autoComplete="tel" placeholder="Phone" value={form.phone_number} onChange={upd('phone_number')} className="rounded-sm border border-edge bg-surface p-2.5 text-sm text-ink-primary" />
+            <input required type="tel" autoComplete="tel" placeholder="Phone" value={form.phone_number} onChange={upd('phone_number')} className="rounded-sm border border-edge bg-surface p-2.5 text-sm text-ink-primary" />
           </div>
           <input required autoComplete="address-line1" placeholder="Address line 1" value={form.address_line1} onChange={upd('address_line1')} className="w-full rounded-sm border border-edge bg-surface p-2.5 text-sm text-ink-primary" />
           <input autoComplete="address-line2" placeholder="Address line 2 (optional)" value={form.address_line2} onChange={upd('address_line2')} className="w-full rounded-sm border border-edge bg-surface p-2.5 text-sm text-ink-primary" />
@@ -444,8 +532,9 @@ function AddressesTab({ authFetch }) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <input required autoComplete="postal-code" placeholder="Postal code" value={form.postal_code} onChange={upd('postal_code')} className="rounded-sm border border-edge bg-surface p-2.5 text-sm text-ink-primary" />
-            <input required autoComplete="country" placeholder="Country (e.g. GB / IN)" value={form.country} onChange={upd('country')} className="rounded-sm border border-edge bg-surface p-2.5 text-sm text-ink-primary" />
+            <input required autoComplete="country" maxLength={2} placeholder="Country (e.g. GB / IN)" value={form.country} onChange={upd('country')} className="rounded-sm border border-edge bg-surface p-2.5 text-sm text-ink-primary uppercase" />
           </div>
+          {formError && <p className="rounded-sm bg-surface-muted px-3 py-2 text-xs font-semibold text-ink-danger">{formError}</p>}
           <div className="flex gap-2">
             <button type="submit" className="btn-primary flex-1 py-2.5 text-xs uppercase">Save address</button>
             <button type="button" onClick={() => setShowForm(false)} className="flex-1 rounded-sm border border-edge py-2.5 text-xs font-medium uppercase text-ink-primary">Cancel</button>
@@ -522,14 +611,14 @@ function OrdersTab({ authFetch }) {
 function WishlistTab() {
   const dispatch = useDispatch();
   const { currentRegion, currencySymbol, session_id } = useSelector((state) => state.region);
-  const accessToken = useSelector((state) => state.auth?.access);
+  const isAuthenticated = useSelector((state) => state.auth?.isAuthenticated);
   const [wishlist, setWishlist] = useState([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!accessToken) return;
+    if (!isAuthenticated) return;
     setLoading(true);
-    authenticatedFetch(`/api/wishlist/?region=${currentRegion}`, {}, accessToken)
+    authenticatedFetch(`/api/wishlist/?region=${currentRegion}`)
       .then((res) => (res.ok ? res.json() : []))
       .then((data) => {
         const items = Array.isArray(data) ? data : (data.results || []);
@@ -537,14 +626,14 @@ function WishlistTab() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [accessToken, currentRegion]);
+  }, [isAuthenticated, currentRegion]);
 
   const handleRemove = async (itemId) => {
-    if (!accessToken) return;
+    if (!isAuthenticated) return;
     try {
       const res = await authenticatedFetch(`/api/wishlist/${itemId}/`, {
         method: 'DELETE',
-      }, accessToken);
+      });
       if (res.ok) {
         setWishlist(wishlist.filter((w) => w.id !== itemId));
       }
@@ -622,16 +711,24 @@ function ProfileTab({ user, authFetch, regions, onSaved }) {
   });
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState('');
+  const [saveError, setSaveError] = useState('');
 
-  const save = () => {
-    setSaving(true); setSavedMsg('');
-    authFetch('/api/auth/profile/', {
-      method: 'PATCH',
-      body: JSON.stringify({ home_region: homeRegion || null, ...prefs }),
-    })
-      .then((r) => r.json())
-      .then(() => { setSavedMsg('Preferences saved.'); onSaved && onSaved(); })
-      .finally(() => setSaving(false));
+  const save = async () => {
+    setSaving(true); setSavedMsg(''); setSaveError('');
+    try {
+      const response = await authFetch('/api/auth/profile/', {
+        method: 'PATCH',
+        body: JSON.stringify({ home_region: homeRegion || null, ...prefs }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(firstApiError(data, 'Could not save your preferences.'));
+      setSavedMsg('Preferences saved.');
+      if (onSaved) onSaved();
+    } catch (error) {
+      setSaveError(error.message || 'Could not save your preferences.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const Toggle = ({ k, label, desc, locked }) => (
@@ -697,6 +794,7 @@ function ProfileTab({ user, authFetch, regions, onSaved }) {
           {saving ? 'Saving…' : 'Save preferences'}
         </button>
         {savedMsg && <span className="text-xs font-semibold text-ink-success">{savedMsg}</span>}
+        {saveError && <span className="text-xs font-semibold text-ink-danger">{saveError}</span>}
       </div>
 
       <PrivacyControls authFetch={authFetch} userEmail={user.email} />
@@ -737,8 +835,6 @@ function PrivacyControls({ authFetch, userEmail }) {
       const res = await authFetch('/api/auth/me/', { method: 'DELETE' });
       if (!res.ok) throw new Error('Deletion failed.');
       setDone('Account deleted. Logging you out…');
-      localStorage.removeItem('sclero_access');
-      localStorage.removeItem('sclero_refresh');
       setTimeout(() => { window.location.href = '/'; }, 1500);
     } catch (e) { setError(e.message); setBusy(false); }
   };
@@ -789,7 +885,7 @@ function PrivacyControls({ authFetch, userEmail }) {
 
 export default function AccountPage() {
   const dispatch = useDispatch();
-  const { user, access } = useSelector((s) => s.auth);
+  const { user, sessionChecked } = useSelector((s) => s.auth);
   const [tab, setTab] = useState('profile');
   const [regions, setRegions] = useState([]);
 
@@ -798,11 +894,7 @@ export default function AccountPage() {
       .then((d) => setRegions(Array.isArray(d) ? d : d.results || [])).catch(() => setRegions([]));
   }, []);
 
-  useEffect(() => {
-    if (access && !user) dispatch(fetchProfile());
-  }, [access, user, dispatch]);
-
-  // Authenticated fetch helper bound to the current access token.
+  // Authenticated fetch helper backed by the HttpOnly browser session.
   const authFetch = useCallback(
     (path, opts = {}) =>
       authenticatedFetch(path, {
@@ -811,9 +903,13 @@ export default function AccountPage() {
           'Content-Type': 'application/json',
           ...(opts.headers || {}),
         },
-      }, access),
-    [access]
+      }),
+    []
   );
+
+  if (!sessionChecked) {
+    return <StoreShell><div className="mx-auto max-w-2xl px-4 py-20 text-center text-sm text-ink-muted">Checking your session…</div></StoreShell>;
+  }
 
   if (!user) {
     return (

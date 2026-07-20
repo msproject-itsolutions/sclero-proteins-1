@@ -1,27 +1,93 @@
 from decimal import Decimal, InvalidOperation
+import hashlib
+import json
+import logging
+import os
+import re
+
 from rest_framework import viewsets, status, views, generics
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.shortcuts import get_object_or_404
-from django.db import transaction
-from django.db.models import Sum, Q
+from django.db import IntegrityError, transaction
+from django.db.models import Sum, Q, Prefetch
 from django.conf import settings
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import validate_email
 from django.utils import timezone
-from apps.regions.models import Region, Warehouse, ShippingZone, ShippingRate
-from apps.products.models import Product, ProductRegionConfig
+from apps.regions.models import Region, Warehouse
+from apps.products.models import Product, ProductRegionConfig, ProductVariant
+from apps.products.pricing import resolve_price, resolve_variant_price
 from apps.inventory.models import StockLevel
 from apps.users.permissions import require_permission
 from .models import Cart, CartItem, Order, OrderItem, Invoice, PaymentLog, Refund, AuditLog, Coupon, WebhookEvent
 from .serializers import (
-    CartSerializer, CartItemSerializer, OrderSerializer, RefundSerializer,
+    CartSerializer, OrderSerializer, RefundSerializer,
     OrderAdminSerializer, OrderAdminUpdateSerializer, RefundAdminSerializer, InvoiceAdminSerializer,
     CouponAdminSerializer,
 )
 from .utils import generate_invoice_pdf
 from .payments import resolve_gateway, refund_payment, PaymentError
+from .pricing import quote_cart, PricingError
 from .email_service import send_order_email
+from apps.admin_dashboard.models import PaymentGateway, SystemSetting
+from apps.audit.recorder import record_audit
+from .payments import get_adapter
+
+
+logger = logging.getLogger(__name__)
+PHONE_PATTERN = re.compile(r'^[+\d][\d\s().-]*$')
+
+
+def _clean_text(value):
+    return str(value or '').strip()
+
+
+def _valid_phone(value):
+    digits = re.sub(r'\D', '', value)
+    return bool(PHONE_PATTERN.fullmatch(value)) and 7 <= len(digits) <= 15
+
+
+def _requested_variant(product, data):
+    """Return the requested active variant, defaulting to the first option.
+
+    Older clients nested variant details under ``metadata`` while newer clients
+    send ``variant_sku`` directly. Supporting both keeps carts compatible during
+    a rolling frontend/backend deployment.
+    """
+    metadata = data.get('metadata') if isinstance(data.get('metadata'), dict) else {}
+    requested_sku = _clean_text(data.get('variant_sku') or metadata.get('variant_sku'))
+    active = product.variants.filter(is_active=True).order_by('sort_order', 'id')
+    if requested_sku:
+        return active.filter(sku=requested_sku).first(), requested_sku
+    return active.first(), ''
+
+
+def _available_for_variant(product, region, variant=None):
+    region_stock = _region_total_available_stock(product, region)
+    if variant is None:
+        return region_stock
+    return min(region_stock, variant.stock_qty)
+
+
+def _select_cart_item(cart, data):
+    cart_item_id = data.get('cart_item_id')
+    if cart_item_id:
+        return cart.items.filter(id=cart_item_id).first(), None
+
+    product_id = data.get('product_id')
+    if not product_id:
+        return None, 'cart_item_id or product_id is required'
+    queryset = cart.items.filter(product_id=product_id)
+    metadata = data.get('metadata') if isinstance(data.get('metadata'), dict) else {}
+    variant_sku = _clean_text(data.get('variant_sku') or metadata.get('variant_sku'))
+    if variant_sku:
+        queryset = queryset.filter(variant_sku=variant_sku)
+    if queryset.count() > 1:
+        return None, 'This product has multiple options in the cart; cart_item_id is required.'
+    return queryset.first(), None
 
 
 def _region_warehouse_queryset(region):
@@ -64,6 +130,20 @@ def _deduct_region_stock(product, region, quantity):
         remaining -= take
 
 
+def _deduct_variant_stock(product, variant_sku, quantity):
+    if not variant_sku:
+        return
+    variant = ProductVariant.objects.select_for_update().filter(
+        product=product, sku=variant_sku, is_active=True,
+    ).first()
+    if variant is None:
+        raise PaymentError(f"The selected option for {product.name} is no longer available.")
+    if variant.stock_qty < quantity:
+        raise PaymentError(f"Only {variant.stock_qty} units of {variant.name} are available.")
+    variant.stock_qty -= quantity
+    variant.save(update_fields=['stock_qty', 'updated_at'])
+
+
 def _restock_region_item(product, region, quantity):
     stock_rows = list(_region_stock_queryset(product, region, for_update=True))
     if stock_rows:
@@ -81,6 +161,53 @@ def _restock_region_item(product, region, quantity):
     target.save(update_fields=['available', 'updated_at'])
 
 
+def _restock_variant_item(product, variant_sku, quantity):
+    if not variant_sku:
+        return
+    variant = ProductVariant.objects.select_for_update().filter(
+        product=product, sku=variant_sku,
+    ).first()
+    if variant is None:
+        logger.warning(
+            'Could not restock removed variant %s for product %s.',
+            variant_sku,
+            product.pk,
+        )
+        return
+    variant.stock_qty += quantity
+    variant.save(update_fields=['stock_qty', 'updated_at'])
+
+
+def _run_checkout_followups(order_id):
+    """Run non-critical work only after the sale transaction has committed."""
+    try:
+        order = Order.objects.select_related('region').get(pk=order_id)
+    except Order.DoesNotExist:
+        logger.error('Committed checkout order %s could not be reloaded.', order_id)
+        return
+
+    try:
+        if not send_order_email('order_confirmation', order):
+            logger.warning('Order confirmation for order %s was queued for retry.', order_id)
+    except Exception:
+        logger.exception('Order confirmation scheduling failed for order %s.', order_id)
+
+    try:
+        from .fraud import assess_order
+        assess_order(order)
+    except Exception:
+        logger.exception('Fraud assessment failed for order %s.', order_id)
+
+
+def _send_order_event_with_logging(event, order_id, *, extra_context=None):
+    try:
+        order = Order.objects.select_related('region').get(pk=order_id)
+        if not send_order_email(event, order, extra_context=extra_context):
+            logger.warning('%s email for order %s was queued for retry.', event, order_id)
+    except Exception:
+        logger.exception('%s email scheduling failed for order %s.', event, order_id)
+
+
 class MyOrdersView(generics.ListAPIView):
     """Order history for the authenticated customer.
 
@@ -94,7 +221,10 @@ class MyOrdersView(generics.ListAPIView):
         user = self.request.user
         return (
             Order.objects.filter(Q(user=user) | Q(email__iexact=user.email))
-            .prefetch_related('items', 'refunds')
+            .prefetch_related(
+                Prefetch('items', queryset=OrderItem.objects.select_related('product')),
+                'refunds',
+            )
             .select_related('invoice')
             .order_by('-created_at')
             .distinct()
@@ -132,9 +262,10 @@ class CartViewSet(viewsets.ViewSet):
         serializer = CartSerializer(cart, context={'region': cart.region})
         return Response(serializer.data)
 
+    @transaction.atomic
     def add_item(self, request):
-        session_id = request.data.get('session_id')
-        region_code = request.data.get('region', 'UK').upper()
+        session_id = _clean_text(request.data.get('session_id'))
+        region_code = _clean_text(request.data.get('region', 'UK')).upper()
         product_id = request.data.get('product_id')
         try:
             quantity = int(request.data.get('quantity', 1))
@@ -147,48 +278,87 @@ class CartViewSet(viewsets.ViewSet):
             return Response({"error": "session_id and product_id are required"}, status=status.HTTP_400_BAD_REQUEST)
 
         cart = self.get_cart(session_id, region_code)
+        cart = Cart.objects.select_for_update().get(pk=cart.pk)
         product = get_object_or_404(Product, id=product_id, is_active=True, is_archived=False)
+        variant, requested_sku = _requested_variant(product, request.data)
+        if requested_sku and variant is None:
+            return Response(
+                {"error": "The selected product option is unavailable."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         
-        # Verify if product is visible/available in this region
-        region_config = ProductRegionConfig.objects.filter(product=product, region=cart.region, is_visible=True).first()
-        if not region_config:
+        # Verify the product is sellable here — same resolver as the catalogue
+        # and checkout, so a shopper can add exactly what they can see and buy.
+        if resolve_price(product, cart.region)[0] is None:
             return Response({"error": "Product is not available in your region."}, status=status.HTTP_400_BAD_REQUEST)
+        if variant is not None and resolve_variant_price(variant, cart.region) is None:
+            return Response(
+                {"error": "The selected product option has no price in this region."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         # Check stock level in this region's warehouses
-        total_available = _region_total_available_stock(product, cart.region)
-        if total_available < quantity:
-            return Response({"error": f"Only {total_available} units are available in your region's stock."}, status=status.HTTP_400_BAD_REQUEST)
+        total_available = _available_for_variant(product, cart.region, variant)
 
-        # Add or update quantity
-        cart_item, created = CartItem.objects.get_or_create(cart=cart, product=product)
+        # A variant is part of a cart line's identity. Two sizes of the same
+        # product must never collapse into one line and silently change price.
+        variant_sku = variant.sku if variant else ''
+        cart_item, created = CartItem.objects.get_or_create(
+            cart=cart,
+            product=product,
+            variant_sku=variant_sku,
+            defaults={'variant_name': variant.name if variant else ''},
+        )
+        requested_quantity = quantity if created else cart_item.quantity + quantity
+        if total_available < requested_quantity:
+            return Response(
+                {"error": f"Only {total_available} units are available in your region's stock."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         if not created:
             cart_item.quantity += quantity
         else:
             cart_item.quantity = quantity
-        cart_item.save()
+        cart_item.variant_name = variant.name if variant else ''
+        cart_item.save(update_fields=['quantity', 'variant_name', 'updated_at'])
 
         return Response(CartSerializer(cart, context={'region': cart.region}).data)
 
+    @transaction.atomic
     def update_item(self, request):
-        session_id = request.data.get('session_id')
-        region_code = request.data.get('region', 'UK').upper()
-        product_id = request.data.get('product_id')
+        session_id = _clean_text(request.data.get('session_id'))
+        region_code = _clean_text(request.data.get('region', 'UK')).upper()
         try:
             quantity = int(request.data.get('quantity', 1))
         except (TypeError, ValueError):
             return Response({"error": "quantity must be an integer"}, status=status.HTTP_400_BAD_REQUEST)
 
-        if not session_id or not product_id:
-            return Response({"error": "session_id and product_id are required"}, status=status.HTTP_400_BAD_REQUEST)
+        if not session_id:
+            return Response({"error": "session_id is required"}, status=status.HTTP_400_BAD_REQUEST)
 
         cart = self.get_cart(session_id, region_code)
-        cart_item = get_object_or_404(CartItem, cart=cart, product_id=product_id)
+        cart = Cart.objects.select_for_update().get(pk=cart.pk)
+        cart_item, selection_error = _select_cart_item(cart, request.data)
+        if selection_error:
+            return Response({"error": selection_error}, status=status.HTTP_400_BAD_REQUEST)
+        if cart_item is None:
+            return Response({"error": "Cart item was not found."}, status=status.HTTP_404_NOT_FOUND)
 
         if quantity <= 0:
             cart_item.delete()
         else:
             # Verify stock
-            total_available = _region_total_available_stock(cart_item.product, cart.region)
+            variant = None
+            if cart_item.variant_sku:
+                variant = cart_item.product.variants.filter(
+                    sku=cart_item.variant_sku, is_active=True,
+                ).first()
+                if variant is None:
+                    return Response(
+                        {"error": "The selected product option is no longer available."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+            total_available = _available_for_variant(cart_item.product, cart.region, variant)
             if total_available < quantity:
                 return Response({"error": f"Only {total_available} units available in stock."}, status=status.HTTP_400_BAD_REQUEST)
                 
@@ -197,20 +367,89 @@ class CartViewSet(viewsets.ViewSet):
 
         return Response(CartSerializer(cart, context={'region': cart.region}).data)
 
+    @transaction.atomic
     def remove_item(self, request):
-        session_id = request.data.get('session_id')
-        region_code = request.data.get('region', 'UK').upper()
-        product_id = request.data.get('product_id')
+        session_id = _clean_text(request.data.get('session_id'))
+        region_code = _clean_text(request.data.get('region', 'UK')).upper()
 
-        if not session_id or not product_id:
-            return Response({"error": "session_id and product_id are required"}, status=status.HTTP_400_BAD_REQUEST)
+        if not session_id:
+            return Response({"error": "session_id is required"}, status=status.HTTP_400_BAD_REQUEST)
 
         cart = self.get_cart(session_id, region_code)
-        cart_item = CartItem.objects.filter(cart=cart, product_id=product_id).first()
+        cart = Cart.objects.select_for_update().get(pk=cart.pk)
+        cart_item, selection_error = _select_cart_item(cart, request.data)
+        if selection_error:
+            return Response({"error": selection_error}, status=status.HTTP_400_BAD_REQUEST)
         if cart_item:
             cart_item.delete()
 
         return Response(CartSerializer(cart, context={'region': cart.region}).data)
+
+
+class CreatePaymentIntentView(views.APIView):
+    """Open a gateway payment for the current cart.
+
+    POST /api/checkout/payment-intent/
+    Body: { session_id, region, country?, state?, postal_code?, coupon_code? }
+
+    The amount is always derived server-side from the cart via quote_cart(); a
+    client-supplied amount is never trusted. Returns the data the browser SDK
+    needs to collect payment, after which /api/checkout/ verifies the result.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        session_id = _clean_text(request.data.get('session_id'))
+        region_code = _clean_text(request.data.get('region')).upper()
+        if not session_id or not region_code:
+            return Response({"error": "session_id and region are required."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        region = get_object_or_404(Region, code=region_code, is_active=True)
+        cart = (
+            Cart.objects.filter(session_id=session_id, region=region)
+            .prefetch_related('items__product__variants')
+            .first()
+        )
+        if not cart or not cart.items.exists():
+            return Response({"error": "Cart is empty or invalid."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            quote = quote_cart(
+                region, cart,
+                country=_clean_text(request.data.get('country')).upper(),
+                state=_clean_text(request.data.get('state')),
+                city=_clean_text(request.data.get('city')),
+                postal_code=_clean_text(request.data.get('postal_code')),
+                coupon_code=_clean_text(request.data.get('coupon_code')),
+                shipping_rate_id=request.data.get('shipping_rate_id'),
+            )
+        except PricingError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        method = (request.data.get('payment_method') or '').upper()
+        try:
+            adapter = resolve_gateway(region, method)
+        except PaymentError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            intent = adapter.create_intent(quote['total'], region.currency_code, {
+                'session_id': session_id,
+                'region': region.code,
+            })
+        except NotImplementedError:
+            return Response(
+                {"error": f"{method} does not support browser payment collection."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except PaymentError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_402_PAYMENT_REQUIRED)
+
+        # Echo the amount so the UI can show exactly what will be charged.
+        intent['amount'] = str(quote['total'])
+        intent['currency'] = region.currency_code
+        return Response(intent, status=status.HTTP_200_OK)
 
 
 class ApplyCouponView(views.APIView):
@@ -281,27 +520,61 @@ class CheckoutView(views.APIView):
     @transaction.atomic
     def post(self, request):
         from decimal import Decimal
-        session_id = request.data.get('session_id')
-        region_code = request.data.get('region', 'UK').upper()
+        session_id = _clean_text(request.data.get('session_id'))
+        region_code = _clean_text(request.data.get('region', 'UK')).upper()
         
         # Contact and Address info
-        email = request.data.get('email')
-        shipping_name = request.data.get('shipping_name')
-        shipping_phone = request.data.get('shipping_phone')
-        address_line1 = request.data.get('shipping_address_line1')
-        address_line2 = request.data.get('shipping_address_line2', '')
-        city = request.data.get('shipping_city')
-        state = request.data.get('shipping_state')
-        postal_code = request.data.get('shipping_postal_code')
-        country = request.data.get('shipping_country')
+        email = _clean_text(request.data.get('email')).lower()
+        shipping_name = _clean_text(request.data.get('shipping_name'))
+        shipping_phone = _clean_text(request.data.get('shipping_phone'))
+        address_line1 = _clean_text(request.data.get('shipping_address_line1'))
+        address_line2 = _clean_text(request.data.get('shipping_address_line2', ''))
+        city = _clean_text(request.data.get('shipping_city'))
+        state = _clean_text(request.data.get('shipping_state'))
+        postal_code = _clean_text(request.data.get('shipping_postal_code'))
+        country = _clean_text(request.data.get('shipping_country')).upper()
         
-        payment_method = request.data.get('payment_method') # Razorpay, Stripe, PayPal
-        payment_id = request.data.get('payment_id', 'sandbox_mock_id')
+        payment_method = _clean_text(request.data.get('payment_method')).upper()
+        payment_id = _clean_text(request.data.get('payment_id', 'sandbox_mock_id'))
+        # Razorpay's browser handshake returns an order id + signature alongside
+        # the payment id; the adapter needs both to verify the callback is genuine.
+        gateway_payload = {
+            "payment_id": payment_id,
+            "razorpay_order_id": request.data.get('razorpay_order_id'),
+            "razorpay_signature": request.data.get('razorpay_signature'),
+        }
 
-        if not all([session_id, email, shipping_name, address_line1, city, state, postal_code, country, payment_method]):
-            return Response({"error": "Missing required checkout parameters."}, status=status.HTTP_400_BAD_REQUEST)
+        required = {
+            'session_id': session_id,
+            'email': email,
+            'shipping_name': shipping_name,
+            'shipping_phone': shipping_phone,
+            'shipping_address_line1': address_line1,
+            'shipping_city': city,
+            'shipping_state': state,
+            'shipping_postal_code': postal_code,
+            'shipping_country': country,
+            'payment_method': payment_method,
+        }
+        missing = [field for field, value in required.items() if not value]
+        if missing:
+            return Response(
+                {"error": f"Missing required checkout field: {missing[0].replace('_', ' ')}."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            validate_email(email)
+        except DjangoValidationError:
+            return Response({"error": "Enter a valid email address."}, status=status.HTTP_400_BAD_REQUEST)
+        if not _valid_phone(shipping_phone):
+            return Response(
+                {"error": "Enter a valid phone number with 7 to 15 digits."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if len(country) != 2:
+            return Response({"error": "Enter a valid two-letter country code."}, status=status.HTTP_400_BAD_REQUEST)
 
-        from apps.admin_dashboard.store_config import get_store_tax_mode, get_guest_checkout_enabled
+        from apps.admin_dashboard.store_config import get_guest_checkout_enabled
 
         if not request.user.is_authenticated and not get_guest_checkout_enabled():
             return Response(
@@ -311,9 +584,12 @@ class CheckoutView(views.APIView):
 
         # 1. Fetch Region & Cart
         region = get_object_or_404(Region, code=region_code, is_active=True)
+        # Serialize checkout completion for one cart. This prevents double-clicks
+        # or client retries from deducting stock and creating two orders while
+        # the first payment completion is still committing.
         cart = (
-            Cart.objects.filter(session_id=session_id, region=region)
-            .prefetch_related('items__product')
+            Cart.objects.select_for_update().filter(session_id=session_id, region=region)
+            .prefetch_related('items__product__variants')
             .first()
         )
         if not cart or not cart.items.exists():
@@ -325,74 +601,60 @@ class CheckoutView(views.APIView):
         except PaymentError as exc:
             return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 2. Verify Stock & Deduct
-        order_items_to_create = []
-        subtotal = Decimal('0.00')
-        
-        for item in cart.items.all():
-            product = item.product
-            qty = item.quantity
-            
-            # Fetch fixed regional price config
-            region_config = ProductRegionConfig.objects.filter(product=product, region=region, is_visible=True).first()
-            if not region_config:
-                return Response({"error": f"{product.name} is not available in your region."}, status=status.HTTP_400_BAD_REQUEST)
-                
-            item_price = Decimal(str(region_config.promotional_price if region_config.promotional_price else region_config.price))
-            subtotal += item_price * qty
-
-            # Inventory deduction
-            if _region_total_available_stock(product, region) < qty:
-                return Response({"error": f"Product {product.name} is out of stock in this region."}, status=status.HTTP_400_BAD_REQUEST)
-            _deduct_region_stock(product, region, qty)
-            
-            order_items_to_create.append((product, qty, item_price))
-
-        # Apply Coupon Discount if supplied
+        # 2. Price the cart. Shared with the payment-intent endpoint so the amount
+        #    authorised by the gateway always equals the amount charged here.
         coupon_code = request.data.get('coupon_code')
-        discount_amount = Decimal('0.00')
-        if coupon_code:
-            coupon = Coupon.objects.filter(code__iexact=coupon_code, is_active=True).first()
-            if coupon:
-                now = timezone.now()
-                valid_date = (not coupon.start_date or coupon.start_date <= now) and (not coupon.end_date or coupon.end_date >= now)
-                valid_region = not coupon.region or coupon.region == region
-                valid_spend = subtotal >= coupon.min_spend
-                valid_limit = not coupon.usage_limit or coupon.usage_count < coupon.usage_limit
+        try:
+            quote = quote_cart(
+                region, cart,
+                country=country, state=state, city=city, postal_code=postal_code,
+                coupon_code=coupon_code,
+                shipping_rate_id=request.data.get('shipping_rate_id'),
+            )
+        except PricingError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-                if valid_date and valid_region and valid_spend and valid_limit:
-                    if coupon.discount_type == 'PERCENTAGE':
-                        discount_val = Decimal(str(coupon.value))
-                        discount_amount = subtotal * (discount_val / Decimal('100.00'))
-                    elif coupon.discount_type in ['FIXED_AMOUNT', 'TIERED']:
-                        discount_amount = Decimal(str(coupon.value))
-                    discount_amount = min(discount_amount, subtotal)
-                    
-                    coupon.usage_count += 1
-                    coupon.save(update_fields=['usage_count'])
+        subtotal = quote['subtotal']
+        discount_amount = quote['discount_amount']
+        tax_rate = quote['tax_rate']
+        tax_mode = quote['tax_mode']
+        rate_factor = quote['rate_factor']
+        tax_amount = quote['tax_amount']
+        shipping_cost = quote['shipping_cost']
+        shipping_option = quote['shipping_option']
+        total = quote['total']
+        order_items_to_create = quote['items']
 
-        # 3. Calculate Tax & Shipping (honouring the store-wide tax mode)
-        tax_mode = get_store_tax_mode()
-        tax_rate = Decimal(str(region.tax_rate))
-        taxable_amount = max(subtotal - discount_amount, Decimal('0.00'))
-        rate_factor = tax_rate / Decimal('100.00')
+        # Lock a limited coupon before stock changes. Without this, two carts
+        # can both observe the final use and exceed its configured usage limit.
+        coupon = None
+        if quote['coupon'] and discount_amount > 0:
+            coupon = Coupon.objects.select_for_update().get(pk=quote['coupon'].pk)
+            if coupon.usage_limit and coupon.usage_count >= coupon.usage_limit:
+                return Response(
+                    {"error": "This coupon has reached its usage limit."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
-        if tax_mode == 'inclusive':
-            # Displayed prices already include tax: extract the embedded portion,
-            # don't add it on top of the goods total.
-            net = (taxable_amount / (Decimal('1') + rate_factor)) if rate_factor else taxable_amount
-            tax_amount = (taxable_amount - net).quantize(Decimal('0.01'))
-            goods_total = taxable_amount
-        else:
-            tax_amount = (taxable_amount * rate_factor).quantize(Decimal('0.01'))
-            goods_total = taxable_amount + tax_amount
+        # 2b. Verify stock & deduct (side effects kept out of the pricing math).
+        # The nested savepoint guarantees a concurrency failure on a later cart
+        # line cannot commit deductions already made for earlier lines.
+        try:
+            with transaction.atomic():
+                for product, variant, qty, _price in order_items_to_create:
+                    _deduct_region_stock(product, region, qty)
+                    _deduct_variant_stock(
+                        product,
+                        variant.sku if variant else '',
+                        qty,
+                    )
+        except PaymentError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-        from apps.regions.shipping import calculate_shipping
-        shipping_cost = calculate_shipping(
-            region, country=country, state=state, postcode=postal_code, subtotal=taxable_amount,
-        )
-
-        total = goods_total + shipping_cost
+        # 2c. Consume the coupon only once the sale is actually going through.
+        if coupon is not None:
+            coupon.usage_count += 1
+            coupon.save(update_fields=['usage_count'])
 
         # 4. Create Order
         user = request.user if request.user.is_authenticated else None
@@ -414,6 +676,9 @@ class CheckoutView(views.APIView):
             tax_rate=tax_rate,
             tax_amount=tax_amount,
             shipping_cost=shipping_cost,
+            shipping_method=shipping_option['method'],
+            shipping_rate_name=shipping_option['name'],
+            shipping_estimated_days=shipping_option['estimated_days'],
             coupon_code=coupon_code if discount_amount > 0 else None,
             discount_amount=discount_amount,
             total=total,
@@ -422,7 +687,7 @@ class CheckoutView(views.APIView):
         )
 
         # 5. Create Order Items
-        for product, qty, price in order_items_to_create:
+        for product, variant, qty, price in order_items_to_create:
             # Per-line tax portion, consistent with the store tax mode.
             line_gross = price * qty
             if tax_mode == 'inclusive':
@@ -433,6 +698,8 @@ class CheckoutView(views.APIView):
             OrderItem.objects.create(
                 order=order,
                 product=product,
+                variant_sku=variant.sku if variant else '',
+                variant_name=variant.name if variant else '',
                 quantity=qty,
                 price=price,
                 tax_amount=item_tax
@@ -440,7 +707,7 @@ class CheckoutView(views.APIView):
 
         # 6. Charge via the routed gateway adapter (sandbox until live keys are set).
         try:
-            charge = gateway_adapter.charge(order, {"payment_id": payment_id})
+            charge = gateway_adapter.charge(order, gateway_payload)
         except PaymentError as exc:
             # Atomic transaction rolls back the order + stock deduction.
             return Response({"error": str(exc)}, status=status.HTTP_402_PAYMENT_REQUIRED)
@@ -470,8 +737,15 @@ class CheckoutView(views.APIView):
             raw_response=charge.get("raw", {}),
         )
 
-        # 7. Generate reportlab Invoice PDF
-        pdf_relative_path, invoice_number = generate_invoice_pdf(order)
+        # 7. Generate the invoice. A rendering/font/filesystem problem must not
+        # roll back a payment-confirmed sale; the admin download endpoint can
+        # regenerate a missing PDF later.
+        invoice_number = f"SP-{order.created_at.year}-{order.id:05d}"
+        pdf_relative_path = ''
+        try:
+            pdf_relative_path, invoice_number = generate_invoice_pdf(order)
+        except Exception:
+            logger.exception('Invoice PDF generation failed for order %s.', order.id)
         
         # Save invoice record
         invoice_details = {
@@ -494,21 +768,12 @@ class CheckoutView(views.APIView):
         # 8. Clear Cart
         cart.items.all().delete()
         
-        # Transactional order-confirmation email (region-aware template, audited).
-        # Email failures must never break checkout — the order is already saved.
-        try:
-            send_order_email('order_confirmation', order)
-        except Exception:
-            pass
-
-        # Phase E3 — fraud scoring. Wrapped in try/except inside `assess_order`
-        # as well; doubled here so an import-time error during a deploy window
-        # cannot bubble up and break checkout.
-        try:
-            from .fraud import assess_order
-            assess_order(order)
-        except Exception:
-            pass
+        # Email and fraud checks must never run against an order that later
+        # rolls back. The callback catches and logs its own failures so a
+        # committed checkout always returns its successful response.
+        transaction.on_commit(
+            lambda order_id=order.id: _run_checkout_followups(order_id)
+        )
 
         return Response({
             "message": "Checkout completed successfully!",
@@ -516,7 +781,7 @@ class CheckoutView(views.APIView):
         }, status=status.HTTP_201_CREATED)
 
 
-def get_user_refund_limit(user, currency_code):
+def get_user_refund_limit(user, region_code):
     if not user or not user.is_authenticated:
         return Decimal('0.00')
     if user.is_superuser:
@@ -526,25 +791,26 @@ def get_user_refund_limit(user, currency_code):
     if 'Admin' in roles or 'Super Admin' in roles:
         return Decimal('Infinity')
         
+    setting = SystemSetting.objects.filter(key='REFUND_LIMITS').first()
+    values = setting.value if setting and isinstance(setting.value, dict) else {}
+    role_limits = values.get('role_limits', {})
+    fallback = values.get('staff_fallback', {})
+
     limit = Decimal('0.00')
-    is_uk = currency_code.upper() == 'GBP'
-    
-    for r in roles:
-        if r == 'Customer Support Agent':
-            cur_limit = Decimal('50.00') if is_uk else Decimal('4000.00')
-        elif r == 'Customer Support Manager':
-            cur_limit = Decimal('200.00') if is_uk else Decimal('16000.00')
-        elif r == 'Operations Manager':
-            cur_limit = Decimal('1000.00') if is_uk else Decimal('80000.00')
-        else:
-            cur_limit = Decimal('0.00')
-        if cur_limit > limit:
-            limit = cur_limit
-            
+    for role in roles:
+        try:
+            candidate = Decimal(str((role_limits.get(role) or {}).get(region_code, '0')))
+        except (InvalidOperation, TypeError, ValueError):
+            candidate = Decimal('0.00')
+        limit = max(limit, candidate)
+
     if not roles and user.is_staff:
-        limit = Decimal('50.00') if is_uk else Decimal('4000.00')
-        
-    return limit
+        try:
+            limit = max(limit, Decimal(str(fallback.get(region_code, '0'))))
+        except (InvalidOperation, TypeError, ValueError):
+            pass
+
+    return max(limit, Decimal('0.00'))
 
 
 class RefundView(views.APIView):
@@ -562,7 +828,9 @@ class RefundView(views.APIView):
 
     @transaction.atomic
     def post(self, request, order_id):
-        order = get_object_or_404(Order, id=order_id)
+        # Lock the order while calculating its remaining refundable balance so
+        # concurrent admin requests cannot both refund the same funds.
+        order = get_object_or_404(Order.objects.select_for_update(), id=order_id)
 
         if not order.payment_id:
             return Response({"error": "Refund failed: Original transaction ID is missing."}, status=status.HTTP_400_BAD_REQUEST)
@@ -596,7 +864,7 @@ class RefundView(views.APIView):
             )
 
         # Gating Check: check if amount exceeds user refund limits
-        limit = get_user_refund_limit(request.user, order.currency_code)
+        limit = get_user_refund_limit(request.user, order.region.code)
         if amount > limit:
             from apps.admin_dashboard.models import ApprovalRequest
             payload = {
@@ -657,6 +925,9 @@ class RefundView(views.APIView):
         if str(request.data.get('restock', '')).lower() in ('1', 'true', 'yes'):
             for item in order.items.all():
                 _restock_region_item(item.product, order.region, item.quantity)
+                _restock_variant_item(
+                    item.product, item.variant_sku, item.quantity,
+                )
 
         if is_full:
             order.status = 'REFUNDED'
@@ -671,13 +942,12 @@ class RefundView(views.APIView):
             raw_response=result.get('raw', {}),
         )
 
-        try:
-            send_order_email(
-                'refund_processed', order,
-                extra_context={'refund_amount': str(amount)},
+        transaction.on_commit(lambda order_id=order.id, refund_amount=str(amount): (
+            _send_order_event_with_logging(
+                'refund_processed', order_id,
+                extra_context={'refund_amount': refund_amount},
             )
-        except Exception:
-            pass
+        ))
 
         return Response(
             {"message": "Refund processed.", "refund": RefundSerializer(refund).data},
@@ -702,8 +972,16 @@ class OrderAdminViewSet(viewsets.ModelViewSet):
     permission_classes = [require_permission('orders.manage')]
     pagination_class = AdminDashboardPagination
 
+    def get_permissions(self):
+        if self.action in ('list', 'retrieve', 'invoice', 'by_region', 'timeline'):
+            return [require_permission('orders.view')()]
+        return [require_permission('orders.manage')()]
+
     def get_queryset(self):
-        queryset = Order.objects.select_related('user', 'region').prefetch_related('items', 'refunds', 'invoice', 'payment_logs')
+        queryset = Order.objects.select_related('user', 'region', 'invoice').prefetch_related(
+            Prefetch('items', queryset=OrderItem.objects.select_related('product')),
+            'refunds', 'payment_logs',
+        )
         
         # Enforce Regional Restrictions for Country Managers
         user = self.request.user
@@ -773,11 +1051,11 @@ class OrderAdminViewSet(viewsets.ModelViewSet):
         from django.contrib.auth import get_user_model
         data = request.data
 
-        def dec(value, default='0'):
+        def dec(value, field, default='0'):
             try:
                 return Decimal(str(value if value not in (None, '') else default))
             except (InvalidOperation, TypeError, ValueError):
-                return Decimal(default)
+                raise ValueError(f'{field} must be a valid number.')
 
         # Resolve region from region_code (accepts legacy 'GB' for the UK store).
         raw_region = str(data.get('region_code') or data.get('region') or '').upper().strip()
@@ -794,12 +1072,27 @@ class OrderAdminViewSet(viewsets.ModelViewSet):
             return Response({'items': ['At least one item is required.']}, status=status.HTTP_400_BAD_REQUEST)
 
         resolved = []
-        for it in items:
-            sku = it.get('product_sku') or it.get('sku')
-            product = Product.objects.filter(sku=sku).first()
-            if not product:
-                return Response({'items': [f'Unknown product SKU "{sku}".']}, status=status.HTTP_400_BAD_REQUEST)
-            resolved.append((product, max(1, int(it.get('quantity') or 1)), dec(it.get('price'))))
+        try:
+            for it in items:
+                if not isinstance(it, dict):
+                    raise ValueError('Each item must be an object.')
+                sku = it.get('product_sku') or it.get('sku')
+                product = Product.objects.filter(sku=sku).first()
+                if not product:
+                    raise ValueError(f'Unknown product SKU "{sku}".')
+                if not ProductRegionConfig.objects.filter(
+                    product=product, region=region, is_visible=True,
+                ).exists():
+                    raise ValueError(f'Product "{sku}" is not available in region {region.code}.')
+                quantity = int(it.get('quantity') or 1)
+                if quantity < 1 or quantity > 10000:
+                    raise ValueError(f'Quantity for "{sku}" must be between 1 and 10,000.')
+                price = dec(it.get('price'), f'Price for "{sku}"')
+                if price < 0:
+                    raise ValueError(f'Price for "{sku}" cannot be negative.')
+                resolved.append((product, quantity, price))
+        except (TypeError, ValueError) as exc:
+            return Response({'items': [str(exc)]}, status=status.HTTP_400_BAD_REQUEST)
 
         # Optional linked customer.
         user = None
@@ -808,14 +1101,64 @@ class OrderAdminViewSet(viewsets.ModelViewSet):
             user = get_user_model().objects.filter(pk=customer_id).first()
 
         email = (data.get('email') or (user.email if user else '') or '').strip()
+        try:
+            validate_email(email)
+        except DjangoValidationError:
+            return Response({'email': ['Enter a valid email address.']}, status=status.HTTP_400_BAD_REQUEST)
+
         # Phone is mandatory on the model; fall back to the customer's phone.
         phone = (data.get('shipping_phone') or (getattr(user, 'phone_number', '') if user else '') or '').strip()
+
+        required_shipping = {
+            'shipping_name': data.get('shipping_name'),
+            'shipping_phone': phone,
+            'shipping_address_line1': data.get('shipping_address_line1'),
+            'shipping_city': data.get('shipping_city'),
+            'shipping_postal_code': data.get('shipping_postal_code'),
+            'shipping_country': data.get('shipping_country'),
+        }
+        missing = [field for field, value in required_shipping.items() if not str(value or '').strip()]
+        if missing:
+            return Response(
+                {field: ['This field is required.'] for field in missing},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        order_status = (data.get('status') or 'PENDING').upper()
+        if order_status not in dict(Order.ORDER_STATUS):
+            return Response({'status': ['Invalid order status.']}, status=status.HTTP_400_BAD_REQUEST)
+
+        payment_method = str(data.get('payment_method') or '').upper().strip()
+        if not PaymentGateway.objects.filter(
+            region=region, code=payment_method, is_enabled=True,
+        ).exists():
+            return Response(
+                {'payment_method': ['Select an enabled payment method for this region.']},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            subtotal = sum((price * qty for _, qty, price in resolved), Decimal('0'))
+            discount_amount = dec(data.get('discount_amount'), 'Discount amount')
+            shipping_cost = dec(data.get('shipping_cost'), 'Shipping cost')
+            tax_rate = dec(data.get('tax_rate'), 'Tax rate', str(region.tax_rate))
+        except ValueError as exc:
+            return Response({'pricing': [str(exc)]}, status=status.HTTP_400_BAD_REQUEST)
+        if discount_amount < 0 or shipping_cost < 0 or not Decimal('0') <= tax_rate <= Decimal('100'):
+            return Response(
+                {'pricing': ['Discount and shipping must be non-negative; tax must be from 0 to 100.']},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        discount_amount = min(discount_amount, subtotal)
+        taxable_amount = subtotal - discount_amount
+        tax_amount = (taxable_amount * tax_rate / Decimal('100')).quantize(Decimal('0.01'))
+        total = taxable_amount + tax_amount + shipping_cost
 
         with transaction.atomic():
             order = Order.objects.create(
                 user=user,
                 region=region,
-                status=(data.get('status') or 'PENDING').upper(),
+                status=order_status,
                 email=email,
                 shipping_name=(data.get('shipping_name') or '').strip(),
                 shipping_phone=phone,
@@ -827,14 +1170,15 @@ class OrderAdminViewSet(viewsets.ModelViewSet):
                 shipping_country=(data.get('shipping_country') or '').strip(),
                 # Currency is authoritative from the region, not the client.
                 currency_code=region.currency_code,
-                subtotal=dec(data.get('subtotal')),
-                tax_rate=dec(data.get('tax_rate')),
-                tax_amount=dec(data.get('tax_amount')),
-                shipping_cost=dec(data.get('shipping_cost')),
+                subtotal=subtotal,
+                tax_rate=tax_rate,
+                tax_amount=tax_amount,
+                shipping_cost=shipping_cost,
+                staff_notes=(data.get('notes') or '').strip(),
                 coupon_code=(data.get('discount_code') or None),
-                discount_amount=dec(data.get('discount_amount')),
-                total=dec(data.get('total')),
-                payment_method=(data.get('payment_method') or 'COD'),
+                discount_amount=discount_amount,
+                total=total,
+                payment_method=payment_method,
                 payment_status='PENDING',
             )
             for product, qty, price in resolved:
@@ -873,24 +1217,17 @@ class OrderAdminViewSet(viewsets.ModelViewSet):
             if new_status == 'SHIPPED':
                 # Keep legacy shipment_dispatched send for backward compat AND
                 # fire the new order_shipped template (best-effort each).
-                try:
-                    send_order_email('shipment_dispatched', order)
-                except Exception:
-                    pass
-                try:
-                    send_order_email('order_shipped', order)
-                except Exception:
-                    pass
+                _send_order_event_with_logging('shipment_dispatched', order.id)
+                _send_order_event_with_logging('order_shipped', order.id)
             elif new_status == 'DELIVERED':
-                try:
-                    send_order_email('order_delivered', order)
-                except Exception:
-                    pass
+                # Stamp the delivery time once — the review-request job counts
+                # 30 days from here, and re-saving the order must not reset it.
+                if not order.delivered_at:
+                    order.delivered_at = timezone.now()
+                    order.save(update_fields=['delivered_at'])
+                _send_order_event_with_logging('order_delivered', order.id)
             elif new_status == 'CANCELLED':
-                try:
-                    send_order_email('order_cancelled', order)
-                except Exception:
-                    pass
+                _send_order_event_with_logging('order_cancelled', order.id)
 
         return Response({"message": "Status updated successfully", "status": order.status})
 
@@ -1005,7 +1342,41 @@ class OrderAdminViewSet(viewsets.ModelViewSet):
             object_id=str(order.id),
             changes={'note': note, 'kind': kind},
         )
-        return Response({"message": "Timeline updated."}, status=status.HTTP_201_CREATED)
+        return Response({"message": "Timeline note added.", "note": note})
+
+    @action(detail=True, methods=['get', 'post'])
+    def invoice(self, request, pk=None):
+        """Generate and download PDF invoice for the order."""
+        import os
+        from django.http import HttpResponse
+        from .models import Invoice
+        order = self.get_object()
+
+        # Check or create Invoice record
+        reg_code = order.region.code if order.region else (getattr(order, 'region_code', 'GLOBAL') or 'GLOBAL')
+        invoice_obj, _ = Invoice.objects.get_or_create(
+            order=order,
+            defaults={
+                'invoice_number': f"INV-{reg_code}-{order.id:06d}",
+                'invoice_type': 'VAT_RECEIPT' if reg_code == 'UK' else 'GST_INVOICE',
+                'details': {
+                    'currency': order.currency_code,
+                    'region': reg_code,
+                }
+            }
+        )
+
+        pdf_rel_path, inv_num = generate_invoice_pdf(order)
+        full_path = os.path.join(settings.MEDIA_ROOT, pdf_rel_path)
+
+        if os.path.exists(full_path):
+            with open(full_path, 'rb') as f:
+                pdf_bytes = f.read()
+            resp = HttpResponse(pdf_bytes, content_type='application/pdf')
+            resp['Content-Disposition'] = f'attachment; filename="Invoice_Order_{order.id}_{inv_num}.pdf"'
+            return resp
+        else:
+            return Response({"error": "Failed to generate invoice PDF file."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=['get'])
     def by_region(self, request):
@@ -1175,13 +1546,10 @@ class RefundAdminViewSet(viewsets.ModelViewSet):
 
         try:
             result = refund_payment(refund.order, refund.amount, refund.reason)
-            try:
-                send_order_email(
-                    'refund_processed', refund.order,
-                    extra_context={'refund_amount': str(refund.amount)},
-                )
-            except Exception:
-                pass
+            _send_order_event_with_logging(
+                'refund_processed', refund.order_id,
+                extra_context={'refund_amount': str(refund.amount)},
+            )
             return Response({
                 "message": "Refund processed successfully",
                 "result": result
@@ -1221,32 +1589,99 @@ class InvoiceAdminViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
-import json as _json
-import os as _os
-
-from apps.admin_dashboard.models import PaymentGateway
-from apps.audit.recorder import record_audit
-from .payments import (
-    verify_stripe_signature, verify_razorpay_signature, verify_paypal_signature,
-)
+def _resolve_gateway_rows(code):
+    """Return enabled regional configurations that may own this provider event."""
+    return PaymentGateway.objects.filter(code=code, is_enabled=True).order_by('id')
 
 
-def _resolve_gateway_row(code):
-    """Find any enabled PaymentGateway row for `code` (any region) to source
-    webhook_secret + flag the integration as active. Returns None if not configured."""
-    return PaymentGateway.objects.filter(code=code, is_enabled=True).first()
+SUPPORTED_WEBHOOK_GATEWAYS = frozenset({'STRIPE', 'RAZORPAY', 'PAYPAL'})
 
 
-def _apply_order_payment_state(order, payment_status, status_field=None):
-    """Helper to safely mutate order.payment_status from a webhook event."""
-    if not order:
-        return
-    order.payment_status = payment_status
-    fields = ['payment_status', 'updated_at']
-    if status_field:
-        order.status = status_field
-        fields.append('status')
-    order.save(update_fields=fields)
+def _receive_payment_webhook(request, gateway_code):
+    """Authenticate and durably enqueue one payment-provider webhook.
+
+    Business processing happens in the scheduler so a web-worker restart cannot
+    lose an acknowledged event. The provider event id (or a SHA-256 content
+    fingerprint when the provider has none) supplies idempotency.
+    """
+    gateway_code = gateway_code.upper()
+    if gateway_code not in SUPPORTED_WEBHOOK_GATEWAYS:
+        return Response({'error': 'Unsupported webhook gateway.'}, status=status.HTTP_404_NOT_FOUND)
+
+    raw = request.body
+    if not raw or len(raw) > 1024 * 1024:
+        return Response({'error': 'Webhook payload is empty or too large.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    gateways = list(_resolve_gateway_rows(gateway_code))
+    if not gateways:
+        return Response(
+            {'error': f'{gateway_code.title()} gateway is not configured.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    adapter = None
+    for gateway in gateways:
+        candidate = get_adapter(gateway)
+        extra = gateway.extra_config or {}
+        secret = (
+            extra.get('webhook_id') if gateway_code == 'PAYPAL'
+            else extra.get('webhook_secret') or os.getenv(f'{gateway_code}_WEBHOOK_SECRET', '')
+        )
+        if candidate.verify_webhook_signature(raw, request.META, secret or ''):
+            adapter = candidate
+            break
+    if adapter is None:
+        return Response({'error': 'Invalid signature.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        payload = json.loads(raw.decode('utf-8'))
+        if not isinstance(payload, dict):
+            raise ValueError('Webhook JSON must be an object.')
+        parsed_event = adapter.parse_webhook_event(payload)
+    except (UnicodeDecodeError, ValueError, TypeError, PaymentError):
+        return Response({'error': 'Malformed payload.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    event_type = str(
+        parsed_event.get('event_type')
+        or payload.get('type')
+        or payload.get('event')
+        or payload.get('event_type')
+        or ''
+    )[:100]
+    if not event_type:
+        return Response({'error': 'Webhook event type is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Stripe and PayPal expose a true provider event id. Razorpay payloads do
+    # not always do so, therefore the exact signed body is the idempotency key.
+    provider_event_id = payload.get('id') if gateway_code in {'STRIPE', 'PAYPAL'} else None
+    event_id = str(provider_event_id or f"sha256_{hashlib.sha256(raw).hexdigest()}")[:255]
+
+    try:
+        event, created = WebhookEvent.objects.get_or_create(
+            gateway=gateway_code,
+            event_id=event_id,
+            defaults={
+                'event_type': event_type,
+                'payload': payload,
+                'status': 'PENDING',
+            },
+        )
+    except IntegrityError:
+        # A concurrent duplicate may win the unique constraint race.
+        event = WebhookEvent.objects.get(gateway=gateway_code, event_id=event_id)
+        created = False
+
+    if not created:
+        return Response({'status': 'duplicate'}, status=status.HTTP_200_OK)
+
+    record_audit(
+        'webhook.received',
+        target_type='WebhookEvent',
+        target_id=event.id,
+        summary=f'{gateway_code.title()} {event_type}',
+        changes={'gateway': gateway_code, 'event_type': event_type, 'event_id': event_id},
+    )
+    return Response({'status': 'queued'}, status=status.HTTP_202_ACCEPTED)
 
 
 class StripeWebhookView(views.APIView):
@@ -1254,76 +1689,7 @@ class StripeWebhookView(views.APIView):
     parser_classes = []  # we need raw bytes for signature verification
 
     def post(self, request):
-        raw = request.body
-        sig_header = request.META.get('HTTP_STRIPE_SIGNATURE', '')
-
-        gateway = _resolve_gateway_row('STRIPE')
-        if not gateway:
-            return Response({"error": "Stripe gateway is not configured."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        secret = (gateway.extra_config or {}).get('webhook_secret') \
-            or _os.getenv('STRIPE_WEBHOOK_SECRET', '')
-        
-        from apps.orders.payments import get_adapter
-        adapter = get_adapter(gateway)
-        if not adapter.verify_webhook_signature(raw, request.META, secret):
-            return Response({"error": "Invalid signature."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            payload = _json.loads(raw.decode('utf-8'))
-        except Exception:
-            return Response({"error": "Malformed payload."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        parsed_event = adapter.parse_webhook_event(payload)
-        event_id = parsed_event.get('payment_id') or payload.get('id') or ''
-        event_type = parsed_event.get('event_type') or payload.get('type') or ''
-        if not event_id or not event_type:
-            return Response({"error": "Webhook event id and type are required."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        we, created = WebhookEvent.objects.get_or_create(
-            gateway='STRIPE',
-            event_id=event_id,
-            defaults={
-                'event_type': event_type,
-                'payload': payload,
-                'status': 'PENDING',
-            },
-        )
-        if not created:
-            return Response({"status": "duplicate"}, status=status.HTTP_200_OK)
-        record_audit(
-            'webhook.received', target_type='WebhookEvent', target_id=we.id,
-            summary=f'Stripe {event_type}',
-            changes={'gateway': 'STRIPE', 'event_type': event_type, 'event_id': event_id},
-        )
-
-        try:
-            payment_id = parsed_event.get('payment_id')
-            order = None
-            if payment_id:
-                order = Order.objects.filter(payment_id=payment_id).first()
-            if not order and parsed_event.get('order_id'):
-                order = Order.objects.filter(id=parsed_event.get('order_id')).first()
-
-            if parsed_event.get('event_type') == 'payment.succeeded':
-                _apply_order_payment_state(order, 'PAID', status_field='PROCESSING' if order and order.status == 'PENDING' else None)
-            elif parsed_event.get('event_type') == 'payment.failed':
-                _apply_order_payment_state(order, 'FAILED')
-            elif parsed_event.get('event_type') == 'refund.processed':
-                _apply_order_payment_state(order, 'REFUNDED')
-            we.status = 'PROCESSED'
-            we.save(update_fields=['status'])
-        except Exception as exc:
-            we.status = 'FAILED'
-            we.error_message = str(exc)
-            we.error_log = str(exc)
-            we.save(update_fields=['status', 'error_message', 'error_log'])
-
-        return Response({"status": "ok"}, status=status.HTTP_200_OK)
+        return _receive_payment_webhook(request, 'STRIPE')
 
 
 class RazorpayWebhookView(views.APIView):
@@ -1331,76 +1697,7 @@ class RazorpayWebhookView(views.APIView):
     parser_classes = []
 
     def post(self, request):
-        raw = request.body
-        sig_header = request.META.get('HTTP_X_RAZORPAY_SIGNATURE', '')
-
-        gateway = _resolve_gateway_row('RAZORPAY')
-        if not gateway:
-            return Response({"error": "Razorpay gateway is not configured."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        secret = (gateway.extra_config or {}).get('webhook_secret') \
-            or _os.getenv('RAZORPAY_WEBHOOK_SECRET', '')
-        
-        from apps.orders.payments import get_adapter
-        adapter = get_adapter(gateway)
-        if not adapter.verify_webhook_signature(raw, request.META, secret):
-            return Response({"error": "Invalid signature."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            payload = _json.loads(raw.decode('utf-8'))
-        except Exception:
-            return Response({"error": "Malformed payload."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        parsed_event = adapter.parse_webhook_event(payload)
-        event_id = parsed_event.get('payment_id') or ''
-        event_type = parsed_event.get('event_type') or payload.get('event') or ''
-        if not event_id or not event_type:
-            return Response({"error": "Webhook event id and type are required."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        we, created = WebhookEvent.objects.get_or_create(
-            gateway='RAZORPAY',
-            event_id=event_id,
-            defaults={
-                'event_type': event_type,
-                'payload': payload,
-                'status': 'PENDING',
-            },
-        )
-        if not created:
-            return Response({"status": "duplicate"}, status=status.HTTP_200_OK)
-        record_audit(
-            'webhook.received', target_type='WebhookEvent', target_id=we.id,
-            summary=f'Razorpay {event_type}',
-            changes={'gateway': 'RAZORPAY', 'event_type': event_type, 'event_id': event_id},
-        )
-
-        try:
-            payment_id = parsed_event.get('payment_id')
-            order = None
-            if payment_id:
-                order = Order.objects.filter(payment_id=payment_id).first()
-            if not order and parsed_event.get('order_id'):
-                order = Order.objects.filter(id=parsed_event.get('order_id')).first()
-
-            if parsed_event.get('event_type') == 'payment.succeeded':
-                _apply_order_payment_state(order, 'PAID', status_field='PROCESSING' if order and order.status == 'PENDING' else None)
-            elif parsed_event.get('event_type') == 'payment.failed':
-                _apply_order_payment_state(order, 'FAILED')
-            elif parsed_event.get('event_type') == 'refund.processed':
-                _apply_order_payment_state(order, 'REFUNDED')
-            we.status = 'PROCESSED'
-            we.save(update_fields=['status'])
-        except Exception as exc:
-            we.status = 'FAILED'
-            we.error_message = str(exc)
-            we.error_log = str(exc)
-            we.save(update_fields=['status', 'error_message', 'error_log'])
-
-        return Response({"status": "ok"}, status=status.HTTP_200_OK)
+        return _receive_payment_webhook(request, 'RAZORPAY')
 
 
 class PaypalWebhookView(views.APIView):
@@ -1408,75 +1705,7 @@ class PaypalWebhookView(views.APIView):
     parser_classes = []
 
     def post(self, request):
-        raw = request.body
-
-        gateway = _resolve_gateway_row('PAYPAL')
-        if not gateway:
-            return Response({"error": "PayPal gateway is not configured."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        secret = (gateway.extra_config or {}).get('webhook_id') \
-            or _os.getenv('PAYPAL_WEBHOOK_ID', '')
-        
-        from apps.orders.payments import get_adapter
-        adapter = get_adapter(gateway)
-        if not adapter.verify_webhook_signature(raw, request.META, secret):
-            return Response({"error": "Invalid signature."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            payload = _json.loads(raw.decode('utf-8'))
-        except Exception:
-            return Response({"error": "Malformed payload."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        parsed_event = adapter.parse_webhook_event(payload)
-        event_id = parsed_event.get('payment_id') or payload.get('id') or ''
-        event_type = parsed_event.get('event_type') or payload.get('event_type') or ''
-        if not event_id or not event_type:
-            return Response({"error": "Webhook event id and type are required."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        we, created = WebhookEvent.objects.get_or_create(
-            gateway='PAYPAL',
-            event_id=event_id,
-            defaults={
-                'event_type': event_type,
-                'payload': payload,
-                'status': 'PENDING',
-            },
-        )
-        if not created:
-            return Response({"status": "duplicate"}, status=status.HTTP_200_OK)
-        record_audit(
-            'webhook.received', target_type='WebhookEvent', target_id=we.id,
-            summary=f'PayPal {event_type}',
-            changes={'gateway': 'PAYPAL', 'event_type': event_type, 'event_id': event_id},
-        )
-
-        try:
-            payment_id = parsed_event.get('payment_id')
-            order = None
-            if payment_id:
-                order = Order.objects.filter(payment_id=payment_id).first()
-            if not order and parsed_event.get('order_id'):
-                order = Order.objects.filter(id=parsed_event.get('order_id')).first()
-
-            if parsed_event.get('event_type') == 'payment.succeeded':
-                _apply_order_payment_state(order, 'PAID', status_field='PROCESSING' if order and order.status == 'PENDING' else None)
-            elif parsed_event.get('event_type') == 'payment.failed':
-                _apply_order_payment_state(order, 'FAILED')
-            elif parsed_event.get('event_type') == 'refund.processed':
-                _apply_order_payment_state(order, 'REFUNDED')
-            we.status = 'PROCESSED'
-            we.save(update_fields=['status'])
-        except Exception as exc:
-            we.status = 'FAILED'
-            we.error_message = str(exc)
-            we.error_log = str(exc)
-            we.save(update_fields=['status', 'error_message', 'error_log'])
-
-        return Response({"status": "ok"}, status=status.HTTP_200_OK)
+        return _receive_payment_webhook(request, 'PAYPAL')
 
 
 class UnifiedPaymentWebhookView(views.APIView):
@@ -1488,80 +1717,7 @@ class UnifiedPaymentWebhookView(views.APIView):
     parser_classes = []
 
     def post(self, request, gateway_code):
-        raw = request.body
-        gateway_code = gateway_code.upper()
-        gateway = _resolve_gateway_row(gateway_code)
-        if not gateway:
-            return Response({"error": f"Gateway {gateway_code} is not configured."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        from apps.orders.payments import get_adapter
-        adapter = get_adapter(gateway)
-        
-        secret = (gateway.extra_config or {}).get('webhook_secret') \
-            or (gateway.extra_config or {}).get('webhook_id') \
-            or _os.getenv(f'{gateway_code}_WEBHOOK_SECRET', '')
-
-        if not adapter.verify_webhook_signature(raw, request.META, secret):
-            return Response({"error": "Invalid signature."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            payload = _json.loads(raw.decode('utf-8'))
-        except Exception:
-            return Response({"error": "Malformed payload."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        parsed_event = adapter.parse_webhook_event(payload)
-        event_id = parsed_event.get('payment_id') or str(payload.get('id') or '')
-        event_type = parsed_event.get('event_type') or str(payload.get('type') or payload.get('event') or '')
-        
-        if not event_id:
-            import hashlib
-            event_id = f"evt_{hashlib.md5(raw).hexdigest()}"
-
-        we, created = WebhookEvent.objects.get_or_create(
-            gateway=gateway_code,
-            event_id=event_id,
-            defaults={
-                'event_type': event_type,
-                'payload': payload,
-                'status': 'PENDING',
-            },
-        )
-        if not created:
-            return Response({"status": "duplicate"}, status=status.HTTP_200_OK)
-            
-        record_audit(
-            'webhook.received', target_type='WebhookEvent', target_id=we.id,
-            summary=f'{gateway_code} {event_type}',
-            changes={'gateway': gateway_code, 'event_type': event_type, 'event_id': event_id},
-        )
-
-        try:
-            payment_id = parsed_event.get('payment_id')
-            order = None
-            if payment_id:
-                order = Order.objects.filter(payment_id=payment_id).first()
-            if not order and parsed_event.get('order_id'):
-                order = Order.objects.filter(id=parsed_event.get('order_id')).first()
-
-            if parsed_event.get('event_type') == 'payment.succeeded':
-                _apply_order_payment_state(order, 'PAID', status_field='PROCESSING' if order and order.status == 'PENDING' else None)
-            elif parsed_event.get('event_type') == 'payment.failed':
-                _apply_order_payment_state(order, 'FAILED')
-            elif parsed_event.get('event_type') == 'refund.processed':
-                _apply_order_payment_state(order, 'REFUNDED')
-
-            we.status = 'PROCESSED'
-            we.save(update_fields=['status'])
-        except Exception as exc:
-            we.status = 'FAILED'
-            we.error_message = str(exc)
-            we.error_log = str(exc)
-            we.save(update_fields=['status', 'error_message', 'error_log'])
-
-        return Response({"status": "ok"}, status=status.HTTP_200_OK)
+        return _receive_payment_webhook(request, gateway_code)
 
 
 

@@ -18,16 +18,14 @@ from __future__ import annotations
 
 import csv
 import datetime as _dt
-from decimal import Decimal
-
-from django.db.models import Count, F, Max, Min, Q, Sum
+from django.db.models import Count, F, Max, Min, Sum
 from django.db.models.functions import TruncDate
 from django.http import StreamingHttpResponse
 from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
-from apps.orders.models import Cart, CartItem, Order, OrderItem
+from apps.orders.models import Cart, Order, OrderItem
 from apps.users.permissions import require_permission
 
 
@@ -55,7 +53,9 @@ def _since(days: int):
 
 
 def _wants_csv(request) -> bool:
-    return (request.query_params.get('format') or '').lower() == 'csv'
+    fmt = (request.query_params.get('format') or '').lower()
+    exp = (request.query_params.get('export') or '').lower()
+    return fmt in ('csv', 'true') or exp == 'csv'
 
 
 class _Echo:
@@ -222,6 +222,20 @@ def repeat_cohort(request):
                 three_plus += 1
     total_customers = one_time + repeat
     repeat_rate = round(repeat / total_customers, 4) if total_customers else 0.0
+
+    if _wants_csv(request):
+        return _stream_csv(
+            f'sclero-repeat-cohort-{_today_str()}.csv',
+            ['metric', 'value'],
+            [
+                ['repeat_rate', repeat_rate],
+                ['one_time_customers', one_time],
+                ['repeat_customers', repeat],
+                ['three_plus_orders', three_plus],
+                ['total_customers', total_customers],
+            ]
+        )
+
     return Response({
         'repeat_rate': repeat_rate,
         'one_time': one_time,
@@ -265,6 +279,19 @@ def abandoned_conversion(request):
             recovered += 1
     abandoned = total - recovered
     rate = round(recovered / total, 4) if total else 0.0
+
+    if _wants_csv(request):
+        return _stream_csv(
+            f'sclero-abandoned-conversion-{_today_str()}.csv',
+            ['metric', 'value'],
+            [
+                ['total_carts_with_items', total],
+                ['recovered_carts', recovered],
+                ['abandoned_carts', abandoned],
+                ['recovery_rate', rate],
+            ]
+        )
+
     return Response({
         'total_carts_with_items': total,
         'recovered': recovered,

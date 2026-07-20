@@ -1,14 +1,13 @@
 import os
-from django.test import TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.conf import settings
 from rest_framework import status
 from rest_framework.test import APITestCase
-from apps.regions.models import Region, Warehouse
+from apps.regions.models import Region, ShippingRate, ShippingZone, Warehouse
 from apps.products.models import Product, ProductRegionConfig
 from apps.inventory.models import StockLevel
-from apps.orders.models import Cart, CartItem, Order, Invoice
+from apps.orders.models import Invoice
 
 User = get_user_model()
 
@@ -46,6 +45,15 @@ class ScleroProteinsTests(APITestCase):
         from apps.admin_dashboard.models import PaymentGateway
         PaymentGateway.objects.create(
             code='RAZORPAY', display_name='Razorpay', region=self.region_in, is_enabled=True, secret_key='test_secret'
+        )
+
+        # Checkout intentionally has no hardcoded shipping fallback; tests must
+        # provide the same explicit zone/rate configuration required in admin.
+        zone_in = ShippingZone.objects.create(
+            region=self.region_in, name='India test zone', countries=['IN'], is_active=True,
+        )
+        ShippingRate.objects.create(
+            zone=zone_in, name='Standard test delivery', rate_type='FLAT', price='100.00', is_active=True,
         )
 
 

@@ -3,8 +3,10 @@ import sys
 import tempfile
 from pathlib import Path
 from datetime import timedelta
+from urllib.parse import urlparse
 from dotenv import load_dotenv
 from django.core.exceptions import ImproperlyConfigured
+from corsheaders.defaults import default_headers
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -120,6 +122,7 @@ INSTALLED_APPS = [
     'apps.fraud.apps.FraudConfig',
     'apps.webhooks.apps.WebhooksConfig',
     'apps.glossary.apps.GlossaryConfig',
+    'apps.push_notifications.apps.PushNotificationsConfig',
 ]
 
 MIDDLEWARE = [
@@ -131,6 +134,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'apps.users.middleware.AuthCookieMiddleware',
     'apps.audit.context.AuditContextMiddleware',
 ]
 
@@ -309,6 +313,7 @@ CORS_ALLOWED_ORIGINS = [
     ).split(',') if o.strip()
 ]
 CORS_ALLOW_CREDENTIALS = env_bool('CORS_ALLOW_CREDENTIALS', True)
+CORS_ALLOW_HEADERS = (*default_headers, 'x-sclero-client')
 
 # CSRF: the trusted origins that may submit forms / unsafe methods. In the ccTLD
 # deployment the frontend calls the API same-origin (per domain), so list every
@@ -321,6 +326,18 @@ CSRF_TRUSTED_ORIGINS = [
         'https://scleroproteins.com,https://www.scleroproteins.com',
     ).split(',') if o.strip()
 ]
+
+if not DEBUG and not _BUILDING_STATIC:
+    insecure_cors = [origin for origin in CORS_ALLOWED_ORIGINS if urlparse(origin).scheme != 'https']
+    insecure_csrf = [origin for origin in CSRF_TRUSTED_ORIGINS if urlparse(origin).scheme != 'https']
+    if insecure_cors:
+        raise ImproperlyConfigured(
+            f"Production CORS origins must use https: {', '.join(insecure_cors)}"
+        )
+    if insecure_csrf:
+        raise ImproperlyConfigured(
+            f"Production CSRF trusted origins must use https: {', '.join(insecure_csrf)}"
+        )
 
 # Running behind nginx, which terminates TLS and forwards the original scheme in
 # X-Forwarded-Proto. This lets Django know the request was secure.
@@ -342,14 +359,19 @@ if not DEBUG:
     SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
     SECURE_CROSS_ORIGIN_OPENER_POLICY = 'same-origin'
     X_FRAME_OPTIONS = 'DENY'
-    # nginx already redirects http->https; leave Django's redirect off to avoid
-    # double-redirect loops behind the proxy.
-    SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'False') == 'True'
+    # Defense in depth: nginx redirects first, while Django also rejects plain
+    # HTTP if the application is ever reached through another trusted proxy.
+    SECURE_SSL_REDIRECT = env_bool('SECURE_SSL_REDIRECT', True)
+
+# Bound non-file request bodies globally. The media endpoint separately limits
+# individual uploads to 25 MiB, so this leaves room for multipart overhead.
+DATA_UPLOAD_MAX_MEMORY_SIZE = int(os.getenv('DATA_UPLOAD_MAX_MEMORY_SIZE', str(30 * 1024 * 1024)))
+FILE_UPLOAD_MAX_MEMORY_SIZE = int(os.getenv('FILE_UPLOAD_MAX_MEMORY_SIZE', str(10 * 1024 * 1024)))
 
 # DRF Configurations
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'apps.users.authentication.CookieOrHeaderJWTAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
@@ -370,6 +392,7 @@ REST_FRAMEWORK = {
         'checkout': os.getenv('DRF_THROTTLE_CHECKOUT', '1000/hour' if DEBUG else '100/hour'),
         'analytics': os.getenv('DRF_THROTTLE_ANALYTICS', '10000/min' if DEBUG else '600/min'),
         'media_upload': os.getenv('DRF_THROTTLE_MEDIA_UPLOAD', '1000/hour' if DEBUG else '100/hour'),
+        'push': os.getenv('DRF_THROTTLE_PUSH', '1000/hour' if DEBUG else '30/hour'),
     },
 }
 
@@ -385,8 +408,17 @@ EMAIL_HOST = os.getenv('EMAIL_HOST', 'localhost')
 EMAIL_PORT = int(os.getenv('EMAIL_PORT', '1025'))
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
-EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'False') == 'True'
-DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'support@scleroproteins.co.uk')
+EMAIL_USE_TLS = env_bool('EMAIL_USE_TLS', False)
+EMAIL_USE_SSL = env_bool('EMAIL_USE_SSL', False)
+EMAIL_TIMEOUT = int(os.getenv('EMAIL_TIMEOUT', '15'))
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'webmaster@localhost').strip()
+SERVER_EMAIL = os.getenv('SERVER_EMAIL', DEFAULT_FROM_EMAIL).strip()
+
+# Standards-based browser Web Push. The private key may be a PEM file path or
+# a value accepted by pywebpush; production mounts the generated key read-only.
+VAPID_PUBLIC_KEY = os.getenv('VAPID_PUBLIC_KEY', '').strip()
+VAPID_PRIVATE_KEY = os.getenv('VAPID_PRIVATE_KEY', '').strip()
+VAPID_SUBJECT = os.getenv('VAPID_SUBJECT', f'mailto:{DEFAULT_FROM_EMAIL}').strip()
 SITE_URL = os.getenv('SITE_URL', '')
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', os.getenv('NEXT_PUBLIC_GOOGLE_CLIENT_ID', '')).strip()
 COMPANY_REGISTRATION_NUMBER = os.getenv('COMPANY_REGISTRATION_NUMBER', '').strip()
@@ -395,6 +427,8 @@ IN_GSTIN = os.getenv('IN_GSTIN', '').strip()
 if not DEBUG and not _BUILDING_STATIC and not SITE_URL.startswith('https://'):
     raise ImproperlyConfigured('SITE_URL must be an absolute https:// URL in production.')
 if not DEBUG and not _BUILDING_STATIC:
+    if not DEFAULT_FROM_EMAIL or DEFAULT_FROM_EMAIL.endswith('@localhost'):
+        raise ImproperlyConfigured('DEFAULT_FROM_EMAIL must be configured for production.')
     missing_legal = [
         name for name, value in {
             'COMPANY_REGISTRATION_NUMBER': COMPANY_REGISTRATION_NUMBER,
@@ -406,6 +440,22 @@ if not DEBUG and not _BUILDING_STATIC:
         raise ImproperlyConfigured(
             f"Production legal identifiers are missing: {', '.join(missing_legal)}"
         )
+    non_delivery_backends = {
+        'django.core.mail.backends.console.EmailBackend',
+        'django.core.mail.backends.locmem.EmailBackend',
+        'django.core.mail.backends.dummy.EmailBackend',
+        'django.core.mail.backends.filebased.EmailBackend',
+    }
+    if EMAIL_BACKEND in non_delivery_backends:
+        raise ImproperlyConfigured(
+            'EMAIL_BACKEND must deliver real mail in production; console, memory, '
+            'dummy and file backends are not allowed.'
+        )
+    if EMAIL_BACKEND == 'django.core.mail.backends.smtp.EmailBackend':
+        if not EMAIL_HOST or EMAIL_HOST in {'localhost', '127.0.0.1', '::1'}:
+            raise ImproperlyConfigured('EMAIL_HOST must point to a real SMTP service in production.')
+        if EMAIL_USE_TLS and EMAIL_USE_SSL:
+            raise ImproperlyConfigured('EMAIL_USE_TLS and EMAIL_USE_SSL cannot both be enabled.')
 
 # Simple JWT Settings
 SIMPLE_JWT = {
@@ -417,3 +467,11 @@ SIMPLE_JWT = {
     'SIGNING_KEY': SECRET_KEY,
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
+
+# Browser sessions use HttpOnly cookies so injected JavaScript cannot extract
+# access or refresh tokens. Bearer headers remain supported for API clients.
+AUTH_COOKIE_MODE = env_bool('AUTH_COOKIE_MODE', True)
+AUTH_COOKIE_ACCESS_NAME = os.getenv('AUTH_COOKIE_ACCESS_NAME', 'sclero_access')
+AUTH_COOKIE_REFRESH_NAME = os.getenv('AUTH_COOKIE_REFRESH_NAME', 'sclero_refresh')
+AUTH_COOKIE_ACCESS_AGE = int(SIMPLE_JWT['ACCESS_TOKEN_LIFETIME'].total_seconds())
+AUTH_COOKIE_REFRESH_AGE = int(SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'].total_seconds())

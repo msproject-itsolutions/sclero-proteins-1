@@ -57,6 +57,7 @@ services:
       GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-60}
     volumes:
       - media:/app/media
+      - ./secrets/vapid_private.pem:/run/secrets/vapid_private.pem:ro
     depends_on:
       db:
         condition: service_healthy
@@ -82,6 +83,42 @@ services:
       - application
     <<: *default-security
 
+  scheduler:
+    image: sclero-proteins-backend:${APP_IMAGE_TAG:-local}
+    build:
+      context: ./backend
+    command: python manage.py run_scheduler
+    restart: unless-stopped
+    init: true
+    env_file: .env
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      ALLOW_SQLITE_FALLBACK: "False"
+      SKIP_STARTUP_MAINTENANCE: "True"
+      SCHEDULE_WEBHOOK_SECONDS: ${SCHEDULE_WEBHOOK_SECONDS:-60}
+      SCHEDULE_EMAIL_SYNC_SECONDS: ${SCHEDULE_EMAIL_SYNC_SECONDS:-900}
+      SCHEDULE_EMAIL_RETRY_SECONDS: ${SCHEDULE_EMAIL_RETRY_SECONDS:-300}
+      SCHEDULE_CART_SECONDS: ${SCHEDULE_CART_SECONDS:-3600}
+      SCHEDULE_REVIEW_SECONDS: ${SCHEDULE_REVIEW_SECONDS:-86400}
+      SCHEDULE_PUSH_SECONDS: ${SCHEDULE_PUSH_SECONDS:-60}
+      SCHEDULER_LEASE_SECONDS: ${SCHEDULER_LEASE_SECONDS:-300}
+    volumes:
+      - media:/app/media
+      - ./secrets/vapid_private.pem:/run/secrets/vapid_private.pem:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    stop_grace_period: 30s
+    mem_limit: ${SCHEDULER_MEMORY_LIMIT:-384m}
+    cpus: ${SCHEDULER_CPUS:-0.5}
+    pids_limit: 128
+    logging: *default-logging
+    networks:
+      - database
+      - application
+    <<: *default-security
+
   frontend:
     image: sclero-proteins-frontend:${APP_IMAGE_TAG:-local}
     build:
@@ -92,12 +129,16 @@ services:
         NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:?set NEXT_PUBLIC_SITE_URL in .env}
         NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY:-}
         NEXT_PUBLIC_GA4_ID: ${NEXT_PUBLIC_GA4_ID:-}
+        NEXT_PUBLIC_GTM_ID: ${NEXT_PUBLIC_GTM_ID:-}
+        NEXT_PUBLIC_GOOGLE_MERCHANT_ID: ${NEXT_PUBLIC_GOOGLE_MERCHANT_ID:-}
         NEXT_PUBLIC_META_PIXEL_ID: ${NEXT_PUBLIC_META_PIXEL_ID:-}
         NEXT_PUBLIC_TIKTOK_PIXEL_ID: ${NEXT_PUBLIC_TIKTOK_PIXEL_ID:-}
         NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
         NEXT_PUBLIC_COMPANY_REGISTRATION_NUMBER: ${COMPANY_REGISTRATION_NUMBER:-}
         NEXT_PUBLIC_IN_GSTIN: ${IN_GSTIN:-}
         NEXT_PUBLIC_TRUSTPILOT_BUSINESS_UNIT_ID: ${NEXT_PUBLIC_TRUSTPILOT_BUSINESS_UNIT_ID:-}
+        NEXT_PUBLIC_IMG_UNOPTIMIZED: ${NEXT_PUBLIC_IMG_UNOPTIMIZED:-false}
+        CSP_REPORT_ONLY: ${CSP_REPORT_ONLY:-false}
     restart: unless-stopped
     init: true
     environment:

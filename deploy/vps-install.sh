@@ -4,14 +4,18 @@ set -Eeuo pipefail
 readonly DEFAULT_DOMAINS="scleroproteins.co.uk,www.scleroproteins.co.uk,scleroproteins.in,www.scleroproteins.in,scleroproteins.com,www.scleroproteins.com"
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+original_args=("$@")
 primary_domain="scleroproteins.co.uk"
 domains_csv="$DEFAULT_DOMAINS"
 certbot_email=""
 app_only=false
 skip_backup_cron=false
+skip_release_backup=false
 site_name="scleroproteins"
 nginx_changed=false
 nginx_backup=""
+release_replaced=false
+previous_image_tag=""
 
 usage() {
   cat <<'EOF'
@@ -24,6 +28,7 @@ Options:
   --domains CSV             Comma-separated SAN hostnames
   --app-only                Start and validate containers; do not change host nginx/TLS
   --skip-backup-cron        Do not install the daily backup cron entry
+  --skip-release-backup     Skip the automatic backup (new empty installs only)
   --help                    Show this help
 
 Prerequisites:
@@ -51,6 +56,43 @@ run_root() {
   fi
 }
 
+install_host_dependencies() {
+  if command -v docker >/dev/null &&
+    docker compose version >/dev/null 2>&1 &&
+    command -v curl >/dev/null && command -v git >/dev/null &&
+    command -v nginx >/dev/null && command -v certbot >/dev/null &&
+    command -v openssl >/dev/null; then
+    return
+  fi
+
+  [[ -r /etc/os-release ]] ||
+    die "Automatic dependency installation requires Ubuntu or Debian"
+  # shellcheck disable=SC1091
+  . /etc/os-release
+  [[ "${ID:-}" == "ubuntu" || "${ID:-}" == "debian" ]] ||
+    die "Automatic dependency installation supports Ubuntu/Debian only"
+  if [[ "$EUID" -ne 0 ]]; then
+    command -v sudo >/dev/null || die "Run this installer as root to install VPS dependencies"
+    exec sudo "$repo_dir/deploy/vps-install.sh" "${original_args[@]}"
+  fi
+
+  log "Installing missing VPS dependencies"
+  run_root apt-get update
+  run_root env DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    ca-certificates certbot curl git nginx openssl
+  if ! command -v docker >/dev/null; then
+    run_root env DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io
+  fi
+  if ! docker compose version >/dev/null 2>&1; then
+    if ! run_root env DEBIAN_FRONTEND=noninteractive apt-get install -y docker-compose-v2; then
+      run_root env DEBIAN_FRONTEND=noninteractive apt-get install -y docker-compose-plugin
+    fi
+  fi
+  run_root systemctl enable --now docker nginx
+  docker compose version >/dev/null 2>&1 ||
+    die "Docker Compose v2 could not be installed"
+}
+
 env_value() {
   local key="$1"
   local value
@@ -65,6 +107,13 @@ validate_domain() {
 
 restore_nginx() {
   local exit_code=$?
+  if [[ "$exit_code" -ne 0 && "$release_replaced" == true && -n "$previous_image_tag" ]]; then
+    echo "Deployment failed; attempting to restore the previous application images." >&2
+    sed -i "s/^APP_IMAGE_TAG=.*/APP_IMAGE_TAG=${previous_image_tag}/" "$repo_dir/.env"
+    if ! docker compose up -d --wait --force-recreate --remove-orphans; then
+      echo "Automatic application rollback failed; use the verified backup and inspect container logs." >&2
+    fi
+  fi
   if [[ "$exit_code" -ne 0 && "$nginx_changed" == true ]]; then
     echo "Deployment failed; restoring the previous Sclero nginx site." >&2
     if [[ -n "$nginx_backup" && -f "$nginx_backup" ]]; then
@@ -106,6 +155,10 @@ while [[ $# -gt 0 ]]; do
       skip_backup_cron=true
       shift
       ;;
+    --skip-release-backup)
+      skip_release_backup=true
+      shift
+      ;;
     --help|-h)
       usage
       exit 0
@@ -117,6 +170,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 cd "$repo_dir"
+
+install_host_dependencies
 
 if [[ ! -f .env ]]; then
   command -v openssl >/dev/null ||
@@ -138,6 +193,31 @@ if [[ ! -f .env ]]; then
 fi
 
 chmod 600 .env
+
+# Generate a dedicated P-256 VAPID key once. The private key is mounted into
+# the backend and scheduler read-only; only the public browser key enters .env.
+vapid_private_key="$repo_dir/secrets/vapid_private.pem"
+if [[ ! -s "$vapid_private_key" ]]; then
+  command -v openssl >/dev/null || die "openssl is required to generate Web Push keys"
+  command -v tail >/dev/null || die "tail is required to derive the Web Push public key"
+  mkdir -p "$repo_dir/secrets"
+  umask 077
+  openssl ecparam -name prime256v1 -genkey -noout -out "$vapid_private_key"
+  chmod 600 "$vapid_private_key"
+fi
+vapid_public_key="$(
+  openssl ec -in "$vapid_private_key" -pubout -conv_form uncompressed -outform DER 2>/dev/null |
+    tail -c 65 |
+    openssl base64 -A |
+    tr '+/' '-_' |
+    tr -d '='
+)"
+[[ -n "$vapid_public_key" ]] || die "Unable to derive the Web Push public key"
+if grep -q '^VAPID_PUBLIC_KEY=' .env; then
+  sed -i "s|^VAPID_PUBLIC_KEY=.*|VAPID_PUBLIC_KEY=${vapid_public_key}|" .env
+else
+  printf '\nVAPID_PUBLIC_KEY=%s\n' "$vapid_public_key" >> .env
+fi
 
 if grep -Eq '(^|=)CHANGE_ME' .env; then
   die ".env still contains CHANGE_ME placeholders"
@@ -208,7 +288,7 @@ if [[ "$app_only" == false && "$certificate_ready" == false ]]; then
 fi
 
 log "Checking repository and shared-host safety"
-[[ -z "$(git status --porcelain)" ]] ||
+[[ -z "$(git -c safe.directory="$repo_dir" status --porcelain)" ]] ||
   die "Git checkout is dirty; commit or stash changes before deployment"
 ./deploy/preflight.sh
 
@@ -224,23 +304,56 @@ if [[ "$app_only" == false ]]; then
   done
 fi
 
-tag="$(git rev-parse --short=12 HEAD)"
+previous_image_tag="$(env_value APP_IMAGE_TAG)"
+tag="$(git -c safe.directory="$repo_dir" rev-parse --short=12 HEAD)"
 if grep -q '^APP_IMAGE_TAG=' .env; then
   sed -i "s/^APP_IMAGE_TAG=.*/APP_IMAGE_TAG=${tag}/" .env
 else
   printf '\nAPP_IMAGE_TAG=%s\n' "$tag" >> .env
 fi
 
-log "Building and starting the isolated application stack"
+existing_db="$(docker compose ps -q db 2>/dev/null || true)"
+existing_backend="$(docker compose ps -q backend 2>/dev/null || true)"
+project_name="$(env_value COMPOSE_PROJECT_NAME)"
+project_name="${project_name:-sclero-proteins}"
+existing_volumes="$(
+  docker volume ls \
+    --filter "label=com.docker.compose.project=${project_name}" \
+    --format '{{.Name}}'
+)"
+if [[ "$skip_release_backup" == true && (
+  -n "$existing_db" || -n "$existing_backend" || -n "$existing_volumes"
+) ]]; then
+  die "--skip-release-backup is refused because existing deployment data was detected"
+elif [[ "$skip_release_backup" == false && -n "$existing_db" && -n "$existing_backend" ]]; then
+  log "Creating a verified database and media backup before replacement"
+  BACKUP_DIR="${BACKUP_DIR:-/var/backups/sclero-proteins}" ./deploy/backup.sh
+elif [[ "$skip_release_backup" == false ]]; then
+  if [[ -n "$existing_volumes" ]]; then
+    die "Persistent deployment volumes exist but the current stack is not running; start it and rerun so it can be backed up"
+  fi
+  log "No existing deployment data found; continuing with a fresh empty volume set"
+fi
+
+log "Building and replacing the isolated application stack"
 docker compose build --pull
-docker compose up -d --wait
+release_replaced=true
+docker compose up -d --wait --force-recreate --remove-orphans
 docker compose ps
 curl -fsS -H "Host: ${primary_domain}" \
   "http://127.0.0.1:${port}/api/health/ready/" >/dev/null
+curl -fsS -H "Host: ${primary_domain}" \
+  "http://127.0.0.1:${port}/" >/dev/null
+curl -fsS -H "Host: ${primary_domain}" \
+  "http://127.0.0.1:${port}/api/products/" >/dev/null
+curl -fsS -H "Host: ${primary_domain}" \
+  "http://127.0.0.1:${port}/api/admin/hero-banners/active/" >/dev/null
 
 log "Running production application checks"
 docker compose exec -T backend python manage.py check --deploy
 docker compose exec -T backend python manage.py makemigrations --check --dry-run
+docker compose exec -T backend python manage.py migrate_datauri_media --base-url "$site_url"
+docker compose exec -T backend python manage.py verify_storefront_content
 
 if [[ "$app_only" == false ]]; then
   log "Configuring the dedicated host nginx site"
@@ -319,6 +432,7 @@ EOF
 fi
 
 nginx_changed=false
+release_replaced=false
 trap - EXIT
 
 log "Deployment completed successfully"

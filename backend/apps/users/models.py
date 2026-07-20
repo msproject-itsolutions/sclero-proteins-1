@@ -200,6 +200,7 @@ class SupportTicket(models.Model):
         ('CRITICAL', 'Critical'),
     ]
     email = models.EmailField(db_index=True)
+    external_message_id = models.CharField(max_length=255, null=True, blank=True, unique=True)
     user = models.ForeignKey('users.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='support_tickets')
     subject = models.CharField(max_length=255)
     message = models.TextField()
