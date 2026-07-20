@@ -53,6 +53,8 @@ services:
       DB_HOST: db
       DB_PORT: "5432"
       ALLOW_SQLITE_FALLBACK: "False"
+      # Public HTTPS is enforced by host nginx. Backend traffic is private HTTP.
+      SECURE_SSL_REDIRECT: "False"
       GUNICORN_WORKERS: ${GUNICORN_WORKERS:-3}
       GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-60}
     volumes:
@@ -95,6 +97,7 @@ services:
       DB_HOST: db
       DB_PORT: "5432"
       ALLOW_SQLITE_FALLBACK: "False"
+      SECURE_SSL_REDIRECT: "False"
       SKIP_STARTUP_MAINTENANCE: "True"
       SCHEDULE_WEBHOOK_SECONDS: ${SCHEDULE_WEBHOOK_SECONDS:-60}
       SCHEDULE_EMAIL_SYNC_SECONDS: ${SCHEDULE_EMAIL_SYNC_SECONDS:-900}

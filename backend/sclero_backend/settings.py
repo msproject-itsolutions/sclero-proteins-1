@@ -359,9 +359,10 @@ if not DEBUG:
     SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
     SECURE_CROSS_ORIGIN_OPENER_POLICY = 'same-origin'
     X_FRAME_OPTIONS = 'DENY'
-    # Defense in depth: nginx redirects first, while Django also rejects plain
-    # HTTP if the application is ever reached through another trusted proxy.
-    SECURE_SSL_REDIRECT = env_bool('SECURE_SSL_REDIRECT', True)
+    # The backend is reachable only on the private Compose network. The public
+    # host nginx owns ports 80/443 and performs the HTTPS redirect; enabling a
+    # second redirect here would turn internal health/SSR requests into 301s.
+    SECURE_SSL_REDIRECT = env_bool('SECURE_SSL_REDIRECT', False)
 
 # Bound non-file request bodies globally. The media endpoint separately limits
 # individual uploads to 25 MiB, so this leaves room for multipart overhead.
