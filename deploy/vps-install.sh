@@ -16,6 +16,8 @@ nginx_changed=false
 nginx_backup=""
 release_replaced=false
 previous_image_tag=""
+candidate_tag=""
+failure_log=""
 
 usage() {
   cat <<'EOF'
@@ -107,6 +109,19 @@ validate_domain() {
 
 restore_nginx() {
   local exit_code=$?
+  if [[ "$exit_code" -ne 0 && "$release_replaced" == true ]]; then
+    local log_dir="${DEPLOY_LOG_DIR:-/var/log/sclero-proteins}"
+    local log_name="failed-deploy-${candidate_tag:-unknown}-$(date -u +%Y%m%dT%H%M%SZ).log"
+    run_root install -d -m 0750 "$log_dir" || true
+    failure_log="${log_dir}/${log_name}"
+    {
+      echo "Failed release: ${candidate_tag:-unknown}"
+      echo "Captured at: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      docker compose ps || true
+      docker compose logs --no-color --tail=250 backend scheduler frontend edge db || true
+    } | run_root tee "$failure_log" >&2 || true
+    echo "Failed-release diagnostics saved to: $failure_log" >&2
+  fi
   if [[ "$exit_code" -ne 0 && "$release_replaced" == true && -n "$previous_image_tag" ]]; then
     echo "Deployment failed; attempting to restore the previous application images." >&2
     sed -i "s/^APP_IMAGE_TAG=.*/APP_IMAGE_TAG=${previous_image_tag}/" "$repo_dir/.env"
@@ -306,6 +321,7 @@ fi
 
 previous_image_tag="$(env_value APP_IMAGE_TAG)"
 tag="$(git -c safe.directory="$repo_dir" rev-parse --short=12 HEAD)"
+candidate_tag="$tag"
 if grep -q '^APP_IMAGE_TAG=' .env; then
   sed -i "s/^APP_IMAGE_TAG=.*/APP_IMAGE_TAG=${tag}/" .env
 else
@@ -337,6 +353,18 @@ fi
 
 log "Building and replacing the isolated application stack"
 docker compose build --pull
+
+log "Validating the candidate backend before touching live containers"
+docker compose run --rm -T --no-deps \
+  -e SKIP_STARTUP_MAINTENANCE=True \
+  backend python manage.py check --deploy
+docker compose run --rm -T --no-deps \
+  -e SKIP_STARTUP_MAINTENANCE=True \
+  backend python manage.py makemigrations --check --dry-run
+docker compose run --rm -T --no-deps \
+  -e SKIP_STARTUP_MAINTENANCE=True \
+  backend python manage.py migrate --plan
+
 release_replaced=true
 docker compose up -d --wait --force-recreate --remove-orphans
 docker compose ps
