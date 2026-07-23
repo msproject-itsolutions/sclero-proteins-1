@@ -45,7 +45,7 @@ from apps.admin_dashboard.views import (
     ApprovalRequestViewSet, PublishedContentPageListView, PublishedContentPageDetailView,
     CronJobRunViewSet, PublishedPolicyPagesView,
     PublishedBlogPostListView, PublishedBlogPostDetailView, PublicSiteSettingView,
-    StoreConfigView, TaxSettingsAdminView,
+    StoreConfigView, TaxSettingsAdminView, SmtpTestView,
 )
 from apps.audit.views import AuditLogViewSet
 from apps.enquiries.views import BulkEnquiryCreateView, BulkEnquiryAdminViewSet, NewsletterSubscribeView
@@ -120,6 +120,7 @@ urlpatterns = [
     path('api/shipping/lookup/', PostcodeLookupView.as_view(), name='shipping_lookup'),
     path('api/shipping/calculate/', ShippingCalculateView.as_view(), name='shipping_calculate'),
     path('api/admin/tax-settings/', TaxSettingsAdminView.as_view(), name='admin_tax_settings'),
+    path('api/admin/smtp-test/', SmtpTestView.as_view(), name='admin_smtp_test'),
     path('api/newsletter/subscribe/', NewsletterSubscribeView.as_view(), name='newsletter_subscribe'),
     path('api/push/config/', PushConfigurationView.as_view(), name='push_config'),
     path('api/push/subscriptions/', PushSubscriptionView.as_view(), name='push_subscriptions'),

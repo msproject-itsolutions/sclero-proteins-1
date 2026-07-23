@@ -184,6 +184,30 @@ class FeatureToggleViewSet(viewsets.ModelViewSet):
         return Response(toggles_dict)
 
 
+class SmtpTestView(APIView):
+    """Send a branded test email using the currently saved SMTP settings, so an
+    admin can verify delivery right after configuring the mail server."""
+    permission_classes = [require_permission('settings.manage')]
+
+    def post(self, request):
+        target = (request.data.get('email') or getattr(request.user, 'email', '') or '').strip()
+        if not target:
+            return Response({'error': 'Provide an email address to send the test to.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        from apps.orders.email_service import send_branded_email
+        try:
+            send_branded_email(
+                'Sclero Proteins email test',
+                'This is a test message confirming your store\'s email settings are '
+                'working. Transactional emails (order confirmations, sign-in links, '
+                'shipping updates) will be delivered exactly like this one.',
+                target,
+            )
+        except Exception as exc:  # surface the SMTP server's own reason to the admin
+            return Response({'error': f'Send failed: {exc}'}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response({'message': f'Test email sent to {target}. Check the inbox (and spam folder).'})
+
+
 class SystemSettingViewSet(viewsets.ModelViewSet):
     queryset = SystemSetting.objects.all()
     serializer_class = SystemSettingSerializer
