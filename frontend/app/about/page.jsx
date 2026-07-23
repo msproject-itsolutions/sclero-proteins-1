@@ -1,6 +1,7 @@
 import StoreShell from '../../components/StoreShell';
 import Link from 'next/link';
 import { ArrowRight, FlaskConical, HeartHandshake, ShieldCheck, ShoppingBag } from 'lucide-react';
+import EggOText from '../../components/EggOText';
 
 export const metadata = {
   title: 'Our Story | Sclero Proteins',
@@ -45,7 +46,7 @@ export default function AboutPage() {
               <div>
                 <p className="kicker mb-4">Our Story</p>
                 <h1 className="text-display max-w-3xl">
-                  We built Sclero to make wellness shopping feel more <em className="text-italic-accent">clear, trustworthy, and human</em>.
+                  We built <EggOText text="Sclero" /> to make wellness shopping feel more <em className="text-italic-accent">clear, trustworthy, and human</em>.
                 </h1>
                 <p className="mt-5 max-w-2xl text-[16px] leading-[1.85] text-ink-secondary">
                   Sclero Proteins was shaped around a simple idea: people deserve better guidance when choosing products for collagen support, joint care, and everyday wellness. Instead of creating more noise, we want to create more clarity.
@@ -64,7 +65,7 @@ export default function AboutPage() {
                 </div>
               </div>
 
-              <div className="overflow-hidden rounded-[32px] border border-edge bg-white shadow-elevated">
+              <div className="gradient-ring overflow-hidden rounded-[28px] border border-edge bg-white shadow-elevated">
                 <img
                   src="/about/founder-garden.jpg"
                   alt="Sclero Proteins founder standing in the garden outside the company premises"
@@ -91,7 +92,7 @@ export default function AboutPage() {
               {STORY_PILLARS.map((item) => {
                 const Icon = item.icon;
                 return (
-                  <article key={item.title} className="rounded-[28px] border border-edge bg-surface-subtle p-7 shadow-card">
+                  <article key={item.title} className="premium-card rounded-[24px] p-7">
                     <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-ink-accent shadow-card">
                       <Icon className="h-5 w-5" />
                     </div>
@@ -117,11 +118,11 @@ export default function AboutPage() {
 
             <figure className="mt-10 overflow-hidden rounded-[28px] border border-edge bg-surface-subtle shadow-card">
               <img
-                src="/about/founder-office-wide.jpg"
-                alt="Sclero Proteins founder seated at his desk in the company office"
+                src="/about/founder-office-desk.jpg"
+                alt="Sclero Proteins founder seated at his desk beneath the company logo in the head office"
                 className="h-full max-h-[560px] w-full object-cover"
-                width={2000}
-                height={1333}
+                width={1537}
+                height={1023}
                 loading="lazy"
               />
             </figure>
@@ -142,7 +143,7 @@ export default function AboutPage() {
                 </p>
               </div>
 
-              <div className="rounded-[28px] border border-edge bg-white p-8 shadow-card">
+              <div className="premium-panel rounded-[24px] p-8">
                 <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-ink-accent">Shop with confidence</p>
                 <ul className="mt-5 space-y-3 text-sm leading-[1.8] text-ink-secondary">
                   <li>Clearer product storytelling</li>

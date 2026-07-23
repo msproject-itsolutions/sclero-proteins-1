@@ -3,12 +3,30 @@ import { Shield, FileText, Truck, RefreshCw, Bookmark, Eye, HeartPulse, Send } f
 import StoreShell from '../../../components/StoreShell';
 import ContactForm from '../../contact/ContactForm';
 import Link from 'next/link';
+import { getApiUrl } from '../../../lib/api';
 
-const POLICIES = {
+// Policy pages are editable from the admin panel (Content -> Policy Pages) and
+// served from the CMS as ContentPage rows in the reserved `policy-<slug>`
+// namespace. The hardcoded copy below is only a FALLBACK so the storefront
+// still renders complete legal pages if the API is unreachable or a page was
+// unpublished by mistake.
+
+const ICONS = {
+  shield: Shield,
+  'file-text': FileText,
+  truck: Truck,
+  'refresh-cw': RefreshCw,
+  bookmark: Bookmark,
+  eye: Eye,
+  'heart-pulse': HeartPulse,
+  send: Send,
+};
+
+const FALLBACK_POLICIES = {
   privacy: {
     title: 'Privacy Policy',
     lastUpdated: 'June 23, 2026',
-    icon: Shield,
+    icon: 'shield',
     metaTitle: 'Privacy Policy | Sclero Proteins Ltd',
     metaDesc: 'How we collect, use, and protect your personal information at Sclero Proteins.',
     sections: [
@@ -33,7 +51,7 @@ const POLICIES = {
   terms: {
     title: 'Terms & Conditions',
     lastUpdated: 'June 23, 2026',
-    icon: FileText,
+    icon: 'file-text',
     metaTitle: 'Terms & Conditions | Sclero Proteins Ltd',
     metaDesc: 'Terms of service and purchasing conditions for Sclero Proteins.',
     sections: [
@@ -58,7 +76,7 @@ const POLICIES = {
   shipping: {
     title: 'Shipping Policy',
     lastUpdated: 'June 23, 2026',
-    icon: Truck,
+    icon: 'truck',
     metaTitle: 'Shipping & Delivery Policy | Sclero Proteins Ltd',
     metaDesc: 'Regional shipping rates, processing times, and free delivery thresholds.',
     sections: [
@@ -83,7 +101,7 @@ const POLICIES = {
   refund: {
     title: 'Refund & Return Policy',
     lastUpdated: 'June 23, 2026',
-    icon: RefreshCw,
+    icon: 'refresh-cw',
     metaTitle: 'Refunds & Returns | Sclero Proteins Ltd',
     metaDesc: 'Learn about our 30-day money-back guarantee and return process.',
     sections: [
@@ -104,7 +122,7 @@ const POLICIES = {
   cookie: {
     title: 'Cookie Policy',
     lastUpdated: 'June 23, 2026',
-    icon: Eye,
+    icon: 'eye',
     metaTitle: 'Cookie Policy | Sclero Proteins Ltd',
     metaDesc: 'How Sclero Proteins uses cookies to improve shopping UX and track analytics.',
     sections: [
@@ -125,7 +143,7 @@ const POLICIES = {
   accessibility: {
     title: 'Accessibility Statement',
     lastUpdated: 'June 23, 2026',
-    icon: HeartPulse,
+    icon: 'heart-pulse',
     metaTitle: 'Accessibility | Sclero Proteins Ltd',
     metaDesc: 'Our commitment to web standards and inclusive digital storefront UX.',
     sections: [
@@ -146,7 +164,7 @@ const POLICIES = {
   about: {
     title: 'Our Story',
     lastUpdated: 'June 23, 2026',
-    icon: HeartPulse,
+    icon: 'heart-pulse',
     metaTitle: 'Our Story | Sclero Proteins Ltd',
     metaDesc: 'Learn the story behind Sclero Proteins and our more human, trust-led approach to wellness.',
     sections: [
@@ -167,7 +185,7 @@ const POLICIES = {
   contact: {
     title: 'Contact Us',
     lastUpdated: 'June 23, 2026',
-    icon: Send,
+    icon: 'send',
     metaTitle: 'Contact Us | Sclero Proteins Ltd',
     metaDesc: 'Get in touch with Sclero Proteins support team in the UK and India.',
     isContactForm: true,
@@ -180,14 +198,68 @@ const POLICIES = {
   },
 };
 
+async function fetchJson(path) {
+  try {
+    const res = await fetch(getApiUrl(path), {
+      next: { revalidate: 300 }, // pick up admin edits within 5 minutes
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+function normalizeCmsPolicy(page) {
+  const layout = page && typeof page.template_layout === 'object' ? page.template_layout : null;
+  if (!page || !layout || layout.kind !== 'policy' || !Array.isArray(layout.sections)) {
+    return null;
+  }
+  const sections = layout.sections
+    .filter((s) => s && (s.heading || s.text))
+    .map((s) => ({ heading: String(s.heading || ''), text: String(s.text || '') }));
+  if (!sections.length) return null;
+
+  const updatedLabel = layout.last_updated_label
+    || (page.updated_at
+      ? new Date(page.updated_at).toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' })
+      : '');
+  return {
+    title: page.title,
+    lastUpdated: updatedLabel,
+    icon: layout.icon || 'file-text',
+    metaTitle: page.meta_title || page.title,
+    metaDesc: page.meta_description || '',
+    isContactForm: Boolean(layout.is_contact_form),
+    sections,
+  };
+}
+
+async function resolvePolicy(slug) {
+  const safeSlug = Object.prototype.hasOwnProperty.call(FALLBACK_POLICIES, slug) ? slug : 'privacy';
+  const cms = normalizeCmsPolicy(await fetchJson(`/api/content-pages/policy-${safeSlug}/`));
+  return { slug: safeSlug, policy: cms || FALLBACK_POLICIES[safeSlug] };
+}
+
+async function resolveNav() {
+  const cmsList = await fetchJson('/api/policies/');
+  if (Array.isArray(cmsList) && cmsList.length) {
+    const nav = cmsList
+      .filter((p) => p && p.slug && p.title)
+      .map((p) => ({ slug: p.slug, title: p.title }));
+    if (nav.length) return nav;
+  }
+  return Object.entries(FALLBACK_POLICIES).map(([slug, val]) => ({ slug, title: val.title }));
+}
+
 export async function generateMetadata({ params }) {
   const { slug = 'privacy' } = await params;
-  const policy = POLICIES[slug] || POLICIES.privacy;
+  const { slug: safeSlug, policy } = await resolvePolicy(slug);
   return {
     title: policy.metaTitle,
     description: policy.metaDesc,
     alternates: {
-      canonical: `/policies/${slug}`,
+      canonical: `/policies/${safeSlug}`,
     },
     openGraph: {
       title: policy.metaTitle,
@@ -199,8 +271,11 @@ export async function generateMetadata({ params }) {
 
 export default async function PolicyPage({ params }) {
   const { slug = 'privacy' } = await params;
-  const policy = POLICIES[slug] || POLICIES.privacy;
-  const IconComponent = policy.icon;
+  const [{ slug: safeSlug, policy }, nav] = await Promise.all([
+    resolvePolicy(slug),
+    resolveNav(),
+  ]);
+  const IconComponent = ICONS[policy.icon] || FileText;
 
   return (
     <StoreShell>
@@ -224,24 +299,24 @@ export default async function PolicyPage({ params }) {
 
       <div className="container-page py-12">
         <div className="grid grid-cols-1 gap-10 md:grid-cols-12">
-          
+
           {/* Policy Links Navigation */}
           <aside className="md:col-span-3 space-y-2">
             <p className="kicker px-2.5">
               Available Pages
             </p>
             <nav className="flex flex-col gap-1.5">
-              {Object.entries(POLICIES).map(([k, val]) => (
+              {nav.map((item) => (
                 <Link
-                  key={k}
-                  href={`/policies/${k}`}
+                  key={item.slug}
+                  href={`/policies/${item.slug}`}
                   className={`rounded-sm px-3 py-2 text-xs font-medium transition-all ${
-                    slug === k
+                    safeSlug === item.slug
                       ? 'bg-surface-muted text-ink-accent font-semibold'
                       : 'text-ink-secondary hover:bg-surface-muted hover:text-ink-primary'
                   }`}
                 >
-                  {val.title}
+                  {item.title}
                 </Link>
               ))}
             </nav>
@@ -262,7 +337,7 @@ export default async function PolicyPage({ params }) {
               {policy.sections.map((sec, i) => (
                 <div key={i} className="space-y-2 py-6 first:pt-0 last:pb-0">
                   <h2 className="text-heading-3">{sec.heading}</h2>
-                  <p className="text-[15px] leading-[1.8] text-ink-secondary">{sec.text}</p>
+                  <p className="text-[15px] leading-[1.8] text-ink-secondary whitespace-pre-line">{sec.text}</p>
                 </div>
               ))}
             </div>

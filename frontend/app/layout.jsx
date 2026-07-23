@@ -76,13 +76,14 @@ export async function generateMetadata() {
       url: SITE_URL,
       title: defaultTitle,
       description: defaultDescription,
-      images: [seoSettings.ogImage || '/logo-full.png'],
+      images: [seoSettings.ogImage || '/og-brand.png'],
     },
     twitter: {
       card: 'summary_large_image',
       site: seoSettings.twitterHandle || undefined,
       title: defaultTitle,
       description: defaultDescription,
+      images: [seoSettings.ogImage || '/og-brand.png'],
     },
     icons: {
       icon: [
@@ -114,7 +115,7 @@ export default async function RootLayout({ children }) {
     '@type': 'Organization',
     name: companyName,
     url: SITE_URL,
-    logo: `${SITE_URL.replace(/\/$/, '')}/logo-full.png`,
+    logo: `${SITE_URL.replace(/\/$/, '')}/logo-full-v2.png`,
     address: companyInfo.address ? { '@type': 'PostalAddress', streetAddress: companyInfo.address } : undefined,
     contactPoint: (companyInfo.support || companyInfo.email || companyInfo.phone) ? {
       '@type': 'ContactPoint',

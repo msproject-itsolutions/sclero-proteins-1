@@ -22,7 +22,10 @@ from apps.products.models import Product, ProductRegionConfig, ProductVariant
 
 from .management.commands.run_scheduler import Command as SchedulerCommand
 from .email_service import send_templated_email
-from .models import Cart, EmailDelivery, Order, SchedulerLease, WebhookEvent
+from .models import (
+    Cart, CronJobRun, EmailDelivery, Order, PaymentLog, Refund,
+    SchedulerLease, WebhookEvent,
+)
 from .pricing import quote_cart
 from .payments import (
     PaymentError,
@@ -76,20 +79,18 @@ class PaymentSafetyTests(TestCase):
             resolve_gateway(self.region, 'STRIPE')
 
     @override_settings(DEBUG=False, TESTING=False)
-    def test_unimplemented_live_gateway_is_hidden_and_rejected(self):
-        # PayPal/Razorpay still have no live capture path, so they must never be
-        # offered in LIVE mode. Stripe is implemented and covered separately below.
+    def test_live_paypal_is_checkout_ready(self):
         gateway = PaymentGateway.objects.create(
             code='PAYPAL',
             display_name='PayPal',
             region=self.region,
             is_enabled=True,
             mode='LIVE',
+            publishable_key='paypal-client-id',
             secret_key='not-a-real-key',
         )
-        self.assertFalse(gateway_is_checkout_ready(gateway))
-        with self.assertRaises(PaymentError):
-            resolve_gateway(self.region, 'PAYPAL')
+        self.assertTrue(gateway_is_checkout_ready(gateway))
+        self.assertIsNotNone(resolve_gateway(self.region, 'PAYPAL'))
 
     @override_settings(DEBUG=False, TESTING=False)
     def test_live_stripe_is_checkout_ready(self):
@@ -477,6 +478,324 @@ class VariantCartSafetyTests(APITestCase):
         self.assertFalse(order.invoice.pdf_file)
         self.small.refresh_from_db()
         self.assertEqual(self.small.stock_qty, 3)
+
+
+class CheckoutChargeRollbackTests(APITestCase):
+    """A failed gateway charge must leave NO order, stock change or coupon use."""
+
+    def setUp(self):
+        self.region = Region.objects.create(
+            code='UK', name='United Kingdom', domain='rollback.example.test',
+            countries=['GB'], currency_code='GBP', currency_symbol='£',
+            tax_name='VAT', tax_rate='20.00',
+        )
+        self.warehouse = Warehouse.objects.create(
+            region=self.region, name='UK warehouse', is_active=True,
+        )
+        self.product = Product.objects.create(
+            sku='ROLLBACK-PRODUCT', name='Rollback product', description='',
+            benefits='', ingredients='', base_price='10.00',
+        )
+        ProductRegionConfig.objects.create(
+            product=self.product, region=self.region, price='10.00', is_visible=True,
+        )
+        self.stock = StockLevel.objects.create(
+            warehouse=self.warehouse, product=self.product, available=25,
+        )
+        zone = ShippingZone.objects.create(
+            region=self.region, name='United Kingdom', countries=['GB'],
+        )
+        ShippingRate.objects.create(
+            zone=zone, name='Standard', method='Standard delivery',
+            rate_type='FLAT', price='5.00',
+        )
+        # LIVE Stripe: charge() demands a verified PaymentIntent reference.
+        PaymentGateway.objects.create(
+            code='STRIPE', display_name='Stripe', region=self.region,
+            is_enabled=True, mode='LIVE', secret_key='sk_live_not_a_real_key',
+        )
+        self.session_id = 'rollback-session'
+        self.client.post('/api/cart/add/', {
+            'session_id': self.session_id, 'region': 'UK',
+            'product_id': self.product.id, 'quantity': 2,
+        }, format='json')
+
+    def test_failed_charge_rolls_back_order_stock_and_cart(self):
+        response = self.client.post('/api/checkout/', {
+            'session_id': self.session_id,
+            'region': 'UK',
+            'email': 'buyer@example.com',
+            'shipping_name': 'Rollback Buyer',
+            'shipping_phone': '+44 7700 900077',
+            'shipping_address_line1': '1 Test Street',
+            'shipping_city': 'London',
+            'shipping_state': 'London',
+            'shipping_postal_code': 'SW1A 1AA',
+            'shipping_country': 'GB',
+            'payment_method': 'STRIPE',
+            'payment_id': 'not-a-payment-intent',
+        }, format='json')
+
+        self.assertEqual(response.status_code, 402, response.data)
+        # Nothing about the failed sale may persist.
+        self.assertEqual(Order.objects.count(), 0)
+        self.assertEqual(PaymentLog.objects.count(), 0)
+        self.stock.refresh_from_db()
+        self.assertEqual(self.stock.available, 25)
+        cart = Cart.objects.get(session_id=self.session_id)
+        self.assertEqual(cart.items.count(), 1)
+
+
+def _make_paid_order(region, *, total='20.00', payment_status='PAID', payment_id='pi_test_order'):
+    return Order.objects.create(
+        region=region,
+        status='PROCESSING',
+        email='buyer@example.com',
+        shipping_name='Buyer',
+        shipping_phone='+447700900077',
+        shipping_address_line1='1 Test Street',
+        shipping_city='London',
+        shipping_state='London',
+        shipping_postal_code='SW1A 1AA',
+        shipping_country='GB',
+        currency_code=region.currency_code,
+        subtotal=Decimal(total),
+        tax_rate=Decimal('0.00'),
+        tax_amount=Decimal('0.00'),
+        shipping_cost=Decimal('0.00'),
+        total=Decimal(total),
+        payment_method='STRIPE',
+        payment_id=payment_id,
+        payment_status=payment_status,
+    )
+
+
+class RefundProcessingSafetyTests(APITestCase):
+    def setUp(self):
+        self.staff = User.objects.create_superuser(
+            email='refunds@example.com', password='StrongOwnerPass123!',
+        )
+        self.client.force_authenticate(self.staff)
+        self.region = Region.objects.create(
+            code='UK', name='United Kingdom', domain='refunds.example.test',
+            currency_code='GBP', currency_symbol='£', tax_name='VAT', tax_rate='20.00',
+        )
+        PaymentGateway.objects.create(
+            code='STRIPE', display_name='Stripe', region=self.region,
+            is_enabled=True, mode='TEST', supports_refunds=True,
+        )
+        self.order = _make_paid_order(self.region)
+
+    def test_process_marks_refund_processed_and_blocks_reprocessing(self):
+        refund = Refund.objects.create(
+            order=self.order, amount=Decimal('20.00'), currency_code='GBP',
+            gateway='STRIPE', status='PENDING',
+        )
+
+        first = self.client.post(f'/api/admin/refunds/{refund.id}/process/')
+        self.assertEqual(first.status_code, 200, first.data)
+
+        refund.refresh_from_db()
+        self.assertEqual(refund.status, 'PROCESSED')
+        self.assertTrue(refund.refund_transaction_id)
+        self.assertTrue(
+            PaymentLog.objects.filter(order=self.order, status='REFUND_PROCESSED').exists()
+        )
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, 'REFUNDED')
+
+        # A second click must not reach the gateway again.
+        second = self.client.post(f'/api/admin/refunds/{refund.id}/process/')
+        self.assertEqual(second.status_code, 400)
+        self.assertEqual(
+            PaymentLog.objects.filter(order=self.order, status='REFUND_PROCESSED').count(), 1,
+        )
+
+    def test_approval_refund_rechecks_remaining_balance(self):
+        from apps.admin_dashboard.models import ApprovalRequest
+        # The order is already fully refunded by the time approval happens.
+        Refund.objects.create(
+            order=self.order, amount=Decimal('20.00'), currency_code='GBP',
+            gateway='STRIPE', status='PROCESSED',
+        )
+        approval = ApprovalRequest.objects.create(
+            requester=self.staff, request_type='REFUND', status='PENDING',
+            summary='Refund of GBP 5.00 for order',
+            payload={'order_id': self.order.id, 'amount': 5.0, 'reason': '', 'restock': False},
+        )
+
+        response = self.client.post(f'/api/admin/approval-requests/{approval.id}/approve/')
+        self.assertEqual(response.status_code, 400, response.data)
+        approval.refresh_from_db()
+        self.assertEqual(approval.status, 'PENDING')
+        # No new refund row was created for the rejected execution.
+        self.assertEqual(self.order.refunds.count(), 1)
+
+    def test_approval_refund_requires_paid_order(self):
+        from apps.admin_dashboard.models import ApprovalRequest
+        unpaid = _make_paid_order(
+            self.region, payment_status='PENDING', payment_id='pi_unpaid',
+        )
+        approval = ApprovalRequest.objects.create(
+            requester=self.staff, request_type='REFUND', status='PENDING',
+            summary='Refund of GBP 5.00 for unpaid order',
+            payload={'order_id': unpaid.id, 'amount': 5.0, 'reason': '', 'restock': False},
+        )
+        response = self.client.post(f'/api/admin/approval-requests/{approval.id}/approve/')
+        self.assertEqual(response.status_code, 400, response.data)
+        approval.refresh_from_db()
+        self.assertEqual(approval.status, 'PENDING')
+        self.assertEqual(unpaid.refunds.count(), 0)
+
+
+class ProcessWebhooksCommandTests(TestCase):
+    def setUp(self):
+        self.region = Region.objects.create(
+            code='UK', name='United Kingdom', domain='webhooks.example.test',
+            currency_code='GBP', currency_symbol='£', tax_name='VAT', tax_rate='20.00',
+        )
+        PaymentGateway.objects.create(
+            code='STRIPE', display_name='Stripe', region=self.region,
+            is_enabled=True, mode='TEST',
+        )
+
+    @staticmethod
+    def _stripe_event(event_type, obj, event_id='evt_test'):
+        return WebhookEvent.objects.create(
+            gateway='STRIPE', event_id=event_id, event_type=event_type,
+            payload={'id': event_id, 'type': event_type, 'data': {'object': obj}},
+        )
+
+    def test_payment_succeeded_marks_order_paid_and_records_run(self):
+        order = _make_paid_order(self.region, payment_status='PENDING', payment_id='pi_hook_1')
+        order.status = 'PENDING'
+        order.save(update_fields=['status'])
+        self._stripe_event('payment_intent.succeeded', {
+            'id': 'pi_hook_1', 'amount_received': 2000, 'currency': 'gbp',
+            'status': 'succeeded', 'metadata': {},
+        })
+
+        call_command('process_webhooks')
+
+        order.refresh_from_db()
+        self.assertEqual(order.payment_status, 'PAID')
+        self.assertEqual(order.status, 'PROCESSING')
+        event = WebhookEvent.objects.get(event_id='evt_test')
+        self.assertEqual(event.status, 'PROCESSED')
+        run = CronJobRun.objects.filter(job_name='process_webhooks').first()
+        self.assertIsNotNone(run)
+        self.assertEqual(run.status, 'SUCCESS')
+        self.assertEqual(run.processed, 1)
+
+    def test_partial_refund_keeps_order_status(self):
+        order = _make_paid_order(self.region, payment_id='pi_hook_2')
+        self._stripe_event('charge.refunded', {
+            'id': 'ch_1', 'payment_intent': 'pi_hook_2', 'amount': 500,
+            'currency': 'gbp', 'status': 'succeeded', 'metadata': {},
+        }, event_id='evt_partial')
+
+        call_command('process_webhooks')
+
+        order.refresh_from_db()
+        self.assertEqual(order.payment_status, 'PAID')
+        self.assertNotEqual(order.status, 'REFUNDED')
+        self.assertTrue(
+            PaymentLog.objects.filter(order=order, status='REFUND_PROCESSED').exists()
+        )
+
+    def test_full_refund_marks_order_refunded(self):
+        order = _make_paid_order(self.region, payment_id='pi_hook_3')
+        self._stripe_event('charge.refunded', {
+            'id': 'ch_2', 'payment_intent': 'pi_hook_3', 'amount': 2000,
+            'currency': 'gbp', 'status': 'succeeded', 'metadata': {},
+        }, event_id='evt_full')
+
+        call_command('process_webhooks')
+
+        order.refresh_from_db()
+        self.assertEqual(order.payment_status, 'REFUNDED')
+        self.assertEqual(order.status, 'REFUNDED')
+
+    def test_late_payment_failed_never_downgrades_paid_order(self):
+        order = _make_paid_order(self.region, payment_id='pi_hook_4')
+        self._stripe_event('payment_intent.payment_failed', {
+            'id': 'pi_hook_4', 'currency': 'gbp', 'status': 'requires_payment_method',
+            'metadata': {},
+        }, event_id='evt_late_fail')
+
+        call_command('process_webhooks')
+
+        order.refresh_from_db()
+        self.assertEqual(order.payment_status, 'PAID')
+
+
+class PruneSystemRecordsTests(TestCase):
+    def test_old_completed_rows_are_pruned_and_active_rows_kept(self):
+        old = timezone.now() - timedelta(days=120)
+        CronJobRun.objects.create(job_name='old_job', status='SUCCESS')
+        CronJobRun.objects.filter(job_name='old_job').update(started_at=old)
+        CronJobRun.objects.create(job_name='recent_job', status='SUCCESS')
+
+        region = Region.objects.create(
+            code='PR', name='Prune', domain='prune.example.test',
+            currency_code='GBP', currency_symbol='£', tax_name='VAT', tax_rate='20.00',
+        )
+        sent = EmailDelivery.objects.create(
+            event='order_confirmation', region=region,
+            recipient_email='old@example.com', status='SENT',
+            audit_target_type='Order', audit_target_id='old-1',
+        )
+        EmailDelivery.objects.filter(pk=sent.pk).update(created_at=old)
+        pending = EmailDelivery.objects.create(
+            event='order_confirmation', region=region,
+            recipient_email='pending@example.com', status='PENDING',
+            audit_target_type='Order', audit_target_id='pending-1',
+        )
+        EmailDelivery.objects.filter(pk=pending.pk).update(created_at=old)
+
+        processed_event = WebhookEvent.objects.create(
+            gateway='STRIPE', event_id='evt_old', event_type='x', payload={},
+            status='PROCESSED',
+        )
+        WebhookEvent.objects.filter(pk=processed_event.pk).update(created_at=old)
+
+        call_command('prune_system_records')
+
+        self.assertFalse(CronJobRun.objects.filter(job_name='old_job').exists())
+        self.assertTrue(CronJobRun.objects.filter(job_name='recent_job').exists())
+        self.assertFalse(EmailDelivery.objects.filter(pk=sent.pk).exists())
+        # PENDING work is never pruned, no matter how old.
+        self.assertTrue(EmailDelivery.objects.filter(pk=pending.pk).exists())
+        self.assertFalse(WebhookEvent.objects.filter(pk=processed_event.pk).exists())
+        run = CronJobRun.objects.filter(job_name='prune_system_records').first()
+        self.assertIsNotNone(run)
+        self.assertEqual(run.status, 'SUCCESS')
+
+
+class CronRunAdminApiTests(APITestCase):
+    def setUp(self):
+        staff = User.objects.create_superuser(
+            email='cron-admin@example.com', password='StrongOwnerPass123!',
+        )
+        self.client.force_authenticate(staff)
+
+    def test_summary_lists_expected_jobs_and_scheduler_state(self):
+        CronJobRun.objects.create(
+            job_name='process_webhooks', status='FAILED', error='boom',
+        )
+        response = self.client.get('/api/admin/cron-runs/summary/')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertFalse(response.data['scheduler_alive'])
+        jobs = {job['job_name']: job for job in response.data['jobs']}
+        self.assertIn('process_webhooks', jobs)
+        self.assertIn('prune_system_records', jobs)
+        self.assertEqual(jobs['process_webhooks']['failures_24h'], 1)
+        self.assertTrue(jobs['send_review_requests']['never_ran'])
+
+    def test_run_history_requires_admin(self):
+        self.client.force_authenticate(None)
+        response = self.client.get('/api/admin/cron-runs/')
+        self.assertIn(response.status_code, (401, 403))
 
 
 class ManualOrderSafetyTests(APITestCase):

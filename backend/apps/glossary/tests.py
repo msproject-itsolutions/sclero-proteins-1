@@ -1,5 +1,7 @@
 from django.test import TestCase
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
+from io import StringIO
 from rest_framework.test import APITestCase
 from rest_framework import status
 from .models import GeneralFAQ, GlossaryTerm
@@ -23,6 +25,7 @@ class GlossaryModelTest(TestCase):
         # Check fields
         self.assertEqual(term1.term, "BJC")
         self.assertEqual(term2.category, "Biosecurity")
+        self.assertEqual(term1.internal_code, '')
         self.assertEqual(term1.image_url, '')
 
         # Check default ordering (alphabetical by term)
@@ -102,6 +105,7 @@ class GlossaryAPITest(APITestCase):
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(GlossaryTerm.objects.count(), 2)
+        self.assertIn('internal_code', response.data)
         
         # 2. Update (PUT)
         term_id = response.data['id']
@@ -118,6 +122,30 @@ class GlossaryAPITest(APITestCase):
         response = self.client.delete(f'/api/admin/glossary/{term_id}/')
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertEqual(GlossaryTerm.objects.count(), 1)
+
+
+class ExpandedGlossarySeedTest(TestCase):
+    def test_seed_imports_complete_supplied_glossary(self):
+        output = StringIO()
+        call_command('seed_glossary', verbosity=0, stdout=output)
+
+        self.assertEqual(GlossaryTerm.objects.count(), 179)
+        self.assertEqual(
+            GlossaryTerm.objects.get(term='Amino Acid Substrate Support').internal_code,
+            'amino_acid_substrate_support',
+        )
+        self.assertEqual(
+            GlossaryTerm.objects.get(term='Biogenic Mineral Profile').category,
+            'ESC Science',
+        )
+        self.assertEqual(
+            GlossaryTerm.objects.get(term='Wetting Agents').category,
+            'Soil & Turf Science',
+        )
+
+        # A second run updates existing rows instead of creating duplicates.
+        call_command('seed_glossary', verbosity=0, stdout=output)
+        self.assertEqual(GlossaryTerm.objects.count(), 179)
 
 
 class GeneralFAQModelTest(TestCase):

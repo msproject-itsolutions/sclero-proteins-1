@@ -79,9 +79,26 @@ class PushCampaignTests(APITestCase):
         summary = process_push_batch()
 
         campaign.refresh_from_db()
-        self.assertEqual(summary, {'configured': True, 'processed': 1})
+        self.assertEqual(summary, {'configured': True, 'processed': 1, 'sent': 1, 'failed': 0})
         self.assertEqual(campaign.status, 'SENT')
         self.assertEqual(campaign.sent_count, 1)
         self.assertEqual(campaign.failed_count, 0)
         send_webpush.assert_called_once()
         validate_destination.assert_called_once()
+
+
+class PushCommandRunRecordingTests(APITestCase):
+    @patch('apps.push_notifications.management.commands.process_push_notifications.process_push_batch')
+    def test_failed_pushes_surface_as_failed_run(self, batch):
+        from django.core.management import call_command
+        from apps.orders.models import CronJobRun
+
+        batch.return_value = {'configured': True, 'processed': 3, 'sent': 1, 'failed': 2}
+        call_command('process_push_notifications')
+
+        run = CronJobRun.objects.filter(job_name='process_push_notifications').first()
+        self.assertIsNotNone(run)
+        # A run with failed deliveries must NOT be recorded as a clean success.
+        self.assertEqual(run.status, 'FAILED')
+        self.assertEqual(run.processed, 1)
+        self.assertEqual(run.failed, 2)

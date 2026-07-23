@@ -56,21 +56,17 @@ export default function usePageView() {
     });
     const url = getApiUrl('/api/analytics/pageview/');
 
-    try {
-      if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
-        const blob = new Blob([body], { type: 'application/json' });
-        navigator.sendBeacon(url, blob);
-        return;
-      }
-    } catch (e) {
-      /* fall through to fetch */
-    }
+    // Anonymous fire-and-forget. NOT sendBeacon: beacons always attach
+    // cookies and cannot set headers, so a signed-in visitor's beacon tripped
+    // the backend's cookie-auth POST guard and was rejected with a 401.
+    // keepalive gives the same survives-navigation behaviour as a beacon.
     try {
       fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body,
         keepalive: true,
+        credentials: 'omit',
       }).catch(() => {});
     } catch (e) {
       /* never raise from analytics */

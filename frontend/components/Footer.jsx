@@ -150,7 +150,7 @@ export default function Footer() {
   );
 
   return (
-    <footer className="mt-auto bg-[#101871] text-white">
+    <footer className="mt-auto bg-[linear-gradient(135deg,#101871_0%,#160E55_56%,#520446_100%)] text-white">
       <div className="container-page py-12">
         <div className="grid gap-10 lg:grid-cols-[1.2fr_0.8fr_0.8fr_0.8fr]">
           <div className="space-y-5">

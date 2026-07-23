@@ -1,6 +1,23 @@
+from django.core.validators import RegexValidator
 from django.db import models
 from django.conf import settings
 from apps.regions.models import Region
+from apps.common.fields import EncryptedJSONField, EncryptedTextField
+
+# Colors are rendered as inline styles on the storefront, so only strict hex
+# values may be stored — never arbitrary CSS.
+HEX_COLOR_VALIDATOR = RegexValidator(
+    regex=r'^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$',
+    message='Enter a hex color such as #1E083B.',
+)
+
+
+def hex_color_field(help_text):
+    """Optional hex color; blank means "use the brand default"."""
+    return models.CharField(
+        max_length=7, blank=True, default='',
+        validators=[HEX_COLOR_VALIDATOR], help_text=help_text,
+    )
 
 class FeatureToggle(models.Model):
     module_name = models.CharField(max_length=100, db_index=True)
@@ -69,6 +86,20 @@ class HeroBannerSlide(models.Model):
     vertical_position = models.CharField(max_length=10, choices=VERTICAL_POSITIONS, default='BOTTOM')
     arrow_position = models.CharField(max_length=10, choices=ARROW_POSITIONS, default='BOTTOM')
     overlay_opacity = models.PositiveSmallIntegerField(default=42, help_text="Dark overlay percentage from 0 to 90")
+    # --- Per-slide theme colors, managed from the admin panel ---------------
+    # Blank = inherit the storefront's brand default, so existing slides keep
+    # their current look and admins can always reset a slide to brand styling.
+    overlay_color_start = hex_color_field("Left color of the legibility overlay gradient")
+    overlay_color_mid = hex_color_field("Middle color of the legibility overlay gradient")
+    overlay_color_end = hex_color_field("Right color of the legibility overlay gradient")
+    eyebrow_color = hex_color_field("Eyebrow text color")
+    heading_color = hex_color_field("Heading text color (replaces the brand gradient when set)")
+    subheading_color = hex_color_field("Subheading text color")
+    primary_cta_bg_color = hex_color_field("Primary button background color")
+    primary_cta_text_color = hex_color_field("Primary button text color")
+    secondary_cta_bg_color = hex_color_field("Secondary button background color")
+    secondary_cta_text_color = hex_color_field("Secondary button text color")
+    accent_color = hex_color_field("Accent color for the active carousel indicator")
     sort_order = models.PositiveIntegerField(default=0, db_index=True)
     is_enabled = models.BooleanField(default=True, db_index=True)
     starts_at = models.DateTimeField(null=True, blank=True)
@@ -124,11 +155,11 @@ class PaymentGateway(models.Model):
         max_length=255, blank=True,
         help_text="Client-side / publishable key (e.g. Razorpay key_id, Stripe pk_*). Safe to expose to the browser.",
     )
-    secret_key = models.CharField(
-        max_length=255, blank=True,
+    secret_key = EncryptedTextField(
+        blank=True,
         help_text="Server-side secret. NEVER exposed to the storefront.",
     )
-    extra_config = models.JSONField(
+    extra_config = EncryptedJSONField(
         default=dict, blank=True,
         help_text="Additional config: webhook secret, PayPal merchant id, etc. Server-side only.",
     )

@@ -6,7 +6,7 @@ cache (best-effort; never raises).
 """
 from django.core.cache import cache
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
@@ -15,6 +15,12 @@ from .models import PageView
 
 
 @api_view(['POST'])
+# Skip authentication entirely: the tracker fires via navigator.sendBeacon,
+# which always attaches cookies but can never add the X-Sclero-Client header
+# the cookie-auth guard demands on POSTs — so every logged-in (or stale-token)
+# visitor's beacon was rejected with a 401 before AllowAny was even consulted.
+# The endpoint never uses request.user, so no auth needs to run at all.
+@authentication_classes([])
 @permission_classes([AllowAny])
 def pageview_ingest(request):
     try:

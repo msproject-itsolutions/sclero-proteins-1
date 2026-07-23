@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from apps.orders.models import CronJobRun
 from .models import (
     FeatureToggle, SystemSetting, HeroBannerSlide, PaymentGateway, EmailTemplate,
     MarketingIntegration, ContentPage, BlogPost, ApprovalRequest,
@@ -101,6 +102,11 @@ class HeroBannerSlideSerializer(serializers.ModelSerializer):
             'media_type', 'alt_text', 'primary_cta_label', 'primary_cta_url',
             'secondary_cta_label', 'secondary_cta_url', 'text_position',
             'vertical_position', 'arrow_position',
+            'overlay_color_start', 'overlay_color_mid', 'overlay_color_end',
+            'eyebrow_color', 'heading_color', 'subheading_color',
+            'primary_cta_bg_color', 'primary_cta_text_color',
+            'secondary_cta_bg_color', 'secondary_cta_text_color',
+            'accent_color',
             'overlay_opacity', 'sort_order', 'is_enabled', 'starts_at',
             'ends_at', 'autoplay_enabled', 'show_indicators',
             'display_duration_ms', 'transition_ms', 'seo_title',
@@ -113,17 +119,29 @@ class PaymentGatewayAdminSerializer(serializers.ModelSerializer):
     """Admin representation that accepts credentials but never returns them."""
     region_code = serializers.CharField(source='region.code', read_only=True)
     is_configured = serializers.BooleanField(read_only=True)
+    credential_status = serializers.SerializerMethodField()
+    extra_config = serializers.JSONField(write_only=True, required=False)
 
     class Meta:
         model = PaymentGateway
         fields = [
             'id', 'code', 'display_name', 'region', 'region_code', 'is_enabled',
             'mode', 'publishable_key', 'secret_key', 'extra_config',
-            'supports_refunds', 'sort_order', 'is_configured', 'updated_at',
+            'supports_refunds', 'sort_order', 'is_configured',
+            'credential_status', 'updated_at',
         ]
         extra_kwargs = {
             'secret_key': {'write_only': True, 'required': False},
             'extra_config': {'write_only': True, 'required': False},
+        }
+
+    def get_credential_status(self, obj):
+        extra = obj.extra_config or {}
+        return {
+            'publishable_key': bool(obj.publishable_key),
+            'secret_key': bool(obj.secret_key),
+            'webhook_secret': bool(extra.get('webhook_secret')),
+            'webhook_id': bool(extra.get('webhook_id')),
         }
 
     def update(self, instance, validated_data):
@@ -195,3 +213,12 @@ class ApprovalRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = ApprovalRequest
         fields = '__all__'
+
+
+class CronJobRunSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CronJobRun
+        fields = [
+            'id', 'job_name', 'status', 'started_at', 'finished_at',
+            'duration_ms', 'processed', 'failed', 'message', 'error',
+        ]

@@ -3,6 +3,7 @@
 from datetime import timedelta
 
 from django.core.management.base import BaseCommand
+from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
@@ -31,42 +32,59 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         limit = min(max(options['limit'], 1), 1000)
         now = timezone.now()
-        due = EmailDelivery.objects.select_related('region').filter(
-            status__in=['PENDING', 'FAILED'],
-        ).filter(
-            Q(next_attempt_at__isnull=True) | Q(next_attempt_at__lte=now),
-        ).order_by('created_at')[:limit]
+        due_ids = list(
+            EmailDelivery.objects.filter(
+                status__in=['PENDING', 'FAILED'],
+            ).filter(
+                Q(next_attempt_at__isnull=True) | Q(next_attempt_at__lte=now),
+            ).order_by('created_at').values_list('pk', flat=True)[:limit]
+        )
 
         with job_run('process_email_deliveries') as result:
-            for delivery in due:
-                delivery.attempts += 1
-                delivery.last_attempt_at = now
-                sent = send_templated_email(
-                    delivery.event,
-                    delivery.region,
-                    delivery.recipient_email,
-                    delivery.context,
-                    audit_target_type=delivery.audit_target_type,
-                    audit_target_id=delivery.audit_target_id,
-                    queue_on_failure=False,
-                )
-                if sent:
-                    delivery.status = 'SENT'
-                    delivery.next_attempt_at = None
-                    delivery.error_message = ''
-                    result.processed += 1
-                else:
-                    result.failed += 1
-                    if delivery.attempts >= len(BACKOFFS):
-                        delivery.status = 'DLQ'
+            for delivery_pk in due_ids:
+                # Claim each row under a lock and re-check that it is still
+                # due — a manual run overlapping the scheduled run must not
+                # send the same email twice.
+                with transaction.atomic():
+                    delivery = (
+                        EmailDelivery.objects.select_for_update()
+                        .select_related('region')
+                        .filter(pk=delivery_pk, status__in=['PENDING', 'FAILED'])
+                        .first()
+                    )
+                    if delivery is None:
+                        continue
+                    attempt_at = timezone.now()
+                    if delivery.next_attempt_at and delivery.next_attempt_at > attempt_at:
+                        continue
+                    delivery.attempts += 1
+                    delivery.last_attempt_at = attempt_at
+                    sent = send_templated_email(
+                        delivery.event,
+                        delivery.region,
+                        delivery.recipient_email,
+                        delivery.context,
+                        audit_target_type=delivery.audit_target_type,
+                        audit_target_id=delivery.audit_target_id,
+                        queue_on_failure=False,
+                    )
+                    if sent:
+                        delivery.status = 'SENT'
                         delivery.next_attempt_at = None
+                        delivery.error_message = ''
+                        result.processed += 1
                     else:
-                        delivery.status = 'FAILED'
-                        delivery.next_attempt_at = now + BACKOFFS[delivery.attempts - 1]
-                delivery.save(update_fields=[
-                    'status', 'attempts', 'last_attempt_at', 'next_attempt_at',
-                    'error_message', 'updated_at',
-                ])
+                        result.failed += 1
+                        if delivery.attempts >= len(BACKOFFS):
+                            delivery.status = 'DLQ'
+                            delivery.next_attempt_at = None
+                        else:
+                            delivery.status = 'FAILED'
+                            delivery.next_attempt_at = attempt_at + BACKOFFS[delivery.attempts - 1]
+                    delivery.save(update_fields=[
+                        'status', 'attempts', 'last_attempt_at', 'next_attempt_at',
+                        'error_message', 'updated_at',
+                    ])
             result.message = f'Processed {result.processed + result.failed} queued email(s).'
 
         self.stdout.write(self.style.SUCCESS(result.message))

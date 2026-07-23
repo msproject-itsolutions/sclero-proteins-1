@@ -98,7 +98,6 @@ function normalizeNavLinks(inputLinks) {
 export default function Navbar({ onOpenCart, onOpenAdmin }) {
   const dispatch = useDispatch();
   const { currentRegion } = useSelector((state) => state.region);
-  const branding = useSelector((state) => state.region.branding);
   const cartItems = useSelector((state) => state.cart.items);
   const session_id = useSelector((state) => state.region.session_id);
   const authUser = useSelector((state) => state.auth?.user);
@@ -243,7 +242,12 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
   const navLinks = normalizeNavLinks(!mounted ? fallbackNavLinks : rawNavLinks)
     .filter((link) => !link.region_limit || String(link.region_limit).toUpperCase() === currentRegion);
 
-  const headerLogoSrc = branding?.logoHeaderTaglineUrl || '/logo-header-tagline-clean.png';
+  // Keep the public-facing identity stable across country/domain changes.
+  // Regional configuration still controls commerce and contact details, but
+  // must never swap the official bird mark or wordmark.
+  // v2 asset restores the full descenders on the tagline's "g" and "y",
+  // which were cropped off in the original export.
+  const headerLogoSrc = '/logo-header-tagline-v2.png';
 
   const formatRegionDisplay = (code) => {
     if (code === 'IN') return 'India';
@@ -260,15 +264,15 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
 
   const navLinkClass = 'relative whitespace-nowrap px-0.5 py-2 text-[12.5px] font-semibold text-ink-secondary transition-colors hover:text-ink-primary xl:text-[13px]';
   return (
-    <nav className="sticky top-0 z-40 w-full border-b border-edge bg-white shadow-sm">
-      <div className="mx-auto flex h-[82px] max-w-container items-center justify-between gap-3 px-3 sm:px-5 lg:px-4">
+    <nav className="energy-navbar sticky top-0 z-40 w-full border-b border-edge/80 bg-white/95 shadow-[0_10px_30px_-24px_rgba(16,24,113,0.55)] backdrop-blur-xl">
+      <div className="mx-auto flex h-[92px] max-w-container items-center justify-between gap-3 px-3 sm:px-5 lg:px-4">
         <div className="flex min-w-0 items-center gap-5 lg:gap-7 xl:gap-9">
           <Link href="/" aria-label="Sclero Proteins home" className="shrink-0">
             <LogoLockup
               assetSrc={headerLogoSrc}
               showMarkWithAsset
-              markClass="h-[46px] w-[46px] sm:h-[52px] sm:w-[52px]"
-              wordClass="h-[34px] sm:h-[40px] lg:h-[44px]"
+              markClass="h-[54px] w-[54px] sm:h-[60px] sm:w-[60px] lg:h-[64px] lg:w-[64px]"
+              wordClass="h-[40px] sm:h-[46px] lg:h-[50px]"
             />
           </Link>
 
@@ -452,8 +456,8 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
                 <LogoLockup
                   assetSrc={headerLogoSrc}
                   showMarkWithAsset
-                  markClass="h-[50px] w-[50px]"
-                  wordClass="h-[40px]"
+                  markClass="h-[60px] w-[60px]"
+                  wordClass="h-[48px]"
                 />
               </Link>
               <button

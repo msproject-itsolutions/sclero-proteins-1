@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import StoreShell from '../../components/StoreShell';
 import ProductCatalog from '../../components/ProductCatalog';
+import EggOText from '../../components/EggOText';
 import { postJson } from '../../lib/api';
 import { firstApiError, validateEnquiry } from '../../lib/formValidation';
 
@@ -119,9 +120,9 @@ export default function CategoryPage() {
       return (
         <div className="space-y-16 py-12">
           {/* Section 1: Hero Section */}
-          <section className="container-page text-center py-12 bg-brand-bg rounded-lg border border-edge">
+          <section className="premium-panel container-page rounded-[28px] py-12 text-center">
             <span className="kicker">Natural Eggshell Ingredient Platform</span>
-            <h1 className="text-display mt-3">OvoMatrix — Natural Eggshell Ingredient Platform</h1>
+            <h1 className="text-display brand-heading-gradient mt-3"><EggOText text="OvoMatrix — Natural Eggshell Ingredient Platform" /></h1>
             <p className="mx-auto mt-4 max-w-2xl text-sm text-ink-secondary">
               Mineral • Protein • Bioactive Technology for Nutrition, Soil, Turf &amp; B2B Applications
             </p>
@@ -142,7 +143,7 @@ export default function CategoryPage() {
           <section className="container-page grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
             <div>
               <span className="kicker">Platform Overview</span>
-              <h2 className="text-heading-1 mt-2">What is OvoMatrix?</h2>
+              <h2 className="text-heading-1 mt-2"><EggOText text="What is OvoMatrix?" /></h2>
               <p className="mt-4 text-xs md:text-sm text-ink-secondary leading-relaxed space-y-4">
                 OvoMatrix is the proprietary eggshell-derived ingredient platform developed by Sclero Proteins. It captures the natural synergy of minerals (calcium-rich matrix), structural proteins (collagen-derived peptides), and bioactive fractions (elastin type, membrane peptides).
               </p>

@@ -38,7 +38,11 @@ export default function useStoreBootstrap() {
       fetch(getApiUrl('/api/geo/'))
         .then((r) => (r.ok ? r.json() : null))
         .then((geo) => {
-          const target = hostForRegion(geo && geo.region_code === 'IN' ? 'IN' : 'UK');
+          // India only on a confident signal (Cloudflare/MaxMind/IP lookup).
+          // 'fallback' means the country is unknown — those visitors belong on
+          // the UK site per routing policy, regardless of the DB default region.
+          const isIndia = Boolean(geo && geo.region_code === 'IN' && geo.source !== 'fallback');
+          const target = hostForRegion(isIndia ? 'IN' : 'UK');
           const { pathname, search } = window.location;
           window.location.replace(`https://${target}${pathname}${search}`);
         })
@@ -111,11 +115,8 @@ export default function useStoreBootstrap() {
     };
     window.addEventListener('cookie-consent-updated', onConsentUpdated);
 
-    // On a real ccTLD (scleroproteins.in / .co.uk) the DOMAIN is authoritative:
-    // the middleware has already geo-routed the shopper here, so the region must
-    // match the host regardless of browser locale. We just hydrate the full
-    // Region object (currency/tax/domain) from the backend and stop — no geo
-    // refinement that could fight the domain.
+    // On a real ccTLD (scleroproteins.in / .co.uk) the DOMAIN is authoritative
+    // for currency/tax: we hydrate the full Region object from the backend.
     const hostRegion = regionFromHost(typeof window !== 'undefined' ? window.location.hostname : '');
     if (hostRegion) {
       fetch(getApiUrl(`/api/detect-region/?country=${hostRegion === 'IN' ? 'IN' : 'GB'}`))
@@ -129,6 +130,31 @@ export default function useStoreBootstrap() {
           dispatch(fetchCart({ session_id: sid, region: hostRegion }));
           setReady(true);
         });
+
+      // Geo correction for deploys without an edge geo header (plain VPS):
+      // the middleware can only redirect when Cloudflare/Vercel stamps the
+      // country, so a shopper who lands on the wrong ccTLD directly (e.g. an
+      // Indian visitor opening the .co.uk site from a search result) would
+      // otherwise stay there. Ask the backend once per session; move them only
+      // on a CONFIDENT signal, and never when they explicitly chose a region.
+      const hasRegionCookie = document.cookie.split('; ').some((c) => c.startsWith('sclero_region='));
+      const userChose = hasRegionCookie || localStorage.getItem('sclero_region_set') === 'true';
+      const alreadyChecked = sessionStorage.getItem('sclero_geo_checked') === 'true';
+      if (!userChose && !alreadyChecked) {
+        sessionStorage.setItem('sclero_geo_checked', 'true');
+        fetch(getApiUrl('/api/geo/'))
+          .then((r) => (r.ok ? r.json() : null))
+          .then((geo) => {
+            if (!geo || geo.source === 'fallback') return;
+            const target = geo.region_code === 'IN' ? 'IN' : 'UK';
+            if (target === hostRegion) return;
+            const { pathname, search } = window.location;
+            // Plain redirect, no set_region: this is an automatic correction,
+            // not an explicit choice, so the shopper can still switch manually.
+            window.location.replace(`https://${hostForRegion(target)}${pathname}${search}`);
+          })
+          .catch(() => {});
+      }
       return () => window.removeEventListener('cookie-consent-updated', onConsentUpdated);
     }
 

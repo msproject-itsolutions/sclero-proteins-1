@@ -1,4 +1,6 @@
 from django.db import models
+from django.utils import timezone
+from apps.common.fields import EncryptedJSONField, EncryptedTextField
 
 class Region(models.Model):
     code = models.CharField(max_length=10, unique=True, help_text="e.g. IN, UK")
@@ -149,3 +151,60 @@ class ShippingRate(models.Model):
 
     def __str__(self):
         return f"{self.name} - {self.price} ({self.zone.name})"
+
+
+class ShippingProvider(models.Model):
+    """Region-scoped courier integration configured entirely by staff."""
+    MODE_CHOICES = [('TEST', 'Test / Sandbox'), ('LIVE', 'Live')]
+    STATUS_CHOICES = [
+        ('NOT_TESTED', 'Not tested'),
+        ('CONNECTED', 'Connected'),
+        ('ERROR', 'Connection error'),
+    ]
+
+    code = models.CharField(max_length=40, db_index=True)
+    display_name = models.CharField(max_length=100)
+    region = models.ForeignKey(Region, on_delete=models.CASCADE, related_name='shipping_providers')
+    is_enabled = models.BooleanField(default=False, db_index=True)
+    mode = models.CharField(max_length=10, choices=MODE_CHOICES, default='TEST')
+    credentials = EncryptedJSONField(default=dict, blank=True)
+    configuration = models.JSONField(
+        default=dict, blank=True,
+        help_text='Non-secret provider settings such as account number, pickup location, and service codes.',
+    )
+    webhook_secret = EncryptedTextField(blank=True, default='')
+    sort_order = models.PositiveIntegerField(default=0)
+    connection_status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='NOT_TESTED')
+    last_tested_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.TextField(blank=True, default='')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('code', 'region')
+        ordering = ['region__code', 'sort_order', 'code']
+        indexes = [models.Index(fields=['region', 'is_enabled'])]
+
+    @property
+    def is_configured(self):
+        from .providers import SHIPPING_PROVIDER_CATALOG
+        definition = SHIPPING_PROVIDER_CATALOG.get(self.code, {})
+        required = definition.get('required_credentials', [])
+        credentials = self.credentials or {}
+        required_configuration = [
+            field['key'] for field in definition.get('configuration_fields', [])
+            if field.get('required')
+        ]
+        configuration = self.configuration or {}
+        return (
+            all(credentials.get(key) for key in required)
+            and all(configuration.get(key) for key in required_configuration)
+        )
+
+    def mark_connection(self, ok, message=''):
+        self.connection_status = 'CONNECTED' if ok else 'ERROR'
+        self.last_tested_at = timezone.now()
+        self.last_error = '' if ok else str(message)[:2000]
+        self.save(update_fields=['connection_status', 'last_tested_at', 'last_error', 'updated_at'])
+
+    def __str__(self):
+        return f'{self.display_name} [{self.region.code}]'

@@ -6,6 +6,15 @@ export const DEFAULT_HOMEPAGE_SETTINGS = {
     keywords:
       'premium collagen supplements, joint support supplements, bone health supplements, wellness supplements UK, wellness supplements India, Sclero Proteins',
   },
+  highlightStrip: {
+    enabled: true,
+    items: [
+      { label: 'Science-led formulations', icon: 'FlaskConical' },
+      { label: 'Naturally sourced actives', icon: 'Leaf' },
+      { label: 'Transparent quality standards', icon: 'ShieldCheck' },
+      { label: 'Built for everyday vitality', icon: 'Sparkles' },
+    ],
+  },
   trustSection: {
     enabled: true,
     kicker: 'Why shoppers choose Sclero',
@@ -78,6 +87,75 @@ export const DEFAULT_HOMEPAGE_SETTINGS = {
     cardDescription: 'A quick, friendly way for first-time shoppers to narrow down the best fit.',
     buttonLabel: 'Start Quiz',
     icon: 'HeartHandshake',
+    content: {
+      questionLabel: 'Question',
+      ofLabel: 'of',
+      backLabel: 'Back',
+      nextLabel: 'Next',
+      recommendationLabel: 'Get Recommendation',
+      resultTitle: 'Perfect Match Found!',
+      resultDescription: 'Based on your answers, we found the ideal product for you',
+      matchLabel: 'Match',
+      addToCartLabel: 'Add to Cart',
+      startOverLabel: 'Start Over',
+      preferencesLabel: 'Your Preferences',
+      steps: [
+        {
+          id: 'goal',
+          title: "What's your primary health goal?",
+          subtitle: 'Help us recommend the best products for you',
+          options: [
+            { value: 'beauty', label: 'Skin, Hair & Nails', icon: '✨', description: 'Glow, strength & elasticity' },
+            { value: 'joints', label: 'Joints & Mobility', icon: '💪', description: 'Comfort & flexibility' },
+            { value: 'overall', label: 'Overall Health', icon: '❤️', description: 'General wellness & vitality' },
+            { value: 'recovery', label: 'Active Recovery', icon: '🏃', description: 'Post-workout support' },
+          ],
+        },
+        {
+          id: 'timeframe',
+          title: 'When do you want to see results?',
+          subtitle: 'Collagen works best with consistency',
+          options: [
+            { value: '4-8weeks', label: '4-8 weeks', icon: '⚡', description: 'Fast-track results' },
+            { value: '8-12weeks', label: '8-12 weeks', icon: '📅', description: 'Standard timeline (recommended)' },
+            { value: '12+weeks', label: '12+ weeks', icon: '🌱', description: 'Long-term commitment' },
+          ],
+        },
+        {
+          id: 'lifestyle',
+          title: "What's your lifestyle like?",
+          subtitle: 'This helps us match the right product format',
+          options: [
+            { value: 'active', label: 'Very Active', icon: '🏋️', description: 'Regular exercise & training' },
+            { value: 'moderate', label: 'Moderately Active', icon: '🚴', description: 'Some movement & exercise' },
+            { value: 'sedentary', label: 'Mostly Sedentary', icon: '🪑', description: 'Limited physical activity' },
+          ],
+        },
+        {
+          id: 'preferences',
+          title: 'Any dietary preferences?',
+          subtitle: "We'll find products that match your needs",
+          options: [
+            { value: 'vegan', label: 'Vegan', icon: '🌱', description: 'Plant-based only' },
+            { value: 'gluten-free', label: 'Gluten-Free', icon: '🌾', description: 'No gluten' },
+            { value: 'none', label: 'No Restrictions', icon: '✅', description: 'Open to all products' },
+          ],
+        },
+      ],
+      recommendations: [
+        { key: 'beauty-8-active-none', sku: 'COMBO-COLLAGEN-60', name: 'Combo Collagen®', match: '95%', reason: 'Perfect for active beauty seekers on a standard timeline' },
+        { key: 'beauty-8-active-vegan', sku: 'COMBO-COLLAGEN-60', name: 'Combo Collagen® (Vegan-Friendly)', match: '92%', reason: 'Best vegan option for beauty and activity' },
+        { key: 'joints-8-active-none', sku: 'BJC-BONE-JOINT', name: 'BJC® Bone & Joint Care', match: '98%', reason: 'Specifically designed for active joint support' },
+        { key: 'overall-8-moderate-none', sku: 'OVOSHELL-COLLAGEN-60', name: 'OvoShell Collagen™', match: '88%', reason: 'Comprehensive wellness formula for all-around health' },
+        { key: 'recovery-8-active-none', sku: 'BJC-BONE-JOINT', name: 'BJC® Bone & Joint Care', match: '96%', reason: 'Ideal for post-workout recovery and muscle support' },
+      ],
+      fallbackRecommendation: {
+        sku: 'COMBO-COLLAGEN-60',
+        name: 'Combo Collagen®',
+        match: '85%',
+        reason: 'Great all-around collagen supplement',
+      },
+    },
   },
   chooseSection: {
     enabled: true,
@@ -180,6 +258,7 @@ export const DEFAULT_HOMEPAGE_SETTINGS = {
     quoteTitle: '“It feels like my wellness routine got an upgrade.”',
     quoteBody:
       'Clearer labels, easier comparison, and a more premium product story help turn curiosity into action.',
+    proofSummary: 'Cleaner labels. Easier comparison. Stronger buying confidence.',
     proofHighlights: [
       { value: 'UK', label: 'Regional store support' },
       { value: 'IN', label: 'Localized checkout flow' },
@@ -222,6 +301,24 @@ export const DEFAULT_HOMEPAGE_SETTINGS = {
       'Explore practical content on ingredients, formulation standards, and supplement literacy so customers can shop with more confidence.',
     ctaLabel: 'Visit Learn',
     ctaUrl: '/blog',
+    readLabel: 'Read guide',
+    fallbackEntries: [
+      {
+        title: 'Understanding joint mobility nutrition',
+        author: 'Sclero Advisory',
+        description: 'A practical guide to collagen, cartilage support, and the cofactors that help them work together.',
+      },
+      {
+        title: 'How to read supplement labels with confidence',
+        author: 'Clinical Education',
+        description: 'Learn how to spot filler-heavy formulas and compare active ingredient levels in minutes.',
+      },
+      {
+        title: 'Why low-heat processing matters',
+        author: 'Product Research',
+        description: 'See how ingredient handling can affect the integrity of delicate protein structures.',
+      },
+    ],
   },
   inquirySection: {
     enabled: true,
@@ -231,12 +328,17 @@ export const DEFAULT_HOMEPAGE_SETTINGS = {
       'Ask about products, ingredients, delivery, or general support and our team will point you in the right direction.',
     successMessage: 'Thanks for reaching out. Our team will get back to you shortly.',
     buttonLabel: 'Submit inquiry',
+    namePlaceholder: 'Your name',
+    emailPlaceholder: 'Email address',
+    messagePlaceholder: 'How can we help?',
+    sendingLabel: 'Sending…',
+    whatsappLabel: 'Chat with us',
   },
 };
 
 function mergeObject(defaultValue, incomingValue) {
   if (Array.isArray(defaultValue)) {
-    return Array.isArray(incomingValue) && incomingValue.length > 0 ? incomingValue : defaultValue;
+    return Array.isArray(incomingValue) ? incomingValue : defaultValue;
   }
 
   if (defaultValue && typeof defaultValue === 'object') {

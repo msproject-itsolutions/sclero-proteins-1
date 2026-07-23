@@ -1,11 +1,16 @@
 """Deliver due outbound webhooks from the durable database queue."""
 
+import logging
+
 from django.core.management.base import BaseCommand
 from django.db.models import Q
 from django.utils import timezone
 
+from apps.orders.cron import job_run
 from apps.webhooks.dispatcher import send_delivery
 from apps.webhooks.models import WebhookDelivery
+
+logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
@@ -24,15 +29,25 @@ class Command(BaseCommand):
             .values_list('id', flat=True)[:limit]
         )
 
-        processed = 0
-        for delivery_id in delivery_ids:
-            delivery = WebhookDelivery.objects.select_related('subscription').filter(
-                pk=delivery_id,
-                status__in=['PENDING', 'FAILED'],
-            ).first()
-            if not delivery:
-                continue
-            send_delivery(delivery)
-            processed += 1
+        with job_run('process_outgoing_webhooks') as result:
+            for delivery_id in delivery_ids:
+                delivery = WebhookDelivery.objects.select_related('subscription').filter(
+                    pk=delivery_id,
+                    status__in=['PENDING', 'FAILED'],
+                ).first()
+                if not delivery:
+                    continue
+                # One broken delivery (bad URL, serialization error) must not
+                # abandon the rest of the batch.
+                try:
+                    send_delivery(delivery)
+                    result.processed += 1
+                except Exception:
+                    logger.exception('Outbound webhook delivery %s crashed', delivery_id)
+                    result.failed += 1
+            result.message = (
+                f'Processed {result.processed} outbound webhook delivery(s); '
+                f'{result.failed} crashed.'
+            )
 
-        self.stdout.write(f'Processed {processed} outbound webhook delivery(s).')
+        self.stdout.write(result.message)

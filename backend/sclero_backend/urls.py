@@ -9,6 +9,7 @@ from apps.regions.views import (
     RegionViewSet, detect_region, geo_detect,
     RegionAdminViewSet, WarehouseAdminViewSet,
     ShippingZoneAdminViewSet, ShippingRateAdminViewSet,
+    ShippingProviderAdminViewSet,
     PostcodeLookupView, ShippingCalculateView,
 )
 from apps.products.views import (
@@ -42,6 +43,7 @@ from apps.admin_dashboard.views import (
     FeatureToggleViewSet, SystemSettingViewSet, HeroBannerSlideViewSet, PaymentGatewayViewSet, EmailTemplateViewSet,
     MarketingIntegrationViewSet, ContentPageViewSet, BlogPostViewSet, ReportAnalyticsView,
     ApprovalRequestViewSet, PublishedContentPageListView, PublishedContentPageDetailView,
+    CronJobRunViewSet, PublishedPolicyPagesView,
     PublishedBlogPostListView, PublishedBlogPostDetailView, PublicSiteSettingView,
     StoreConfigView, TaxSettingsAdminView,
 )
@@ -77,6 +79,7 @@ router.register(r'admin/regions', RegionAdminViewSet, basename='admin-region')
 router.register(r'admin/warehouses', WarehouseAdminViewSet, basename='admin-warehouse')
 router.register(r'admin/shipping-zones', ShippingZoneAdminViewSet, basename='admin-shipping-zone')
 router.register(r'admin/shipping-rates', ShippingRateAdminViewSet, basename='admin-shipping-rate')
+router.register(r'admin/shipping-providers', ShippingProviderAdminViewSet, basename='admin-shipping-provider')
 router.register(r'admin/orders', OrderAdminViewSet, basename='admin-order')
 router.register(r'admin/refunds', RefundAdminViewSet, basename='admin-refund')
 router.register(r'admin/invoices', InvoiceAdminViewSet, basename='admin-invoice')
@@ -102,6 +105,7 @@ router.register(r'admin/webhook-subscriptions', WebhookSubscriptionViewSet, base
 router.register(r'admin/webhook-deliveries', WebhookDeliveryViewSet, basename='admin-webhook-delivery')
 router.register(r'admin/incoming-webhooks', IncomingWebhookEventViewSet, basename='admin-incoming-webhook')
 router.register(r'admin/push-campaigns', PushCampaignViewSet, basename='admin-push-campaign')
+router.register(r'admin/cron-runs', CronJobRunViewSet, basename='admin-cron-run')
 
 urlpatterns = [
     path('api/health/live/', live, name='health_live'),
@@ -165,6 +169,7 @@ urlpatterns = [
     path('api/orders/<int:order_id>/refund/', RefundView.as_view(), name='order_refund'),
 
     # Public CMS endpoints
+    path('api/policies/', PublishedPolicyPagesView.as_view(), name='public_policy_pages'),
     path('api/content-pages/published-slugs/', PublishedContentPageListView.as_view(), name='public_content_pages_slugs'),
     path('api/content-pages/<slug:slug>/', PublishedContentPageDetailView.as_view(), name='public_content_page_detail'),
     path('api/blog-posts/', PublishedBlogPostListView.as_view(), name='public_blog_posts'),

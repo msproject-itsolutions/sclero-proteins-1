@@ -6,11 +6,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from .geo import detect_country_with_source, map_country_to_region_code
 from .shipping import calculate_shipping
-from .models import Region, Warehouse, ShippingZone, ShippingRate
+from .models import Region, Warehouse, ShippingZone, ShippingRate, ShippingProvider
 from .serializers import (
     RegionSerializer,
     RegionAdminSerializer, WarehouseAdminSerializer,
-    ShippingZoneAdminSerializer, ShippingRateAdminSerializer
+    ShippingZoneAdminSerializer, ShippingRateAdminSerializer,
+    ShippingProviderAdminSerializer,
 )
 from apps.users.permissions import require_permission
 
@@ -282,3 +283,36 @@ class ShippingRateAdminViewSet(viewsets.ModelViewSet):
         rates = self.get_queryset().filter(zone_id=zone_id)
         serializer = self.get_serializer(rates, many=True)
         return Response(serializer.data)
+
+
+class ShippingProviderAdminViewSet(viewsets.ModelViewSet):
+    queryset = ShippingProvider.objects.select_related('region').all()
+    serializer_class = ShippingProviderAdminSerializer
+    permission_classes = [require_permission('settings.manage')]
+
+    def get_queryset(self):
+        queryset = self.queryset
+        region_code = self.request.query_params.get('region')
+        if region_code:
+            queryset = queryset.filter(region__code=region_code.upper())
+        return queryset
+
+    @action(detail=False, methods=['get'])
+    def catalog(self, request):
+        from .providers import shipping_provider_catalog
+        providers = shipping_provider_catalog()
+        for provider in providers:
+            provider['webhook_path'] = f"/api/webhooks/shipping/{provider['code'].lower()}/"
+        return Response(providers)
+
+    @action(detail=True, methods=['post'])
+    def test_connection(self, request, pk=None):
+        from .providers import ShippingProviderError, get_shipping_adapter
+        provider = self.get_object()
+        try:
+            result = get_shipping_adapter(provider).test_connection()
+        except ShippingProviderError as exc:
+            provider.mark_connection(False, str(exc))
+            return Response({'ok': False, 'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        provider.mark_connection(True)
+        return Response(result)

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Region, Warehouse, ShippingZone, ShippingRate
+from .models import Region, Warehouse, ShippingZone, ShippingRate, ShippingProvider
 
 class RegionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -211,3 +211,80 @@ class ShippingRateAdminSerializer(serializers.ModelSerializer):
             attrs['per_unit_price'] = 0
             attrs['handling_fee'] = 0
         return attrs
+
+
+class ShippingProviderAdminSerializer(serializers.ModelSerializer):
+    region_code = serializers.CharField(source='region.code', read_only=True)
+    is_configured = serializers.BooleanField(read_only=True)
+    credential_status = serializers.SerializerMethodField()
+    credentials = serializers.JSONField(write_only=True, required=False)
+
+    class Meta:
+        model = ShippingProvider
+        fields = [
+            'id', 'code', 'display_name', 'region', 'region_code', 'is_enabled',
+            'mode', 'credentials', 'configuration', 'webhook_secret',
+            'sort_order', 'is_configured', 'credential_status',
+            'connection_status', 'last_tested_at', 'last_error', 'updated_at',
+        ]
+        read_only_fields = [
+            'id', 'connection_status', 'last_tested_at', 'last_error', 'updated_at',
+        ]
+        extra_kwargs = {
+            'credentials': {'write_only': True, 'required': False},
+            'webhook_secret': {'write_only': True, 'required': False},
+        }
+
+    def get_credential_status(self, obj):
+        from .providers import SHIPPING_PROVIDER_CATALOG
+        definition = SHIPPING_PROVIDER_CATALOG.get(obj.code, {})
+        credentials = obj.credentials or {}
+        return {
+            field['key']: bool(credentials.get(field['key']))
+            for field in definition.get('credential_fields', [])
+        }
+
+    def validate_code(self, value):
+        from .providers import SHIPPING_PROVIDER_CATALOG
+        code = str(value or '').upper()
+        if code not in SHIPPING_PROVIDER_CATALOG:
+            raise serializers.ValidationError('This shipping provider is not installed.')
+        return code
+
+    def validate(self, attrs):
+        from .providers import SHIPPING_PROVIDER_CATALOG
+        instance = self.instance
+        code = attrs.get('code', getattr(instance, 'code', ''))
+        definition = SHIPPING_PROVIDER_CATALOG.get(code, {})
+        credentials = {**(getattr(instance, 'credentials', {}) or {}), **(attrs.get('credentials') or {})}
+        configuration = {**(getattr(instance, 'configuration', {}) or {}), **(attrs.get('configuration') or {})}
+        if attrs.get('is_enabled', getattr(instance, 'is_enabled', False)):
+            missing = [
+                key for key in definition.get('required_credentials', [])
+                if not credentials.get(key)
+            ]
+            missing += [
+                field['key'] for field in definition.get('configuration_fields', [])
+                if field.get('required') and not configuration.get(field['key'])
+            ]
+            if missing:
+                raise serializers.ValidationError({
+                    'is_enabled': f"Complete these required settings before enabling: {', '.join(missing)}."
+                })
+        return attrs
+
+    def update(self, instance, validated_data):
+        incoming = validated_data.get('credentials')
+        if isinstance(incoming, dict):
+            validated_data['credentials'] = {
+                **(instance.credentials or {}),
+                **{key: value for key, value in incoming.items() if value not in ('', None)},
+            }
+        if not validated_data.get('webhook_secret'):
+            validated_data.pop('webhook_secret', None)
+        if isinstance(validated_data.get('configuration'), dict):
+            validated_data['configuration'] = {
+                **(instance.configuration or {}),
+                **validated_data['configuration'],
+            }
+        return super().update(instance, validated_data)

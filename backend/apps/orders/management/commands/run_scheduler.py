@@ -38,10 +38,12 @@ class Command(BaseCommand):
             'send_abandoned_cart_reminders': int(os.getenv('SCHEDULE_CART_SECONDS', '3600')),
             'send_review_requests': int(os.getenv('SCHEDULE_REVIEW_SECONDS', '86400')),
             'process_push_notifications': int(os.getenv('SCHEDULE_PUSH_SECONDS', '60')),
+            'prune_system_records': int(os.getenv('SCHEDULE_PRUNE_SECONDS', '86400')),
         }
         intervals = {name: max(seconds, 30) for name, seconds in intervals.items()}
         due = {name: 0.0 for name in intervals}
         stop = threading.Event()
+        heartbeat_path = os.getenv('SCHEDULER_HEARTBEAT_FILE', '/tmp/scheduler-heartbeat')
 
         def request_stop(*_args):
             stop.set()
@@ -54,6 +56,7 @@ class Command(BaseCommand):
             while not stop.is_set():
                 if not self._renew_lease(owner, lease_seconds):
                     raise CommandError('Scheduler database lease was lost.')
+                self._touch_heartbeat(heartbeat_path)
                 now = time.monotonic()
                 for name, interval in intervals.items():
                     if now < due[name]:
@@ -71,6 +74,16 @@ class Command(BaseCommand):
             SchedulerLease.objects.filter(name='primary', owner=owner).delete()
 
         self.stdout.write('Scheduler stopped.')
+
+    @staticmethod
+    def _touch_heartbeat(path):
+        """Stamp a liveness file each loop so a container healthcheck can
+        detect a hung (alive but stuck) scheduler, not just a crashed one."""
+        try:
+            with open(path, 'w', encoding='utf-8') as handle:
+                handle.write(str(int(time.time())))
+        except OSError:
+            logger.warning('Could not write scheduler heartbeat file %s', path)
 
     @staticmethod
     def _renew_lease(owner, lease_seconds):

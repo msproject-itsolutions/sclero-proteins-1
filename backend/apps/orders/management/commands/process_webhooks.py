@@ -3,7 +3,8 @@ from decimal import Decimal, InvalidOperation
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, Sum
+from apps.orders.cron import job_run
 from apps.orders.models import Order, WebhookEvent, PaymentLog, Invoice
 from apps.orders.utils import generate_invoice_pdf
 
@@ -21,42 +22,63 @@ BACKOFFS = [
 class Command(BaseCommand):
     help = 'Processes queued webhook events with exponential backoff.'
 
-    def handle(self, *args, **options):
-        self.stdout.write(self.style.SUCCESS("Starting Webhook Event Processor..."))
-        
-        now = timezone.now()
-        events = WebhookEvent.objects.filter(
-            status__in=['PENDING', 'FAILED']
-        ).filter(
-            Q(next_attempt_at__isnull=True) | Q(next_attempt_at__lte=now)
+    def add_arguments(self, parser):
+        parser.add_argument(
+            '--limit', type=int, default=100,
+            help='Maximum events per run; keeps one run from blocking the scheduler.',
         )
-        
-        count = events.count()
-        if count == 0:
-            self.stdout.write("No pending webhook events to process.")
-            return
 
-        self.stdout.write(f"Found {count} events to process.")
+    def handle(self, *args, **options):
+        limit = min(max(options['limit'], 1), 1000)
+        self.stdout.write(self.style.SUCCESS("Starting Webhook Event Processor..."))
 
-        for event in events:
-            self.process_event(event)
+        now = timezone.now()
+        # Snapshot ids once (no count()+iterate double query) and bound the
+        # batch, so a backlog cannot hold the single-threaded scheduler past
+        # its lease. Whatever is left is picked up on the next tick.
+        event_ids = list(
+            WebhookEvent.objects.filter(status__in=['PENDING', 'FAILED'])
+            .filter(Q(next_attempt_at__isnull=True) | Q(next_attempt_at__lte=now))
+            .order_by('created_at')
+            .values_list('pk', flat=True)[:limit]
+        )
 
-    def process_event(self, event):
+        with job_run('process_webhooks') as result:
+            if not event_ids:
+                result.message = 'No pending webhook events to process.'
+                self.stdout.write(result.message)
+                return
+
+            self.stdout.write(f"Found {len(event_ids)} events to process.")
+            for event_pk in event_ids:
+                if self.process_event_by_pk(event_pk):
+                    result.processed += 1
+                else:
+                    result.failed += 1
+            result.message = (
+                f'Processed {result.processed} webhook event(s); {result.failed} failed.'
+            )
+
+    def process_event_by_pk(self, event_pk):
+        """Process one queued event. Returns True on success, False on failure."""
         # Claim and process one event under a row lock. The scheduler lease is
         # the normal single-worker guard; this lock also protects against a
         # manual command overlapping a scheduled run.
         with transaction.atomic():
-            event = WebhookEvent.objects.select_for_update().get(pk=event.pk)
+            event = WebhookEvent.objects.select_for_update().filter(pk=event_pk).first()
+            if event is None:
+                return True
             now = timezone.now()
             if event.status not in ('PENDING', 'FAILED'):
-                return
+                return True
             if event.next_attempt_at and event.next_attempt_at > now:
-                return
+                return True
 
             event.attempts += 1
             event.last_attempt_at = now
             self.stdout.write(f"Processing event {event.id} ({event.gateway} - {event.event_type}), Attempt #{event.attempts}")
 
+            succeeded = False
             try:
                 # A nested savepoint rolls back partial order/log changes while
                 # allowing the failure state and retry schedule to be recorded.
@@ -78,6 +100,7 @@ class Command(BaseCommand):
                     event.next_attempt_at = timezone.now() + delay
                     self.stdout.write(self.style.WARNING(f"Event {event.id} failed. Scheduled next attempt in {delay} (at {event.next_attempt_at})"))
             else:
+                succeeded = True
                 event.status = 'PROCESSED'
                 event.error_log = ''
                 event.error_message = ''
@@ -88,6 +111,7 @@ class Command(BaseCommand):
                 'attempts', 'last_attempt_at', 'status', 'error_log',
                 'error_message', 'next_attempt_at',
             ])
+            return succeeded
 
     def execute_business_logic(self, event):
         payload = event.payload
@@ -178,12 +202,59 @@ class Command(BaseCommand):
                 # Don't fail the whole transaction if PDF generation has a minor glitch
                 self.stdout.write(self.style.WARNING(f"Invoice generation failed for Order #{order.id}: {str(inv_err)}"))
         elif event_type == 'payment.failed':
-            order.payment_status = 'FAILED'
-            order.save(update_fields=['payment_status', 'updated_at'])
+            # A late/duplicate failure event for another payment attempt must
+            # never downgrade an order that has already been paid or refunded.
+            if order.payment_status in ('PENDING', 'AUTHORIZED', 'FAILED'):
+                order.payment_status = 'FAILED'
+                order.save(update_fields=['payment_status', 'updated_at'])
+            else:
+                self.stdout.write(
+                    f"Ignoring payment.failed for order #{order.id} "
+                    f"(payment status is {order.payment_status})."
+                )
+            PaymentLog.objects.get_or_create(
+                order=order,
+                transaction_id=payment_id,
+                status='FAILED',
+                defaults={
+                    'gateway': gateway_code,
+                    'amount': order.total,
+                    'raw_response': payload,
+                },
+            )
         elif event_type == 'refund.processed':
-            order.payment_status = 'REFUNDED'
-            order.status = 'REFUNDED'
-            order.save(update_fields=['payment_status', 'status', 'updated_at'])
+            try:
+                refunded_amount = Decimal(str(parsed_event.get('amount') or '0'))
+            except InvalidOperation:
+                refunded_amount = Decimal('0')
+
+            PaymentLog.objects.get_or_create(
+                order=order,
+                transaction_id=payment_id,
+                status='REFUND_PROCESSED',
+                defaults={
+                    'gateway': gateway_code,
+                    'amount': refunded_amount or order.total,
+                    'raw_response': payload,
+                },
+            )
+
+            # Refunds recorded in our own system (admin refunds) plus this
+            # event's amount decide whether the WHOLE order is refunded. A
+            # partial refund must not flip the entire order to REFUNDED.
+            recorded = order.refunds.filter(status='PROCESSED').aggregate(
+                s=Sum('amount')
+            )['s'] or Decimal('0')
+            covered = max(recorded, refunded_amount)
+            if not refunded_amount or covered >= order.total:
+                order.payment_status = 'REFUNDED'
+                order.status = 'REFUNDED'
+                order.save(update_fields=['payment_status', 'status', 'updated_at'])
+            else:
+                self.stdout.write(
+                    f"Partial refund of {refunded_amount} recorded for order #{order.id}; "
+                    "order remains in its current status."
+                )
 
     def extract_order_id_from_metadata(self, event, payload):
         gateway = event.gateway

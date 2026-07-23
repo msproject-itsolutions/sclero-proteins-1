@@ -204,3 +204,50 @@ class ScleroProteinsTests(APITestCase):
             StockLevel.objects.get(warehouse=overflow_wh, product=self.prod_glut).available,
             0,
         )
+
+
+class GeoRoutingTests(APITestCase):
+    """Country-based routing policy: India -> IN site, everyone else -> UK."""
+
+    def setUp(self):
+        self.region_in = Region.objects.create(
+            code='IN', name='India', domain='scleroproteins.in',
+            currency_code='INR', currency_symbol='₹', tax_name='GST', tax_rate=18.00,
+            countries=['IN'],
+        )
+        self.region_uk = Region.objects.create(
+            code='UK', name='United Kingdom', domain='scleroproteins.co.uk',
+            currency_code='GBP', currency_symbol='£', tax_name='VAT', tax_rate=20.00,
+            countries=['GB', 'IE'], is_default=True,
+        )
+
+    def geo(self, **headers):
+        return self.client.get(reverse('geo_detect'), **headers)
+
+    def test_indian_visitor_maps_to_india_region(self):
+        response = self.geo(HTTP_CF_IPCOUNTRY='IN')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['region_code'], 'IN')
+        self.assertEqual(response.data['source'], 'cloudflare')
+
+    def test_non_indian_visitor_maps_to_uk_region(self):
+        for country in ('US', 'GB', 'DE', 'AU', 'AE'):
+            response = self.geo(HTTP_CF_IPCOUNTRY=country)
+            self.assertEqual(
+                response.data['region_code'], 'UK',
+                f'{country} should route to the UK site',
+            )
+            self.assertEqual(response.data['source'], 'cloudflare')
+
+    def test_unknown_country_reports_fallback_source(self):
+        # 'XX' is Cloudflare's "unknown"; with no signal at all the source must
+        # be 'fallback' so the frontend never auto-redirects on a guess.
+        response = self.geo(HTTP_CF_IPCOUNTRY='XX')
+        self.assertEqual(response.data['source'], 'fallback')
+        response = self.geo()
+        self.assertEqual(response.data['source'], 'fallback')
+
+    def test_vercel_header_used_when_cloudflare_absent(self):
+        response = self.geo(HTTP_X_VERCEL_IP_COUNTRY='IN')
+        self.assertEqual(response.data['region_code'], 'IN')
+        self.assertEqual(response.data['source'], 'vercel')

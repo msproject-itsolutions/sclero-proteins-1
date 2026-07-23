@@ -397,6 +397,7 @@ class CreatePaymentIntentView(views.APIView):
     needs to collect payment, after which /api/checkout/ verifies the result.
     """
     permission_classes = [AllowAny]
+    throttle_scope = 'checkout'
 
     def post(self, request):
         session_id = _clean_text(request.data.get('session_id'))
@@ -709,7 +710,11 @@ class CheckoutView(views.APIView):
         try:
             charge = gateway_adapter.charge(order, gateway_payload)
         except PaymentError as exc:
-            # Atomic transaction rolls back the order + stock deduction.
+            # Catching the error would normally let the surrounding atomic
+            # block COMMIT the order, stock deduction and coupon use for a
+            # payment that never happened. Explicitly mark the transaction for
+            # rollback so a failed charge leaves no trace.
+            transaction.set_rollback(True)
             return Response({"error": str(exc)}, status=status.HTTP_402_PAYMENT_REQUIRED)
 
         order.payment_id = charge.get("transaction_id", payment_id)
@@ -1538,24 +1543,75 @@ class RefundAdminViewSet(viewsets.ModelViewSet):
         return RefundAdminSerializer
 
     @action(detail=True, methods=['post'])
+    @transaction.atomic
     def process(self, request, pk=None):
-        """Process a refund through the original payment gateway."""
-        refund = self.get_object()
+        """Process a PENDING refund through the original payment gateway.
+
+        Locks the refund row so two admins clicking "process" concurrently
+        cannot both reach the gateway, and records the outcome on the refund
+        itself — without that, a processed refund stayed PENDING forever and
+        could be re-processed into a double payout.
+        """
+        refund = get_object_or_404(
+            Refund.objects.select_for_update().select_related('order'), pk=pk,
+        )
         if refund.status != 'PENDING':
             return Response({"error": "Only pending refunds can be processed"}, status=status.HTTP_400_BAD_REQUEST)
 
+        order = Order.objects.select_for_update().get(pk=refund.order_id)
+
         try:
-            result = refund_payment(refund.order, refund.amount, refund.reason)
-            _send_order_event_with_logging(
-                'refund_processed', refund.order_id,
-                extra_context={'refund_amount': str(refund.amount)},
+            result = refund_payment(order, refund.amount, refund.reason)
+        except PaymentError as exc:
+            # Keep the refund PENDING so it can be retried once the gateway
+            # problem is resolved, but leave an audit trail of the attempt.
+            PaymentLog.objects.create(
+                order=order,
+                transaction_id=refund.refund_transaction_id or f"refund_{refund.id}",
+                gateway=order.payment_method,
+                amount=refund.amount,
+                status='REFUND_ATTEMPT_FAILED',
+                raw_response={'error': str(exc)},
             )
-            return Response({
-                "message": "Refund processed successfully",
-                "result": result
-            })
-        except PaymentError as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        gateway_status = result.get('status')
+        if gateway_status == 'REFUNDED':
+            refund.status = 'PROCESSED'
+        elif gateway_status == 'FAILED':
+            refund.status = 'FAILED'
+        # REFUND_PENDING (e.g. COD manual payout) stays PENDING for follow-up.
+        refund.refund_transaction_id = result.get('refund_id', '') or refund.refund_transaction_id
+        refund.save(update_fields=['status', 'refund_transaction_id'])
+
+        PaymentLog.objects.create(
+            order=order,
+            transaction_id=refund.refund_transaction_id or f"refund_{refund.id}",
+            gateway=order.payment_method,
+            amount=refund.amount,
+            status=f"REFUND_{refund.status}",
+            raw_response=result.get('raw', {}),
+        )
+
+        if refund.status == 'PROCESSED':
+            processed_total = order.refunds.filter(status='PROCESSED').aggregate(
+                s=Sum('amount')
+            )['s'] or Decimal('0.00')
+            if processed_total >= order.total and order.status != 'REFUNDED':
+                order.status = 'REFUNDED'
+                order.save(update_fields=['status'])
+            transaction.on_commit(lambda order_id=order.id, amount=str(refund.amount): (
+                _send_order_event_with_logging(
+                    'refund_processed', order_id,
+                    extra_context={'refund_amount': amount},
+                )
+            ))
+
+        return Response({
+            "message": f"Refund {refund.status.lower()}.",
+            "refund": RefundAdminSerializer(refund).data,
+            "result": result,
+        })
 
 
 class InvoiceAdminViewSet(viewsets.ReadOnlyModelViewSet):

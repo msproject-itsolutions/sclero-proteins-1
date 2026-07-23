@@ -2157,8 +2157,10 @@ function AbandonedTab({ authFetch }) {
 
 /* ----------------------------------------------------------- Payments */
 function PaymentsTab({ authFetch, regions }) {
-  const [activeSubTab, setActiveSubTab] = useState('routing'); // routing | fraud | refunds
+  const [activeSubTab, setActiveSubTab] = useState('routing'); // routing | webhooks | fraud | refunds
   const [gateways, setGateways] = useState([]);
+  const [providerCatalog, setProviderCatalog] = useState([]);
+  const [webhookEvents, setWebhookEvents] = useState([]);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(null);
@@ -2176,6 +2178,8 @@ function PaymentsTab({ authFetch, regions }) {
     setLoading(true);
     Promise.all([
       authFetch('/api/admin/payment-gateways/').then((r) => r.json()).catch(() => []),
+      authFetch('/api/admin/payment-gateways/catalog/').then((r) => r.json()).catch(() => []),
+      authFetch('/api/admin/incoming-webhooks/').then((r) => r.json()).catch(() => []),
       authFetch('/api/admin/orders/').then((r) => r.json()).catch(() => []),
       authFetch('/api/admin/settings/PAYMENT_FRAUD_RULES/')
         .then((r) => r.ok ? r.json().then(d => d.value) : null)
@@ -2184,8 +2188,10 @@ function PaymentsTab({ authFetch, regions }) {
         .then((r) => r.ok ? r.json().then(d => d.value) : null)
         .catch(() => null),
       authFetch('/api/admin/roles/').then((r) => r.ok ? r.json() : []).catch(() => []),
-    ]).then(([g, o, fraudData, refundData, roleData]) => {
+    ]).then(([g, catalogData, webhookData, o, fraudData, refundData, roleData]) => {
       setGateways(Array.isArray(g) ? g : g.results || []);
+      setProviderCatalog(Array.isArray(catalogData) ? catalogData : catalogData.results || []);
+      setWebhookEvents(Array.isArray(webhookData) ? webhookData : webhookData.results || []);
       setOrders(Array.isArray(o) ? o : o.results || []);
       if (fraudData) {
         setFraudRules(fraudData);
@@ -2277,6 +2283,23 @@ function PaymentsTab({ authFetch, regions }) {
       })
       .catch(() => alert('Sync failed — check the gateway logs.'));
   };
+  const testConnection = (gateway) => {
+    authFetch(`/api/admin/payment-gateways/${gateway.id}/test_connection/`, { method: 'POST', body: JSON.stringify({}) })
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Connection test failed.');
+        alert(data.message || 'Connection verified.');
+      })
+      .catch((error) => alert(error.message));
+  };
+  const retryWebhook = (event) => {
+    authFetch(`/api/admin/incoming-webhooks/${event.id}/retry/`, { method: 'POST', body: JSON.stringify({}) })
+      .then((response) => {
+        if (!response.ok) throw new Error('Could not queue this webhook for retry.');
+        load();
+      })
+      .catch((error) => alert(error.message));
+  };
   const regionCode = (id) => regions.find((r) => r.id === id)?.code || id;
 
   if (loading) return <p className="text-sm text-brand-muted">Loading gateways and rules registry...</p>;
@@ -2296,6 +2319,7 @@ function PaymentsTab({ authFetch, regions }) {
       {/* Subtab Navigation */}
       <div className="flex gap-2 border-b border-edge-subtle pb-2">
         <button onClick={() => setActiveSubTab('routing')} className={`px-4 py-1.5 text-sm font-semibold uppercase rounded-sm ${activeSubTab === 'routing' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Gateway Routing &amp; Priority</button>
+        <button onClick={() => setActiveSubTab('webhooks')} className={`px-4 py-1.5 text-sm font-semibold uppercase rounded-sm ${activeSubTab === 'webhooks' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Webhook Operations</button>
         <button onClick={() => setActiveSubTab('fraud')} className={`px-4 py-1.5 text-sm font-semibold uppercase rounded-sm ${activeSubTab === 'fraud' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Fraud Prevention Rules</button>
         <button onClick={() => setActiveSubTab('refunds')} className={`px-4 py-1.5 text-sm font-semibold uppercase rounded-sm ${activeSubTab === 'refunds' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Refund Limits</button>
       </div>
@@ -2307,7 +2331,7 @@ function PaymentsTab({ authFetch, regions }) {
             <div className="rounded-md border border-edge bg-white shadow-card p-4"><p className="text-sm text-brand-muted">Manual capture queue</p><p className="mt-1 text-2xl font-semibold text-ink-primary">{manualCapture.length}</p></div>
             <div className="rounded-md border border-edge bg-white shadow-card p-4"><p className="text-sm text-brand-muted">Captured orders</p><p className="mt-1 text-2xl font-semibold text-ink-primary">{orders.filter((o) => (o.payment_status || 'PAID') === 'PAID').length}</p></div>
           </div>
-          <div className="flex items-center justify-between"><p className="text-sm text-brand-muted">{gateways.length} gateways · region-routed by priority</p><button onClick={() => setForm({ code: 'RAZORPAY', display_name: '', region: regions[0]?.id, is_enabled: true, mode: 'TEST', publishable_key: '', secret_key: '', webhook_secret: '', webhook_id: '', supports_refunds: true, sort_order: 0 })} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-sm uppercase"><Plus className="h-4 w-4" /> New gateway</button></div>
+          <div className="flex items-center justify-between"><p className="text-sm text-brand-muted">{gateways.length} gateways · region-routed by priority</p><button onClick={() => setForm({ code: providerCatalog[0]?.code || 'RAZORPAY', display_name: providerCatalog[0]?.name || '', region: regions[0]?.id, is_enabled: false, mode: 'TEST', publishable_key: '', secret_key: '', webhook_secret: '', webhook_id: '', supports_refunds: true, sort_order: 0 })} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-sm uppercase"><Plus className="h-4 w-4" /> New gateway</button></div>
           
           <div className="space-y-2">
             {sortedGateways.map((g) => (
@@ -2322,6 +2346,7 @@ function PaymentsTab({ authFetch, regions }) {
                 <div className="flex items-center gap-3">
                   <button onClick={() => toggle(g)} className={`rounded-xs px-2 py-0.5 text-[12px] font-medium uppercase tracking-wide ${g.is_enabled ? 'bg-brand-success/10 text-ink-success' : 'bg-surface-muted text-ink-muted'}`}>{g.is_enabled ? 'ENABLED' : 'DISABLED'}</button>
                   <button onClick={() => syncStatus(g)} title="Reconcile recent orders against this gateway" className="rounded-sm border border-edge px-2 py-1 text-[12px] font-medium uppercase text-ink-primary hover:bg-surface-muted">Sync recent</button>
+                  <button onClick={() => testConnection(g)} title="Verify the saved credentials" className="rounded-sm border border-edge px-2 py-1 text-[12px] font-medium uppercase text-ink-primary hover:bg-surface-muted">Test</button>
                   <button onClick={() => setForm({ ...g, webhook_secret: '', webhook_id: '' })} className="text-ink-accent hover:opacity-70"><Pencil className="h-4 w-4" /></button>
                   <button onClick={() => del(g)} className="text-brand-muted hover:text-brand-danger"><X className="h-4 w-4" /></button>
                 </div>
@@ -2340,6 +2365,31 @@ function PaymentsTab({ authFetch, regions }) {
               ))}
               {!manualCapture.length && <p className="px-4 py-5 text-sm text-brand-muted">No orders are waiting for manual capture.</p>}
             </div>
+          </div>
+        </div>
+      ) : activeSubTab === 'webhooks' ? (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-edge bg-white p-5">
+            <h3 className="text-sm font-semibold text-ink-primary">Incoming payment webhooks</h3>
+            <p className="mt-1 text-sm text-brand-muted">Review delivery status and safely replay failed events. Duplicate provider event IDs remain idempotent.</p>
+          </div>
+          <div className="overflow-x-auto rounded-lg border border-edge bg-white">
+            <table className="min-w-full text-sm">
+              <thead className="bg-surface-muted text-left text-ink-muted"><tr><th className="px-4 py-3">Provider</th><th className="px-4 py-3">Event</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Attempts</th><th className="px-4 py-3">Received</th><th className="px-4 py-3"></th></tr></thead>
+              <tbody className="divide-y divide-edge-subtle">
+                {webhookEvents.slice(0, 50).map((event) => (
+                  <tr key={event.id}>
+                    <td className="px-4 py-3 font-semibold text-ink-primary">{event.gateway}</td>
+                    <td className="px-4 py-3"><p className="font-medium text-ink-primary">{event.event_type}</p><p className="max-w-[240px] truncate font-mono text-[12px] text-ink-subtle">{event.event_id || event.id}</p></td>
+                    <td className="px-4 py-3"><span className={`rounded-full px-2 py-1 text-[12px] font-semibold ${event.status === 'PROCESSED' ? 'bg-brand-success/10 text-ink-success' : event.status === 'PENDING' ? 'bg-amber-50 text-amber-800' : 'bg-red-50 text-ink-danger'}`}>{event.status}</span></td>
+                    <td className="px-4 py-3 text-ink-secondary">{event.attempts || 0}</td>
+                    <td className="px-4 py-3 text-ink-secondary">{formatDateTime(event.created_at)}</td>
+                    <td className="px-4 py-3 text-right">{event.status !== 'PROCESSED' && <button onClick={() => retryWebhook(event)} className="btn-secondary px-3 py-1.5 text-xs"><RefreshCw className="h-3.5 w-3.5" /> Retry</button>}</td>
+                  </tr>
+                ))}
+                {!webhookEvents.length && <tr><td colSpan="6" className="px-4 py-8 text-center text-brand-muted">No payment webhooks have been received yet.</td></tr>}
+              </tbody>
+            </table>
           </div>
         </div>
       ) : activeSubTab === 'fraud' ? (
@@ -2411,14 +2461,15 @@ function PaymentsTab({ authFetch, regions }) {
             <h3 className="mb-4 text-lg font-semibold text-ink-primary">{form.id ? 'Edit' : 'New'} gateway</h3>
             <div className="space-y-3 text-sm">
               <div className="grid grid-cols-2 gap-3">
-                <select value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} className="rounded-sm border border-edge p-2.5">
-                  {['RAZORPAY', 'STRIPE', 'PAYPAL', 'COD'].map((c) => <option key={c} value={c}>{c}</option>)}
+                <select value={form.code} onChange={(e) => { const definition = providerCatalog.find((item) => item.code === e.target.value); setForm({ ...form, code: e.target.value, display_name: form.id ? form.display_name : (definition?.name || e.target.value) }); }} className="rounded-sm border border-edge p-2.5">
+                  {providerCatalog.map((provider) => <option key={provider.code} value={provider.code}>{provider.name}</option>)}
                 </select>
                 <select value={form.region} onChange={(e) => setForm({ ...form, region: Number(e.target.value) })} className="rounded-sm border border-edge p-2.5">
                   {regions.map((r) => <option key={r.id} value={r.id}>{r.code} — {r.name}</option>)}
                 </select>
               </div>
               <input placeholder="Display name" value={form.display_name} onChange={(e) => setForm({ ...form, display_name: e.target.value })} className="w-full rounded-sm border border-edge p-2.5" />
+              {providerCatalog.find((item) => item.code === form.code)?.description && <p className="rounded-sm bg-surface-muted px-3 py-2 text-[13px] text-ink-secondary">{providerCatalog.find((item) => item.code === form.code).description}</p>}
               <div className="grid grid-cols-2 gap-3">
                 <select value={form.mode} onChange={(e) => setForm({ ...form, mode: e.target.value })} className="rounded-sm border border-edge p-2.5">
                   <option value="TEST">Test</option>
@@ -2433,6 +2484,7 @@ function PaymentsTab({ authFetch, regions }) {
               ) : form.code !== 'COD' ? (
                 <PasswordInput autoComplete="new-password" placeholder="Webhook signing secret (leave blank to keep current)" value={form.webhook_secret || ''} onChange={(e) => setForm({ ...form, webhook_secret: e.target.value })} className="w-full rounded-sm border border-edge p-2.5" />
               ) : null}
+              {form.code !== 'COD' && <div className="rounded-sm border border-edge bg-surface-muted px-3 py-2 text-[12px] text-ink-secondary"><span className="font-semibold text-ink-primary">Webhook URL:</span> {providerCatalog.find((item) => item.code === form.code)?.webhook_path || `/api/webhooks/payment/${form.code.toLowerCase()}/`}</div>}
               
               <div className="grid grid-cols-2 gap-3 items-center">
                 <div>
@@ -2651,8 +2703,12 @@ function EmailsTab({ authFetch, regions }) {
 
 /* ----------------------------------------------------------- Shipping */
 function ShippingTab({ authFetch, regions = [] }) {
+  const [activeSubTab, setActiveSubTab] = useState('providers');
   const [zones, setZones] = useState([]);
   const [rates, setRates] = useState([]);
+  const [providers, setProviders] = useState([]);
+  const [providerCatalog, setProviderCatalog] = useState([]);
+  const [providerForm, setProviderForm] = useState(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
   const [editingZone, setEditingZone] = useState(null);  // null | zone object | 'new'
@@ -2670,9 +2726,13 @@ function ShippingTab({ authFetch, regions = [] }) {
     Promise.all([
       loadList('/api/admin/shipping-zones/', 'shipping zones'),
       loadList('/api/admin/shipping-rates/', 'shipping rates'),
-    ]).then(([z, r]) => {
+      loadList('/api/admin/shipping-providers/', 'shipping providers'),
+      loadList('/api/admin/shipping-providers/catalog/', 'shipping provider catalog'),
+    ]).then(([z, r, p, catalogData]) => {
       setZones(Array.isArray(z) ? z : z.results || []);
       setRates(Array.isArray(r) ? r : r.results || []);
+      setProviders(Array.isArray(p) ? p : p.results || []);
+      setProviderCatalog(Array.isArray(catalogData) ? catalogData : catalogData.results || []);
     }).catch((error) => {
       setErr(`${error.message} Please confirm the latest database migrations are applied.`);
     }).finally(() => setLoading(false));
@@ -2741,6 +2801,64 @@ function ShippingTab({ authFetch, regions = [] }) {
     authFetch(`/api/admin/shipping-rates/${rate.id}/`, { method: 'DELETE' }).then(load);
   };
 
+  const saveProvider = async () => {
+    const isNew = !providerForm.id;
+    const response = await authFetch(
+      isNew ? '/api/admin/shipping-providers/' : `/api/admin/shipping-providers/${providerForm.id}/`,
+      {
+        method: isNew ? 'POST' : 'PUT',
+        body: JSON.stringify({
+          code: providerForm.code,
+          display_name: providerForm.display_name,
+          region: Number(providerForm.region),
+          is_enabled: Boolean(providerForm.is_enabled),
+          mode: providerForm.mode || 'TEST',
+          credentials: providerForm.credentials || {},
+          configuration: providerForm.configuration || {},
+          webhook_secret: providerForm.webhook_secret || '',
+          sort_order: Number(providerForm.sort_order || 0),
+        }),
+      },
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.is_enabled?.[0] || data.detail || JSON.stringify(data));
+    setProviderForm(null);
+    load();
+  };
+
+  const testProvider = (provider) => {
+    authFetch(`/api/admin/shipping-providers/${provider.id}/test_connection/`, { method: 'POST', body: JSON.stringify({}) })
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Connection test failed.');
+        alert(data.message || 'Connection verified.');
+        load();
+      })
+      .catch((error) => { alert(error.message); load(); });
+  };
+
+  const toggleProvider = async (provider) => {
+    const response = await authFetch(`/api/admin/shipping-providers/${provider.id}/`, {
+      method: 'PATCH', body: JSON.stringify({ is_enabled: !provider.is_enabled }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) { alert(data.is_enabled?.[0] || data.detail || 'Complete the provider configuration first.'); return; }
+    load();
+  };
+
+  const openNewProvider = () => {
+    const definition = providerCatalog[0] || { code: 'DHL_EXPRESS', name: 'DHL Express' };
+    setProviderForm({
+      code: definition.code, display_name: definition.name, region: regions[0]?.id,
+      is_enabled: false, mode: 'TEST', credentials: {}, configuration: {},
+      webhook_secret: '', sort_order: 0,
+    });
+  };
+
+  const selectedProviderDefinition = providerForm
+    ? providerCatalog.find((item) => item.code === providerForm.code)
+    : null;
+
   if (loading) return (
     <div className="flex items-center gap-3 py-12 justify-center text-ink-subtle">
       <Loader2 className="h-5 w-5 animate-spin" />
@@ -2757,7 +2875,39 @@ function ShippingTab({ authFetch, regions = [] }) {
           <button onClick={() => setErr('')} className="ml-auto text-ink-danger hover:text-ink-danger"><X className="h-4 w-4" /></button>
         </div>
       )}
-      <ShippingZonePanel
+      <div className="flex flex-wrap gap-2 border-b border-edge-subtle pb-2">
+        <button onClick={() => setActiveSubTab('providers')} className={`rounded-sm px-4 py-2 text-sm font-semibold uppercase ${activeSubTab === 'providers' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Courier providers</button>
+        <button onClick={() => setActiveSubTab('rates')} className={`rounded-sm px-4 py-2 text-sm font-semibold uppercase ${activeSubTab === 'rates' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Zones &amp; rates</button>
+      </div>
+
+      {activeSubTab === 'providers' ? (
+        <div className="space-y-4">
+          <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+            <div><h3 className="text-base font-semibold text-ink-primary">Shipping integrations</h3><p className="text-sm text-ink-muted">Connect a supported courier per market, test credentials, and enable it without a deployment.</p></div>
+            <button onClick={openNewProvider} className="btn-primary px-5 py-2.5 text-sm"><Plus className="h-4 w-4" /> Add provider</button>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {providers.map((provider) => {
+              const definition = providerCatalog.find((item) => item.code === provider.code) || {};
+              return (
+                <div key={provider.id} className="rounded-lg border border-edge bg-white p-5 shadow-card">
+                  <div className="flex items-start justify-between gap-3">
+                    <div><div className="flex flex-wrap items-center gap-2"><h4 className="font-semibold text-ink-primary">{provider.display_name}</h4><span className="rounded-full bg-surface-muted px-2 py-1 text-[12px] font-semibold text-ink-accent">{provider.region_code}</span></div><p className="mt-1 text-sm text-ink-muted">{definition.description || provider.code}</p></div>
+                    <button onClick={() => toggleProvider(provider)} className={`rounded-full px-3 py-1 text-[12px] font-semibold ${provider.is_enabled ? 'bg-brand-success/10 text-ink-success' : 'bg-surface-muted text-ink-muted'}`}>{provider.is_enabled ? 'Enabled' : 'Disabled'}</button>
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2">{(definition.capabilities || []).map((capability) => <span key={capability} className="rounded-full border border-edge px-2.5 py-1 text-[12px] text-ink-secondary">{capability.replaceAll('_', ' ')}</span>)}</div>
+                  <div className="mt-4 flex items-center justify-between border-t border-edge-subtle pt-4">
+                    <div><p className={`text-sm font-semibold ${provider.connection_status === 'CONNECTED' ? 'text-ink-success' : provider.connection_status === 'ERROR' ? 'text-ink-danger' : 'text-ink-muted'}`}>{provider.connection_status.replaceAll('_', ' ')}</p><p className="text-[12px] text-ink-subtle">{provider.mode} · {provider.is_configured ? 'credentials saved' : 'setup incomplete'}</p></div>
+                    <div className="flex gap-2"><button onClick={() => testProvider(provider)} className="btn-secondary px-3 py-2 text-xs">Test</button><button onClick={() => setProviderForm({ ...provider, credentials: {}, webhook_secret: '' })} className="btn-secondary px-3 py-2 text-xs"><Pencil className="h-3.5 w-3.5" /> Edit</button></div>
+                  </div>
+                  {provider.last_error && <p className="mt-3 rounded-sm bg-red-50 px-3 py-2 text-[12px] text-ink-danger">{provider.last_error}</p>}
+                </div>
+              );
+            })}
+          </div>
+          {!providers.length && <div className="rounded-lg border-2 border-dashed border-edge py-14 text-center"><Truck className="mx-auto h-9 w-9 text-ink-subtle" /><p className="mt-3 font-semibold text-ink-primary">No courier integration configured</p><p className="mt-1 text-sm text-ink-muted">Add DHL Express, Shiprocket, or manual fulfilment for a market.</p></div>}
+        </div>
+      ) : <ShippingZonePanel
         zones={zones}
         rates={rates}
         regions={regions}
@@ -2773,7 +2923,28 @@ function ShippingTab({ authFetch, regions = [] }) {
         onDuplicateZone={duplicateZone}
         onSaveRate={saveRate}
         onDeleteRate={deleteRate}
-      />
+      />}
+
+      {providerForm && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-surface-overlay p-0 backdrop-blur-sm sm:items-center sm:p-4">
+          <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-lg border border-edge bg-white p-6 shadow-overlay sm:max-w-xl sm:rounded-lg">
+            <div className="mb-5 flex items-start justify-between"><div><h3 className="text-lg font-semibold text-ink-primary">{providerForm.id ? 'Edit' : 'Add'} shipping provider</h3><p className="mt-1 text-sm text-ink-muted">Secrets are encrypted and are never returned after saving.</p></div><button onClick={() => setProviderForm(null)} className="p-2 text-ink-muted"><X className="h-4 w-4" /></button></div>
+            <div className="space-y-4 text-sm">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div><label className="label-base">Provider</label><select value={providerForm.code} disabled={Boolean(providerForm.id)} onChange={(event) => { const definition = providerCatalog.find((item) => item.code === event.target.value); setProviderForm({ ...providerForm, code: event.target.value, display_name: definition?.name || event.target.value, credentials: {}, configuration: {} }); }} className="input-base">{providerCatalog.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</select></div>
+                <div><label className="label-base">Market</label><select value={providerForm.region} disabled={Boolean(providerForm.id)} onChange={(event) => setProviderForm({ ...providerForm, region: Number(event.target.value) })} className="input-base">{regions.map((region) => <option key={region.id} value={region.id}>{region.code} — {region.name}</option>)}</select></div>
+              </div>
+              <div><label className="label-base">Customer-facing name</label><input value={providerForm.display_name} onChange={(event) => setProviderForm({ ...providerForm, display_name: event.target.value })} className="input-base" /></div>
+              {selectedProviderDefinition?.description && <p className="rounded-md bg-surface-muted px-3 py-2 text-ink-secondary">{selectedProviderDefinition.description}</p>}
+              {(selectedProviderDefinition?.credential_fields || []).map((field) => <div key={field.key}><label className="label-base">{field.label}{field.required ? ' *' : ''}</label>{field.secret ? <PasswordInput autoComplete="new-password" value={providerForm.credentials?.[field.key] || ''} onChange={(event) => setProviderForm({ ...providerForm, credentials: { ...(providerForm.credentials || {}), [field.key]: event.target.value } })} placeholder={providerForm.credential_status?.[field.key] ? 'Configured — leave blank to keep current' : field.label} className="input-base" /> : <input value={providerForm.credentials?.[field.key] || ''} onChange={(event) => setProviderForm({ ...providerForm, credentials: { ...(providerForm.credentials || {}), [field.key]: event.target.value } })} placeholder={providerForm.credential_status?.[field.key] ? 'Configured — leave blank to keep current' : field.label} className="input-base" />}</div>)}
+              {(selectedProviderDefinition?.configuration_fields || []).map((field) => <div key={field.key}><label className="label-base">{field.label}{field.required ? ' *' : ''}</label><input value={providerForm.configuration?.[field.key] || ''} onChange={(event) => setProviderForm({ ...providerForm, configuration: { ...(providerForm.configuration || {}), [field.key]: event.target.value } })} className="input-base" /></div>)}
+              <div className="grid gap-3 sm:grid-cols-2"><div><label className="label-base">Environment</label><select value={providerForm.mode} onChange={(event) => setProviderForm({ ...providerForm, mode: event.target.value })} className="input-base"><option value="TEST">Test / Sandbox</option><option value="LIVE">Live</option></select></div><div><label className="label-base">Priority</label><input type="number" min="0" value={providerForm.sort_order || 0} onChange={(event) => setProviderForm({ ...providerForm, sort_order: Number(event.target.value) })} className="input-base" /></div></div>
+              <label className="flex items-center gap-2 font-semibold text-ink-primary"><input type="checkbox" checked={Boolean(providerForm.is_enabled)} onChange={(event) => setProviderForm({ ...providerForm, is_enabled: event.target.checked })} /> Enable after saving</label>
+              <div className="flex gap-2 pt-2"><button onClick={() => saveProvider().catch((error) => alert(error.message))} className="btn-primary flex-1 py-3">Save provider</button><button onClick={() => setProviderForm(null)} className="btn-ghost flex-1 py-3">Cancel</button></div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -3651,6 +3822,7 @@ function ContentOverviewTab({ authFetch, go }) {
 
   const cards = [
     { key: 'pages', title: 'Banners', detail: `${counts.banners} slides`, icon: ImageIcon },
+    { key: 'pages', tab: 'policies', title: 'Policy Pages', detail: 'Privacy, Terms, Refunds & more', icon: ShieldCheck },
     { key: 'blogs', title: 'Blog', detail: `${counts.blogs} articles`, icon: Film },
     { key: 'navigation', title: 'Menus', detail: 'Header and footer links', icon: MenuIcon },
     { key: 'glossary', title: 'Glossary Manager', detail: `${counts.glossary} terms`, icon: BookOpen },
@@ -3662,7 +3834,7 @@ function ContentOverviewTab({ authFetch, go }) {
       {cards.map((card) => {
         const Icon = card.icon;
         return (
-          <button key={card.key} type="button" onClick={() => go(card.key)} className="rounded-lg border border-edge bg-white p-5 text-left hover:border-edge-strong hover:shadow-card transition">
+          <button key={`${card.key}-${card.tab || 'main'}`} type="button" onClick={() => go(card.key, card.tab)} className="rounded-lg border border-edge bg-white p-5 text-left hover:border-edge-strong hover:shadow-card transition">
             <Icon className="mb-4 h-5 w-5 text-ink-accent" />
             <p className="text-sm font-semibold text-ink-primary">{card.title}</p>
             <p className="mt-1 text-sm text-brand-muted">{card.detail}</p>
@@ -4461,6 +4633,7 @@ function HomepageSettingsTab({ authFetch }) {
 
   const SECTION_OPTIONS = [
     { key: 'seo', label: 'SEO' },
+    { key: 'highlightStrip', label: 'Highlight Strip' },
     { key: 'trustSection', label: 'Trust Section' },
     { key: 'productShowcase', label: 'Product Showcase' },
     { key: 'quizSection', label: 'Quiz Section' },
@@ -4515,6 +4688,39 @@ function HomepageSettingsTab({ authFetch }) {
 
   const removeArrayItem = (sectionKey, arrayKey, index) => {
     updateSectionField(sectionKey, arrayKey, (settings[sectionKey][arrayKey] || []).filter((_, itemIndex) => itemIndex !== index));
+  };
+
+  const updateQuizContent = (field, value) => {
+    updateSectionField('quizSection', 'content', { ...settings.quizSection.content, [field]: value });
+  };
+
+  const updateQuizStep = (index, field, value) => {
+    const steps = [...settings.quizSection.content.steps];
+    steps[index] = { ...steps[index], [field]: value };
+    updateQuizContent('steps', steps);
+  };
+
+  const updateQuizOption = (stepIndex, optionIndex, field, value) => {
+    const steps = [...settings.quizSection.content.steps];
+    const options = [...steps[stepIndex].options];
+    options[optionIndex] = { ...options[optionIndex], [field]: value };
+    steps[stepIndex] = { ...steps[stepIndex], options };
+    updateQuizContent('steps', steps);
+  };
+
+  const addQuizOption = (stepIndex) => {
+    const steps = [...settings.quizSection.content.steps];
+    steps[stepIndex] = {
+      ...steps[stepIndex],
+      options: [...steps[stepIndex].options, { value: 'new-option', label: 'New option', icon: '✓', description: 'Add a short description.' }],
+    };
+    updateQuizContent('steps', steps);
+  };
+
+  const removeQuizOption = (stepIndex, optionIndex) => {
+    const steps = [...settings.quizSection.content.steps];
+    steps[stepIndex] = { ...steps[stepIndex], options: steps[stepIndex].options.filter((_, index) => index !== optionIndex) };
+    updateQuizContent('steps', steps);
   };
 
   const saveHomepageSettings = async () => {
@@ -4625,6 +4831,28 @@ function HomepageSettingsTab({ authFetch }) {
             <TextAreaField label="Homepage keywords" value={settings.seo.keywords} onChange={(value) => updateSectionField('seo', 'keywords', value)} rows={2} />
           </div>
         );
+      case 'highlightStrip':
+        return (
+          <div className="space-y-4">
+            <ToggleField checked={settings.highlightStrip.enabled !== false} onChange={(value) => updateSectionField('highlightStrip', 'enabled', value)} label="Show highlight strip" description="Display the compact reassurance row immediately below the hero banner." />
+            <ArrayCard title="Highlights" subtitle="Manage each short reassurance message and its icon." onAdd={() => addArrayItem('highlightStrip', 'items', { label: 'New highlight', icon: 'ShieldCheck' })}>
+              <div className="space-y-3">
+                {settings.highlightStrip.items.map((item, index) => (
+                  <div key={`${item.label}-${index}`} className="rounded-lg border border-edge bg-surface-muted p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[13px] font-semibold uppercase text-ink-accent">Highlight {index + 1}</p>
+                      <button type="button" onClick={() => removeArrayItem('highlightStrip', 'items', index)} className="text-[12px] font-semibold uppercase text-red-600">Remove</button>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <InputField label="Label" value={item.label} onChange={(value) => updateArrayItem('highlightStrip', 'items', index, 'label', value)} />
+                      <InputField label="Icon name" value={item.icon} onChange={(value) => updateArrayItem('highlightStrip', 'items', index, 'icon', value)} placeholder="ShieldCheck" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </ArrayCard>
+          </div>
+        );
       case 'trustSection':
         return (
           <div className="space-y-4">
@@ -4698,6 +4926,87 @@ function HomepageSettingsTab({ authFetch }) {
               <InputField label="Button label" value={settings.quizSection.buttonLabel} onChange={(value) => updateSectionField('quizSection', 'buttonLabel', value)} />
               <InputField label="Icon name" value={settings.quizSection.icon} onChange={(value) => updateSectionField('quizSection', 'icon', value)} />
             </div>
+            <ArrayCard title="Quiz interface labels" subtitle="Edit every heading, instruction, and action shown inside the quiz.">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {[
+                  ['questionLabel', 'Question label'], ['ofLabel', 'Progress separator'], ['backLabel', 'Back button'],
+                  ['nextLabel', 'Next button'], ['recommendationLabel', 'Recommendation button'], ['resultTitle', 'Result headline'],
+                  ['resultDescription', 'Result description'], ['matchLabel', 'Match label'], ['addToCartLabel', 'Add to cart button'],
+                  ['startOverLabel', 'Start over button'], ['preferencesLabel', 'Preferences heading'],
+                ].map(([field, label]) => (
+                  <InputField key={field} label={label} value={settings.quizSection.content[field]} onChange={(value) => updateQuizContent(field, value)} />
+                ))}
+              </div>
+            </ArrayCard>
+            <ArrayCard title="Quiz questions" subtitle="Manage each question and all selectable answers." onAdd={() => updateQuizContent('steps', [...settings.quizSection.content.steps, { id: `step-${Date.now()}`, title: 'New question', subtitle: 'Add a short instruction.', options: [] }])}>
+              <div className="space-y-4">
+                {settings.quizSection.content.steps.map((step, stepIndex) => (
+                  <div key={`${step.id}-${stepIndex}`} className="rounded-lg border border-edge bg-surface-muted p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[13px] font-semibold uppercase text-ink-accent">Question {stepIndex + 1}</p>
+                      <button type="button" onClick={() => updateQuizContent('steps', settings.quizSection.content.steps.filter((_, index) => index !== stepIndex))} className="text-[12px] font-semibold uppercase text-red-600">Remove</button>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <InputField label="Question ID" value={step.id} onChange={(value) => updateQuizStep(stepIndex, 'id', value)} />
+                      <InputField label="Question" value={step.title} onChange={(value) => updateQuizStep(stepIndex, 'title', value)} />
+                    </div>
+                    <InputField label="Instruction" value={step.subtitle} onChange={(value) => updateQuizStep(stepIndex, 'subtitle', value)} />
+                    <div className="space-y-3 border-t border-edge pt-3">
+                      <div className="flex items-center justify-between">
+                        <p className="font-semibold text-ink-primary">Answer options</p>
+                        <button type="button" onClick={() => addQuizOption(stepIndex)} className="rounded-sm border border-edge bg-white px-3 py-1.5 text-[12px] font-semibold uppercase text-ink-primary">Add option</button>
+                      </div>
+                      {step.options.map((option, optionIndex) => (
+                        <div key={`${option.value}-${optionIndex}`} className="rounded-lg border border-edge bg-white p-3 space-y-3">
+                          <div className="flex justify-end">
+                            <button type="button" onClick={() => removeQuizOption(stepIndex, optionIndex)} className="text-[12px] font-semibold uppercase text-red-600">Remove option</button>
+                          </div>
+                          <div className="grid gap-3 sm:grid-cols-3">
+                            <InputField label="Value" value={option.value} onChange={(value) => updateQuizOption(stepIndex, optionIndex, 'value', value)} />
+                            <InputField label="Label" value={option.label} onChange={(value) => updateQuizOption(stepIndex, optionIndex, 'label', value)} />
+                            <InputField label="Icon or emoji" value={option.icon} onChange={(value) => updateQuizOption(stepIndex, optionIndex, 'icon', value)} />
+                          </div>
+                          <InputField label="Description" value={option.description} onChange={(value) => updateQuizOption(stepIndex, optionIndex, 'description', value)} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </ArrayCard>
+            <ArrayCard title="Quiz recommendations" subtitle="Match answer keys to the product recommendation shown at completion." onAdd={() => updateQuizContent('recommendations', [...settings.quizSection.content.recommendations, { key: 'goal-time-lifestyle-preference', sku: 'PRODUCT-SKU', name: 'Product name', match: '90%', reason: 'Why this product is a match.' }])}>
+              <div className="space-y-3">
+                {settings.quizSection.content.recommendations.map((item, index) => (
+                  <div key={`${item.key}-${index}`} className="rounded-lg border border-edge bg-surface-muted p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[13px] font-semibold uppercase text-ink-accent">Recommendation {index + 1}</p>
+                      <button type="button" onClick={() => updateQuizContent('recommendations', settings.quizSection.content.recommendations.filter((_, itemIndex) => itemIndex !== index))} className="text-[12px] font-semibold uppercase text-red-600">Remove</button>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {['key', 'sku', 'name', 'match'].map((field) => (
+                        <InputField key={field} label={field === 'key' ? 'Answer key' : field.toUpperCase()} value={item[field]} onChange={(value) => {
+                          const next = [...settings.quizSection.content.recommendations];
+                          next[index] = { ...next[index], [field]: value };
+                          updateQuizContent('recommendations', next);
+                        }} />
+                      ))}
+                    </div>
+                    <InputField label="Reason" value={item.reason} onChange={(value) => {
+                      const next = [...settings.quizSection.content.recommendations];
+                      next[index] = { ...next[index], reason: value };
+                      updateQuizContent('recommendations', next);
+                    }} />
+                  </div>
+                ))}
+              </div>
+            </ArrayCard>
+            <ArrayCard title="Default recommendation" subtitle="Used when no exact answer key is configured.">
+              <div className="grid gap-3 sm:grid-cols-2">
+                {['sku', 'name', 'match', 'reason'].map((field) => (
+                  <InputField key={field} label={field === 'sku' ? 'SKU' : field[0].toUpperCase() + field.slice(1)} value={settings.quizSection.content.fallbackRecommendation[field]} onChange={(value) => updateQuizContent('fallbackRecommendation', { ...settings.quizSection.content.fallbackRecommendation, [field]: value })} />
+                ))}
+              </div>
+            </ArrayCard>
           </div>
         );
       case 'chooseSection':
@@ -4810,6 +5119,7 @@ function HomepageSettingsTab({ authFetch }) {
               <InputField label="Quote title" value={settings.conversionSection.quoteTitle} onChange={(value) => updateSectionField('conversionSection', 'quoteTitle', value)} />
             </div>
             <TextAreaField label="Quote body" value={settings.conversionSection.quoteBody} onChange={(value) => updateSectionField('conversionSection', 'quoteBody', value)} rows={2} />
+            <InputField label="Proof summary" value={settings.conversionSection.proofSummary} onChange={(value) => updateSectionField('conversionSection', 'proofSummary', value)} />
             <ArrayCard title="Trust badges" subtitle="Manage the smaller reassurance badges in this block." onAdd={() => addArrayItem('conversionSection', 'badges', { title: 'New badge', icon: 'ShieldCheck' })}>
               <div className="space-y-3">
                 {settings.conversionSection.badges.map((item, index) => (
@@ -4881,7 +5191,25 @@ function HomepageSettingsTab({ authFetch }) {
             <div className="grid gap-4 sm:grid-cols-2">
               <InputField label="CTA label" value={settings.educationSection.ctaLabel} onChange={(value) => updateSectionField('educationSection', 'ctaLabel', value)} />
               <InputField label="CTA URL" value={settings.educationSection.ctaUrl} onChange={(value) => updateSectionField('educationSection', 'ctaUrl', value)} />
+              <InputField label="Article link label" value={settings.educationSection.readLabel} onChange={(value) => updateSectionField('educationSection', 'readLabel', value)} />
             </div>
+            <ArrayCard title="Fallback articles" subtitle="These cards are shown when no published blog articles are available." onAdd={() => addArrayItem('educationSection', 'fallbackEntries', { title: 'New article', author: 'Sclero Proteins', description: 'Add a short article summary.' })}>
+              <div className="space-y-3">
+                {settings.educationSection.fallbackEntries.map((item, index) => (
+                  <div key={`${item.title}-${index}`} className="rounded-lg border border-edge bg-surface-muted p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[13px] font-semibold uppercase text-ink-accent">Article {index + 1}</p>
+                      <button type="button" onClick={() => removeArrayItem('educationSection', 'fallbackEntries', index)} className="text-[12px] font-semibold uppercase text-red-600">Remove</button>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <InputField label="Title" value={item.title} onChange={(value) => updateArrayItem('educationSection', 'fallbackEntries', index, 'title', value)} />
+                      <InputField label="Author" value={item.author} onChange={(value) => updateArrayItem('educationSection', 'fallbackEntries', index, 'author', value)} />
+                    </div>
+                    <TextAreaField label="Description" value={item.description} onChange={(value) => updateArrayItem('educationSection', 'fallbackEntries', index, 'description', value)} rows={2} />
+                  </div>
+                ))}
+              </div>
+            </ArrayCard>
           </div>
         );
       case 'inquirySection':
@@ -4896,6 +5224,13 @@ function HomepageSettingsTab({ authFetch }) {
             <div className="grid gap-4 sm:grid-cols-2">
               <InputField label="Button label" value={settings.inquirySection.buttonLabel} onChange={(value) => updateSectionField('inquirySection', 'buttonLabel', value)} />
               <InputField label="Success message" value={settings.inquirySection.successMessage} onChange={(value) => updateSectionField('inquirySection', 'successMessage', value)} />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <InputField label="Name placeholder" value={settings.inquirySection.namePlaceholder} onChange={(value) => updateSectionField('inquirySection', 'namePlaceholder', value)} />
+              <InputField label="Email placeholder" value={settings.inquirySection.emailPlaceholder} onChange={(value) => updateSectionField('inquirySection', 'emailPlaceholder', value)} />
+              <InputField label="Message placeholder" value={settings.inquirySection.messagePlaceholder} onChange={(value) => updateSectionField('inquirySection', 'messagePlaceholder', value)} />
+              <InputField label="Sending label" value={settings.inquirySection.sendingLabel} onChange={(value) => updateSectionField('inquirySection', 'sendingLabel', value)} />
+              <InputField label="WhatsApp tooltip" value={settings.inquirySection.whatsappLabel} onChange={(value) => updateSectionField('inquirySection', 'whatsappLabel', value)} />
             </div>
           </div>
         );
@@ -5131,8 +5466,120 @@ function PushNotificationsTab({ authFetch }) {
   );
 }
 
+/* ------------------------------------------------------------- Scheduled Jobs */
+function ScheduledJobsTab({ authFetch }) {
+  const [summary, setSummary] = useState(null);
+  const [recentRuns, setRecentRuns] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const load = useCallback(() => {
+    setLoading(true);
+    setError('');
+    Promise.all([
+      authFetch('/api/admin/cron-runs/summary/').then((r) => (r.ok ? r.json() : null)),
+      authFetch('/api/admin/cron-runs/?status=FAILED').then((r) => (r.ok ? r.json() : null)),
+    ])
+      .then(([summaryData, failedData]) => {
+        if (!summaryData) throw new Error('load-failed');
+        setSummary(summaryData);
+        const failures = Array.isArray(failedData) ? failedData : failedData?.results || [];
+        setRecentRuns(failures.slice(0, 15));
+      })
+      .catch(() => setError('Could not load scheduled job history.'))
+      .finally(() => setLoading(false));
+  }, [authFetch]);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (loading) return <p className="text-sm text-brand-muted">Loading scheduled jobs...</p>;
+  if (error) return <div className="rounded bg-brand-danger/10 p-2.5 text-sm text-brand-danger font-semibold">{error}</div>;
+
+  const fmtTime = (iso) => (iso ? new Date(iso).toLocaleString() : '—');
+  const runBadge = (status) => ({
+    SUCCESS: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+    FAILED: 'bg-rose-50 text-rose-700 border border-rose-200',
+    RUNNING: 'bg-blue-50 text-blue-700 border border-blue-200',
+  }[status] || 'bg-surface-muted text-ink-muted');
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${summary.scheduler_alive ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
+            <Activity className="h-3.5 w-3.5" />
+            Scheduler {summary.scheduler_alive ? 'running' : 'NOT RUNNING'}
+          </span>
+          {!summary.scheduler_alive && (
+            <span className="text-xs text-brand-danger font-semibold">
+              No active scheduler lease — background jobs are not being executed.
+              In production the &quot;scheduler&quot; container runs this automatically; if it shows here, restart that container.
+              For local development start it with: <code className="rounded bg-surface-muted px-1 py-0.5 font-mono">python manage.py run_scheduler</code>
+            </span>
+          )}
+        </div>
+        <button onClick={load} className="inline-flex items-center gap-1.5 rounded-sm border border-edge px-3 py-1.5 text-sm font-semibold text-ink-secondary hover:text-ink-primary">
+          <RefreshCw className="h-4 w-4" /> Refresh
+        </button>
+      </div>
+
+      <div className="overflow-x-auto rounded-md border border-edge bg-white shadow-card">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-edge bg-surface-muted text-left text-xs font-semibold uppercase tracking-wide text-ink-muted">
+              <th className="px-4 py-2.5">Job</th>
+              <th className="px-4 py-2.5">Last run</th>
+              <th className="px-4 py-2.5">Result</th>
+              <th className="px-4 py-2.5">Processed / Failed</th>
+              <th className="px-4 py-2.5">Duration</th>
+              <th className="px-4 py-2.5">Failures (24h)</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-edge-subtle">
+            {summary.jobs.map((job) => {
+              const latest = job.latest_run;
+              return (
+                <tr key={job.job_name} className={job.failures_24h > 0 ? 'bg-rose-50/40' : ''}>
+                  <td className="px-4 py-2.5 font-mono text-xs text-ink-primary">{job.job_name}</td>
+                  <td className="px-4 py-2.5 text-ink-secondary">{latest ? fmtTime(latest.started_at) : 'never ran'}</td>
+                  <td className="px-4 py-2.5">
+                    {latest ? (
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${runBadge(latest.status)}`}>{latest.status}</span>
+                    ) : (
+                      <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-800 border border-amber-200">no history</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5 text-ink-secondary">{latest ? `${latest.processed} / ${latest.failed}` : '—'}</td>
+                  <td className="px-4 py-2.5 text-ink-secondary">{latest?.duration_ms != null ? `${latest.duration_ms} ms` : '—'}</td>
+                  <td className={`px-4 py-2.5 font-semibold ${job.failures_24h > 0 ? 'text-brand-danger' : 'text-ink-secondary'}`}>{job.failures_24h}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Recent failed runs</p>
+        {recentRuns.length === 0 && <p className="text-sm text-brand-muted">No failed runs recorded. All clear.</p>}
+        {recentRuns.map((run) => (
+          <div key={run.id} className="rounded-md border border-edge bg-white p-3 shadow-card">
+            <div className="flex items-center justify-between gap-3">
+              <p className="font-mono text-xs font-semibold text-ink-primary">{run.job_name}</p>
+              <p className="text-xs text-ink-muted">{fmtTime(run.started_at)}</p>
+            </div>
+            {(run.error || run.message) && (
+              <p className="mt-1 break-words text-xs text-brand-danger">{run.error || run.message}</p>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function SettingsTab({ authFetch, regions, initialTab = 'general' }) {
-  const allowedTabs = ['general', 'homepage', 'markets', 'payments', 'shipping', 'discounts', 'emails', 'notifications', 'theme', 'cookie-consent'];
+  const allowedTabs = ['general', 'homepage', 'markets', 'payments', 'shipping', 'discounts', 'emails', 'notifications', 'theme', 'cookie-consent', 'automation'];
   const [subTab, setSubTab] = useState(allowedTabs.includes(initialTab) ? initialTab : 'general');
 
   useEffect(() => {
@@ -5150,6 +5597,7 @@ function SettingsTab({ authFetch, regions, initialTab = 'general' }) {
     { key: 'notifications', label: 'Push notifications' },
     { key: 'theme', label: 'Theme' },
     { key: 'cookie-consent', label: 'Cookie Consent' },
+    { key: 'automation', label: 'Scheduled Jobs' },
   ];
 
   return (
@@ -5174,6 +5622,7 @@ function SettingsTab({ authFetch, regions, initialTab = 'general' }) {
         {subTab === 'shipping' && <ShippingTab authFetch={authFetch} regions={regions} />}
         {subTab === 'theme' && <ThemeTab authFetch={authFetch} />}
         {subTab === 'cookie-consent' && <CookieConsentTab authFetch={authFetch} />}
+        {subTab === 'automation' && <ScheduledJobsTab authFetch={authFetch} />}
       </div>
     </div>
   );
@@ -5529,8 +5978,7 @@ function ThemeTab({ authFetch }) {
     announcementIN: '',
     announcementUK: '',
     borderRadius: '6px',
-    glassmorphism: 'None',
-    customCss: ''
+    glassmorphism: 'None'
   });
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -5687,10 +6135,6 @@ function ThemeTab({ authFetch }) {
             </div>
           </div>
 
-          <div className="border-t border-edge-subtle pt-3">
-            <label className="block font-semibold text-ink-primary mb-1">Custom CSS Overrides</label>
-            <textarea rows={3} value={theme.customCss || ''} onChange={(e) => setTheme({ ...theme, customCss: e.target.value })} placeholder="e.g. .btn { text-transform: uppercase; }" className="w-full rounded-sm border border-edge p-2 font-mono text-[12px]" />
-          </div>
         </div>
 
         {success && <p className="text-sm bg-brand-success/10 text-ink-success border border-brand-success/30 p-2 rounded-lg font-semibold">Theme published to storefront successfully!</p>}
@@ -5885,12 +6329,49 @@ function CookieConsentTab({ authFetch }) {
 }
 
 /* ------------------------------------------------------------- Header & Footer Builders */
+/* Defaults mirror the live storefront exactly (Navbar.jsx fallbackNavLinks and
+   Footer.jsx link columns), so the editor always starts from what visitors
+   actually see instead of placeholder links to pages that do not exist. */
+const DEFAULT_HEADER_LINKS = [
+  { label: 'Shop', url: '/products', mega_menu: true },
+  { label: 'Our Story', url: '/about' },
+  { label: 'Learn', url: '/knowledge-hub' },
+  { label: 'Insights', url: '/blog' },
+  { label: 'Contact', url: '/contact' },
+];
+
+const DEFAULT_FOOTER_LINKS = {
+  shop: [
+    { label: 'Shop all products', url: '/products' },
+    { label: 'Wholesale and bulk', url: '/bulk' },
+    { label: 'Track your order', url: '/account' },
+  ],
+  support: [
+    { label: 'Contact us', url: '/contact' },
+    { label: 'FAQs', url: '/faq' },
+    { label: 'Glossary', url: '/glossary' },
+    { label: 'Shipping and delivery', url: '/policies/shipping' },
+    { label: 'Returns and refunds', url: '/policies/refund' },
+  ],
+  legal: [
+    { label: 'Privacy policy', url: '/policies/privacy' },
+    { label: 'Terms of service', url: '/policies/terms' },
+    { label: 'Cookie policy', url: '/policies/cookie' },
+    { label: 'Accessibility', url: '/policies/accessibility' },
+  ],
+};
+
+// Only the columns the storefront footer actually renders.
+const FOOTER_COLUMNS = ['shop', 'support', 'legal'];
+
 function NavigationTab({ authFetch, regions }) {
   const [headerLinks, setHeaderLinks] = useState([]);
-  const [footerLinks, setFooterLinks] = useState({ shop: [], company: [], support: [], legal: [] });
+  const [footerLinks, setFooterLinks] = useState({ shop: [], support: [], legal: [] });
   const [editingItem, setEditingItem] = useState(null); // { type: 'header'|'footer', column?: string, index: number, item: object }
   const [loading, setLoading] = useState(true);
   const [activeSubTab, setActiveSubTab] = useState('header');
+  const [notice, setNotice] = useState('');
+  const [error, setError] = useState('');
 
   const load = useCallback(() => {
     setLoading(true);
@@ -5899,51 +6380,40 @@ function NavigationTab({ authFetch, regions }) {
       authFetch('/api/admin/settings/FOOTER_SETTINGS/').then(r => r.ok ? r.json() : null).catch(() => null)
     ]).then(([headerData, footerData]) => {
       const rawHeader = headerData?.value;
-      const headerVal = Array.isArray(rawHeader) ? rawHeader : [
-        { label: 'Home', url: '/' },
-        { label: 'Shop', url: '/catalog' },
-        { label: 'Science', url: '/science' },
-        { label: 'Support', url: '/support' }
-      ];
-      setHeaderLinks(headerVal);
-      
+      setHeaderLinks(Array.isArray(rawHeader) && rawHeader.length ? rawHeader : DEFAULT_HEADER_LINKS);
+
       const rawFooter = footerData?.value;
-      const footerVal = (rawFooter && typeof rawFooter === 'object' && !Array.isArray(rawFooter)) ? rawFooter : {
-        shop: [{ label: 'Proteins', url: '/catalog' }, { label: 'Amino Acids', url: '/catalog' }],
-        company: [{ label: 'About', url: '/about' }, { label: 'Careers', url: '/careers' }],
-        support: [{ label: 'FAQ', url: '/faq' }, { label: 'Contact', url: '/contact' }],
-        legal: [{ label: 'Privacy', url: '/privacy' }, { label: 'Terms', url: '/terms' }]
-      };
-      
-      const normalizedFooter = {
-        shop: Array.isArray(footerVal.shop) ? footerVal.shop : [],
-        company: Array.isArray(footerVal.company) ? footerVal.company : [],
-        support: Array.isArray(footerVal.support) ? footerVal.support : [],
-        legal: Array.isArray(footerVal.legal) ? footerVal.legal : [],
-      };
-      setFooterLinks(normalizedFooter);
+      const footerVal = (rawFooter && typeof rawFooter === 'object' && !Array.isArray(rawFooter)) ? rawFooter : {};
+      setFooterLinks({
+        shop: Array.isArray(footerVal.shop) && footerVal.shop.length ? footerVal.shop : DEFAULT_FOOTER_LINKS.shop,
+        support: Array.isArray(footerVal.support) && footerVal.support.length ? footerVal.support : DEFAULT_FOOTER_LINKS.support,
+        legal: Array.isArray(footerVal.legal) && footerVal.legal.length ? footerVal.legal : DEFAULT_FOOTER_LINKS.legal,
+      });
     }).finally(() => setLoading(false));
   }, [authFetch]);
 
   useEffect(() => { load(); }, [load]);
 
   const save = (newHeader, newFooter) => {
+    setNotice('');
+    setError('');
     Promise.all([
       authFetch('/api/admin/settings/NAVIGATION_MENUS/', {
         method: 'PUT',
         body: JSON.stringify({ key: 'NAVIGATION_MENUS', value: newHeader || headerLinks, description: 'Storefront main header menu links' })
-      }).then(r => r.status === 404 ? authFetch('/api/admin/settings/', {
-        method: 'POST',
-        body: JSON.stringify({ key: 'NAVIGATION_MENUS', value: newHeader || headerLinks, description: 'Storefront main header menu links' })
-      }) : r),
+      }),
       authFetch('/api/admin/settings/FOOTER_SETTINGS/', {
         method: 'PUT',
         body: JSON.stringify({ key: 'FOOTER_SETTINGS', value: newFooter || footerLinks, description: 'Storefront footer columns and social links' })
-      }).then(r => r.status === 404 ? authFetch('/api/admin/settings/', {
-        method: 'POST',
-        body: JSON.stringify({ key: 'FOOTER_SETTINGS', value: newFooter || footerLinks, description: 'Storefront footer columns and social links' })
-      }) : r)
-    ]).then(() => load());
+      })
+    ]).then(([headerRes, footerRes]) => {
+      if (!headerRes.ok || !footerRes.ok) throw new Error('The server rejected the change.');
+      setNotice('Menus saved. The storefront header and footer update immediately.');
+      load();
+    }).catch((e) => {
+      setError(e.message || 'Could not save the menus. Please try again.');
+      load();
+    });
   };
 
   const deleteHeaderItem = (idx) => {
@@ -6031,6 +6501,9 @@ function NavigationTab({ authFetch, regions }) {
         <button onClick={() => setActiveSubTab('footer')} className={`px-4 py-1.5 text-sm font-semibold uppercase rounded-sm ${activeSubTab === 'footer' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Footer Columns</button>
       </div>
 
+      {notice && <p className="rounded-lg border border-brand-success/30 bg-brand-success/10 px-3 py-2 text-sm font-semibold text-ink-success">{notice}</p>}
+      {error && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-ink-danger">{error}</p>}
+
       {activeSubTab === 'header' ? (
         <div className="bg-white rounded-lg border border-edge p-5 space-y-4">
           <div className="flex justify-between items-center">
@@ -6057,8 +6530,8 @@ function NavigationTab({ authFetch, regions }) {
           </div>
         </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-4">
-          {['shop', 'company', 'support', 'legal'].map((col) => (
+        <div className="grid gap-4 md:grid-cols-3">
+          {FOOTER_COLUMNS.map((col) => (
             <div key={col} className="bg-white rounded-lg border border-edge p-4 space-y-3">
               <div className="flex justify-between items-center border-b border-edge-subtle pb-2">
                 <h4 className="text-sm font-semibold uppercase text-ink-primary">{col}</h4>
@@ -6068,7 +6541,7 @@ function NavigationTab({ authFetch, regions }) {
               <div className="space-y-1.5 min-h-[150px]">
                 {footerLinks[col]?.map((link, idx) => (
                   <div key={idx} className="flex justify-between items-center p-2 rounded-lg border border-edge-subtle bg-surface-muted text-[13px] font-semibold text-ink-primary">
-                    <span className="truncate max-w-[80px]">{toDisplayText(link.label)}</span>
+                    <span className="truncate max-w-[140px]">{toDisplayText(link.label)}</span>
                     <div className="flex gap-1.5">
                       <button onClick={() => moveFooter(col, idx, -1)} disabled={idx === 0} className="text-[13px] text-ink-subtle">▲</button>
                       <button onClick={() => moveFooter(col, idx, 1)} disabled={idx === footerLinks[col].length - 1} className="text-[13px] text-ink-subtle">▼</button>
@@ -6084,8 +6557,8 @@ function NavigationTab({ authFetch, regions }) {
       )}
 
       {editingItem && (
-        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-          <div className="w-full max-w-md bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-surface-overlay p-4 backdrop-blur-sm sm:p-6 lg:p-8">
+          <div className="my-10 w-full max-w-md bg-white rounded-lg border border-edge p-6 shadow-overlay space-y-4">
             <h3 className="text-lg font-semibold text-ink-primary">{editingItem.index === -1 ? 'Add Link' : 'Edit Link'}</h3>
             <div className="space-y-3 text-sm">
               <div>
@@ -6103,8 +6576,9 @@ function NavigationTab({ authFetch, regions }) {
                     <label className="block font-semibold text-ink-subtle mb-1">Limit to Region (leave blank for Global)</label>
                     <select value={editingItem.item.region_limit || ''} onChange={(e) => setEditingItem({ ...editingItem, item: { ...editingItem.item, region_limit: e.target.value } })} className="w-full rounded-sm border border-edge p-1.5">
                       <option value="">Global / All regions</option>
-                      <option value="UK">United Kingdom (UK)</option>
-                      <option value="IN">India (IN)</option>
+                      {(Array.isArray(regions) && regions.length ? regions : [{ code: 'UK', name: 'United Kingdom' }, { code: 'IN', name: 'India' }]).map((r) => (
+                        <option key={r.code} value={r.code}>{r.name} ({r.code})</option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -6138,6 +6612,17 @@ const blankHeroBanner = () => ({
   secondary_cta_label: '',
   secondary_cta_url: '',
   text_position: 'LEFT',
+  overlay_color_start: '',
+  overlay_color_mid: '',
+  overlay_color_end: '',
+  eyebrow_color: '',
+  heading_color: '',
+  subheading_color: '',
+  primary_cta_bg_color: '',
+  primary_cta_text_color: '',
+  secondary_cta_bg_color: '',
+  secondary_cta_text_color: '',
+  accent_color: '',
   // Scheduling / ordering / carousel timing are no longer editable — the save
   // payload forces safe values so a banner is always live.
   sort_order: 0,
@@ -6145,9 +6630,349 @@ const blankHeroBanner = () => ({
   seo_description: '',
 });
 
-/* Pages + Banners merged surface per spec 2026-06-24. */
-function PagesAndBannersTab({ authFetch }) {
-  return <HeroBannersTab authFetch={authFetch} />;
+/* Per-slide theme colors. `fallback` mirrors the storefront's brand default so
+   the picker opens on the color the visitor currently sees; an empty stored
+   value means "brand default" and lets the storefront keep its own styling. */
+const HERO_COLOR_FIELDS = [
+  { key: 'overlay_color_start', label: 'Overlay gradient — left', fallback: '#090C3A', group: 'Overlay' },
+  { key: 'overlay_color_mid', label: 'Overlay gradient — middle', fallback: '#101871', group: 'Overlay' },
+  { key: 'overlay_color_end', label: 'Overlay gradient — right', fallback: '#1E083B', group: 'Overlay' },
+  { key: 'eyebrow_color', label: 'Eyebrow text', fallback: '#FFFFFF', group: 'Text' },
+  { key: 'heading_color', label: 'Heading text', fallback: '#FFFFFF', group: 'Text' },
+  { key: 'subheading_color', label: 'Subheading text', fallback: '#FFFFFF', group: 'Text' },
+  { key: 'primary_cta_bg_color', label: 'Primary button background', fallback: '#F5A227', group: 'Buttons' },
+  { key: 'primary_cta_text_color', label: 'Primary button text', fallback: '#171250', group: 'Buttons' },
+  { key: 'secondary_cta_bg_color', label: 'Secondary button background', fallback: '#1A1A2E', group: 'Buttons' },
+  { key: 'secondary_cta_text_color', label: 'Secondary button text', fallback: '#FFFFFF', group: 'Buttons' },
+  { key: 'accent_color', label: 'Carousel indicator accent', fallback: '#F5A227', group: 'Accent' },
+];
+
+// <input type="color"> only accepts 6-digit hex; expand shorthand like #fff.
+const expandHex = (value) => (
+  /^#[0-9a-fA-F]{3}$/.test(value || '')
+    ? `#${value[1]}${value[1]}${value[2]}${value[2]}${value[3]}${value[3]}`
+    : value
+);
+
+function HeroColorField({ label, value, fallback, onChange }) {
+  const isCustom = Boolean(value);
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-edge bg-white px-3 py-2">
+      <div className="min-w-0">
+        <p className="text-[13px] font-semibold text-ink-primary">{label}</p>
+        <p className="text-[12px] text-ink-muted">{isCustom ? value.toUpperCase() : 'Brand default'}</p>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {isCustom && (
+          <button
+            type="button"
+            onClick={() => onChange('')}
+            className="rounded-sm border border-edge px-2 py-1 text-[11px] font-semibold uppercase text-brand-muted hover:bg-surface-muted"
+          >
+            Reset
+          </button>
+        )}
+        <input
+          type="color"
+          value={expandHex(isCustom ? value : fallback)}
+          onChange={(e) => onChange(e.target.value)}
+          className="h-8 w-10 cursor-pointer rounded-sm border border-edge bg-white p-0.5"
+          aria-label={`${label} color`}
+        />
+      </div>
+    </div>
+  );
+}
+
+/* Pages + Banners merged surface per spec 2026-06-24; policy pages added as a
+   second sub-tab so every legal/info page is editable from the console. */
+function PagesAndBannersTab({ authFetch, initialTab = 'banners' }) {
+  const allowedTabs = ['banners', 'policies'];
+  const [subTab, setSubTab] = useState(allowedTabs.includes(initialTab) ? initialTab : 'banners');
+
+  useEffect(() => {
+    if (allowedTabs.includes(initialTab)) setSubTab(initialTab);
+  }, [initialTab]);
+
+  const SUB_TABS = [
+    { key: 'banners', label: 'Banners' },
+    { key: 'policies', label: 'Policy Pages' },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap gap-2 border-b border-edge-subtle pb-2">
+        {SUB_TABS.map((t) => (
+          <button key={t.key} onClick={() => setSubTab(t.key)}
+            className={`px-3 py-1.5 text-sm font-semibold uppercase rounded-lg transition-colors ${subTab === t.key ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <div className="mt-4">
+        {subTab === 'banners' && <HeroBannersTab authFetch={authFetch} />}
+        {subTab === 'policies' && <PolicyPagesTab authFetch={authFetch} />}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------- Policy Pages */
+const POLICY_SLUG_PREFIX = 'policy-';
+const POLICY_ICON_OPTIONS = [
+  { value: 'shield', label: 'Shield (privacy)' },
+  { value: 'file-text', label: 'Document (terms)' },
+  { value: 'truck', label: 'Truck (shipping)' },
+  { value: 'refresh-cw', label: 'Refresh (refunds)' },
+  { value: 'eye', label: 'Eye (cookies)' },
+  { value: 'heart-pulse', label: 'Heart (accessibility / story)' },
+  { value: 'send', label: 'Send (contact)' },
+  { value: 'bookmark', label: 'Bookmark' },
+];
+
+function PolicyPagesTab({ authFetch }) {
+  const [pages, setPages] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  const load = useCallback(() => {
+    setLoading(true);
+    authFetch(`/api/admin/content-pages/?q=${POLICY_SLUG_PREFIX}`)
+      .then((r) => r.json())
+      .then((d) => {
+        const rows = (Array.isArray(d) ? d : d.results || []).filter(
+          (p) => typeof p.slug === 'string' && p.slug.startsWith(POLICY_SLUG_PREFIX)
+        );
+        setPages(rows);
+      })
+      .catch(() => setError('Could not load policy pages.'))
+      .finally(() => setLoading(false));
+  }, [authFetch]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const startEdit = (page) => {
+    const layout = page.template_layout && typeof page.template_layout === 'object' ? page.template_layout : {};
+    setError('');
+    setNotice('');
+    setEditing({
+      id: page.id,
+      slug: page.slug,
+      title: page.title || '',
+      meta_title: page.meta_title || '',
+      meta_description: page.meta_description || '',
+      is_published: Boolean(page.is_published),
+      icon: layout.icon || 'file-text',
+      last_updated_label: layout.last_updated_label || '',
+      is_contact_form: Boolean(layout.is_contact_form),
+      sections: Array.isArray(layout.sections) && layout.sections.length
+        ? layout.sections.map((s) => ({ heading: s?.heading || '', text: s?.text || '' }))
+        : [{ heading: '', text: '' }],
+    });
+  };
+
+  const updateSection = (index, field, value) => {
+    setEditing((prev) => ({
+      ...prev,
+      sections: prev.sections.map((s, i) => (i === index ? { ...s, [field]: value } : s)),
+    }));
+  };
+
+  const moveSection = (index, delta) => {
+    setEditing((prev) => {
+      const next = [...prev.sections];
+      const target = index + delta;
+      if (target < 0 || target >= next.length) return prev;
+      [next[index], next[target]] = [next[target], next[index]];
+      return { ...prev, sections: next };
+    });
+  };
+
+  const addSection = () => {
+    setEditing((prev) => ({ ...prev, sections: [...prev.sections, { heading: '', text: '' }] }));
+  };
+
+  const removeSection = (index) => {
+    setEditing((prev) => ({
+      ...prev,
+      sections: prev.sections.length > 1 ? prev.sections.filter((_, i) => i !== index) : prev.sections,
+    }));
+  };
+
+  const save = () => {
+    if (!editing) return;
+    const sections = editing.sections
+      .map((s) => ({ heading: s.heading.trim(), text: s.text.trim() }))
+      .filter((s) => s.heading || s.text);
+    if (!editing.title.trim()) { setError('Title is required.'); return; }
+    if (!sections.length) { setError('At least one section with content is required.'); return; }
+
+    setSaving(true);
+    setError('');
+    authFetch(`/api/admin/content-pages/${editing.id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        title: editing.title.trim(),
+        meta_title: editing.meta_title.trim(),
+        meta_description: editing.meta_description.trim(),
+        is_published: editing.is_published,
+        template_layout: {
+          kind: 'policy',
+          icon: editing.icon,
+          last_updated_label: editing.last_updated_label.trim(),
+          is_contact_form: editing.is_contact_form,
+          sections,
+        },
+      }),
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error('save-failed');
+        return r.json();
+      })
+      .then(() => {
+        setEditing(null);
+        setNotice('Policy page saved. The storefront picks up edits within 5 minutes.');
+        load();
+      })
+      .catch(() => setError('Could not save the policy page. Please try again.'))
+      .finally(() => setSaving(false));
+  };
+
+  if (loading) return <p className="text-sm text-brand-muted">Loading policy pages...</p>;
+
+  return (
+    <div className="space-y-4">
+      {notice && <div className="rounded bg-brand-success/10 p-2.5 text-sm text-ink-success font-semibold">{notice}</div>}
+      {error && !editing && <div className="rounded bg-brand-danger/10 p-2.5 text-sm text-brand-danger font-semibold">{error}</div>}
+
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-brand-muted">
+          {pages.length} policy page{pages.length === 1 ? '' : 's'} — Privacy, Terms, Refunds and other
+          legal pages shown at <span className="font-mono">/policies/…</span> on the storefront.
+        </p>
+      </div>
+
+      {pages.length === 0 && (
+        <div className="rounded-md border border-edge bg-surface-muted p-4 text-sm text-ink-secondary">
+          No policy pages found. Seed them once with
+          <span className="mx-1 rounded bg-white px-1.5 py-0.5 font-mono text-xs border border-edge">python manage.py seed_policy_pages</span>
+          on the backend, then reload this tab.
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {pages.map((page) => (
+          <div key={page.id} className="flex justify-between items-center rounded-md border border-edge bg-white shadow-card p-4">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="truncate text-sm font-semibold text-ink-primary">{page.title}</p>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${page.is_published ? 'bg-brand-success/10 text-ink-success' : 'bg-surface-muted text-ink-muted'}`}>
+                  {page.is_published ? 'Published' : 'Hidden'}
+                </span>
+              </div>
+              <p className="mt-0.5 text-xs text-brand-muted font-mono">/policies/{page.slug.slice(POLICY_SLUG_PREFIX.length)}</p>
+            </div>
+            <button onClick={() => startEdit(page)} aria-label={`Edit ${page.title}`} className="inline-flex h-9 w-9 items-center justify-center rounded-sm border border-edge text-ink-secondary hover:text-ink-primary hover:border-edge-strong">
+              <Pencil className="h-4 w-4" />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {editing && (
+        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 md:p-8">
+          <div className="mx-auto max-w-3xl bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-heading-3">Edit {editing.title || 'policy page'}</h3>
+              <button onClick={() => setEditing(null)} aria-label="Close editor" className="text-ink-muted hover:text-ink-primary"><X className="h-5 w-5" /></button>
+            </div>
+            {error && <div className="rounded bg-brand-danger/10 p-2.5 text-sm text-brand-danger font-semibold">{error}</div>}
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-ink-muted">Page title</label>
+                <input value={editing.title} onChange={(e) => setEditing({ ...editing, title: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-ink-muted">Header icon</label>
+                <select value={editing.icon} onChange={(e) => setEditing({ ...editing, icon: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-sm">
+                  {POLICY_ICON_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-ink-muted">"Last updated" label</label>
+                <input value={editing.last_updated_label} onChange={(e) => setEditing({ ...editing, last_updated_label: e.target.value })} placeholder="e.g. July 22, 2026" className="w-full rounded-sm border border-edge p-2.5 text-sm" />
+                <p className="mt-1 text-[11px] text-ink-muted">Leave blank to show the date of the latest save.</p>
+              </div>
+              <div className="flex items-end gap-6 pb-1">
+                <label className="flex items-center gap-2 text-sm text-ink-primary">
+                  <input type="checkbox" checked={editing.is_published} onChange={(e) => setEditing({ ...editing, is_published: e.target.checked })} className="accent-ink-primary" />
+                  Published
+                </label>
+                <label className="flex items-center gap-2 text-sm text-ink-primary">
+                  <input type="checkbox" checked={editing.is_contact_form} onChange={(e) => setEditing({ ...editing, is_contact_form: e.target.checked })} className="accent-ink-primary" />
+                  Show contact form
+                </label>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Sections</p>
+                <button onClick={addSection} className="inline-flex items-center gap-1 text-sm font-semibold text-ink-accent hover:underline">
+                  <Plus className="h-4 w-4" /> Add section
+                </button>
+              </div>
+              {editing.sections.map((sec, i) => (
+                <div key={i} className="rounded-md border border-edge-subtle bg-surface-muted p-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={sec.heading}
+                      onChange={(e) => updateSection(i, 'heading', e.target.value)}
+                      placeholder="Section heading"
+                      className="flex-1 rounded-sm border border-edge p-2 text-sm font-semibold"
+                    />
+                    <button onClick={() => moveSection(i, -1)} disabled={i === 0} aria-label="Move section up" className="h-8 w-8 rounded-sm border border-edge text-ink-secondary disabled:opacity-30">↑</button>
+                    <button onClick={() => moveSection(i, 1)} disabled={i === editing.sections.length - 1} aria-label="Move section down" className="h-8 w-8 rounded-sm border border-edge text-ink-secondary disabled:opacity-30">↓</button>
+                    <button onClick={() => removeSection(i)} disabled={editing.sections.length === 1} aria-label="Remove section" className="h-8 w-8 rounded-sm border border-edge text-brand-danger disabled:opacity-30"><X className="mx-auto h-4 w-4" /></button>
+                  </div>
+                  <textarea
+                    value={sec.text}
+                    onChange={(e) => updateSection(i, 'text', e.target.value)}
+                    rows={4}
+                    placeholder="Section text"
+                    className="w-full rounded-sm border border-edge p-2.5 text-sm leading-relaxed"
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div className="p-3 bg-surface-muted rounded-md border border-edge-subtle space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">SEO</p>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-ink-muted">Meta title</label>
+                <input value={editing.meta_title} onChange={(e) => setEditing({ ...editing, meta_title: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-ink-muted">Meta description</label>
+                <textarea value={editing.meta_description} onChange={(e) => setEditing({ ...editing, meta_description: e.target.value })} rows={2} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-edge-subtle pt-4">
+              <button onClick={() => setEditing(null)} className="rounded-sm border border-edge px-4 py-2 text-sm font-semibold text-ink-secondary">Cancel</button>
+              <button onClick={save} disabled={saving} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-sm uppercase disabled:opacity-60">
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save page
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function HeroBannersTab({ authFetch }) {
@@ -6280,8 +7105,16 @@ function HeroBannersTab({ authFetch }) {
                 <h3 className="mt-1 text-base font-semibold text-ink-primary">{slide.heading}</h3>
                 <p className="mt-1 line-clamp-2 text-sm text-brand-muted">{slide.subheading}</p>
               </div>
-              <div className="flex flex-wrap gap-2 text-[13px] text-brand-muted">
+              <div className="flex flex-wrap items-center gap-2 text-[13px] text-brand-muted">
                 <span>Text {String(slide.text_position || '').toLowerCase()}</span>
+                {HERO_COLOR_FIELDS.some((f) => slide[f.key]) && (
+                  <span className="inline-flex items-center gap-1.5">
+                    <span>· Custom theme</span>
+                    {HERO_COLOR_FIELDS.filter((f) => slide[f.key]).slice(0, 6).map((f) => (
+                      <span key={f.key} className="h-3 w-3 rounded-full border border-edge" style={{ backgroundColor: slide[f.key] }} title={f.label} />
+                    ))}
+                  </span>
+                )}
               </div>
               <div className="flex justify-end gap-2">
                 <button onClick={() => startEdit(slide)} className="rounded-sm border border-edge p-2 text-ink-accent hover:bg-surface-muted" aria-label={`Edit ${slide.title}`}>
@@ -6454,6 +7287,30 @@ function HeroBannersTab({ authFetch }) {
                 </div>
               </div>
 
+              <div className="space-y-3">
+                <div>
+                  <label className="kicker mb-1 block">Colors &amp; theme</label>
+                  <p className="text-[12px] text-ink-muted">
+                    Recolor this slide for a campaign or seasonal theme. Every color falls back to the
+                    brand default — use <span className="font-semibold">Reset</span> to undo a change.
+                  </p>
+                </div>
+                {['Overlay', 'Text', 'Buttons', 'Accent'].map((group) => (
+                  <div key={group} className="space-y-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">{group}</p>
+                    {HERO_COLOR_FIELDS.filter((f) => f.group === group).map((f) => (
+                      <HeroColorField
+                        key={f.key}
+                        label={f.label}
+                        value={editing[f.key] || ''}
+                        fallback={f.fallback}
+                        onChange={(value) => setField(f.key, value)}
+                      />
+                    ))}
+                  </div>
+                ))}
+              </div>
+
               <div className="space-y-4">
                 <div>
                   <label className="kicker mb-1 block">SEO title</label>
@@ -6474,10 +7331,35 @@ function HeroBannersTab({ authFetch }) {
                     ) : (
                       <div className="flex h-full items-center justify-center text-sm font-semibold uppercase text-ink-subtle">Preview media</div>
                     )}
-                    <div className="absolute inset-0 bg-black/35" />
+                    <div
+                      className="absolute inset-0"
+                      style={{
+                        background: `linear-gradient(90deg, ${editing.overlay_color_start || '#090C3A'} 0%, ${editing.overlay_color_mid || '#101871'} 48%, ${editing.overlay_color_end || '#1E083B'} 100%)`,
+                        opacity: 0.35,
+                      }}
+                    />
                     <div className="absolute bottom-4 left-4 right-4 text-white">
-                      <p className="text-[12px] font-semibold uppercase tracking-wider text-white/75">{editing.eyebrow}</p>
-                      <p className="text-lg font-semibold leading-tight">{editing.heading || 'Banner heading preview'}</p>
+                      <p className="text-[12px] font-semibold uppercase tracking-wider text-white/75" style={editing.eyebrow_color ? { color: editing.eyebrow_color } : undefined}>{editing.eyebrow}</p>
+                      <p className="text-lg font-semibold leading-tight" style={editing.heading_color ? { color: editing.heading_color } : undefined}>{editing.heading || 'Banner heading preview'}</p>
+                      {editing.subheading && (
+                        <p className="mt-1 line-clamp-1 text-[12px] text-white/85" style={editing.subheading_color ? { color: editing.subheading_color } : undefined}>{editing.subheading}</p>
+                      )}
+                      {(editing.primary_cta_label || editing.secondary_cta_label) && (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {editing.primary_cta_label && (
+                            <span
+                              className="rounded-pill px-3 py-1 text-[11px] font-semibold"
+                              style={{ background: editing.primary_cta_bg_color || '#F5A227', color: editing.primary_cta_text_color || '#171250' }}
+                            >{editing.primary_cta_label}</span>
+                          )}
+                          {editing.secondary_cta_label && (
+                            <span
+                              className="rounded-pill border border-white/30 px-3 py-1 text-[11px] font-semibold"
+                              style={{ background: editing.secondary_cta_bg_color || 'rgba(255,255,255,0.1)', color: editing.secondary_cta_text_color || '#FFFFFF' }}
+                            >{editing.secondary_cta_label}</span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -8000,9 +8882,9 @@ export default function AdminPage() {
 
   return (
     <StoreShell showFooter={false}>
-      <div className="flex min-h-[calc(100vh-65px)] bg-brand-bg relative">
+      <div className="flex min-h-[calc(100vh-92px)] bg-brand-bg relative">
         {/* Desktop Sidebar (Fixed Left) */}
-        <aside className="hidden md:block w-64 border-r border-edge bg-white fixed left-0 top-[65px] bottom-0 z-30 p-4">
+        <aside className="hidden md:block w-64 border-r border-edge bg-white fixed left-0 top-[92px] bottom-0 z-30 p-4">
           <SidebarContent />
         </aside>
 
@@ -8027,7 +8909,7 @@ export default function AdminPage() {
         {/* Main Content Pane */}
         <main className="flex-1 min-w-0 py-4 pr-4 pl-4 sm:py-6 sm:pr-6 sm:pl-6 lg:py-8 lg:pr-8 md:pl-[280px] lg:pl-[288px] space-y-6">
           {/* Top Control Bar for Mobile (sticky) */}
-        <div className="sticky top-[65px] z-20 -mx-4 sm:-mx-6 mb-3 flex items-center justify-between gap-3 border-b border-edge bg-white/95 px-4 sm:px-6 py-2.5 backdrop-blur md:hidden">
+        <div className="sticky top-[92px] z-20 -mx-4 sm:-mx-6 mb-3 flex items-center justify-between gap-3 border-b border-edge bg-white/95 px-4 sm:px-6 py-2.5 backdrop-blur md:hidden">
           <button onClick={() => setMobileMenuOpen(true)} aria-label="Open admin menu" className="inline-flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-sm border border-edge bg-white px-3 text-sm font-semibold text-ink-primary">
             <MenuIcon className="h-5 w-5" />
             <span className="sr-only sm:not-sr-only">Menu</span>
@@ -8064,7 +8946,7 @@ export default function AdminPage() {
 
           {/* Content sub-pages, reached from the Content overview rather than
               the sidebar. */}
-          {section === 'pages' && <PagesAndBannersTab authFetch={authFetch} />}
+          {section === 'pages' && <PagesAndBannersTab authFetch={authFetch} initialTab={sectionTab} />}
           {section === 'blogs' && <BlogsTab authFetch={authFetch} />}
           {section === 'glossary' && <GlossaryTab authFetch={authFetch} />}
           {section === 'faq' && <FAQTab authFetch={authFetch} />}

@@ -26,13 +26,14 @@ from .serializers import (
     ContentPageSerializer,
     BlogPostSerializer,
     ApprovalRequestSerializer,
+    CronJobRunSerializer,
 )
 from django.http import HttpResponse
 from .reporting import generate_pdf_report
 from apps.users.models import User, CustomerActivity
 from decimal import Decimal
 from django.db import transaction
-from apps.orders.models import Order, Refund, PaymentLog
+from apps.orders.models import Order, Refund, PaymentLog, CronJobRun
 from apps.orders.payments import refund_payment, PaymentError
 from apps.regions.models import Warehouse
 from apps.inventory.models import StockLevel
@@ -262,6 +263,24 @@ class PaymentGatewayViewSet(viewsets.ModelViewSet):
             return self.queryset.filter(region__code=region_code.upper())
         return self.queryset
 
+    @action(detail=False, methods=['get'])
+    def catalog(self, request):
+        from .provider_catalog import payment_provider_catalog
+        providers = payment_provider_catalog()
+        for provider in providers:
+            provider['webhook_path'] = f"/api/webhooks/payment/{provider['code'].lower()}/"
+        return Response(providers)
+
+    @action(detail=True, methods=['post'])
+    def test_connection(self, request, pk=None):
+        from apps.orders.payments import PaymentError, get_adapter
+        gateway = self.get_object()
+        try:
+            result = get_adapter(gateway).test_connection()
+        except PaymentError as exc:
+            return Response({'ok': False, 'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(result)
+
     @action(detail=False, methods=['get'], permission_classes=[AllowAny])
     def available(self, request):
         """
@@ -431,13 +450,112 @@ class ContentPageViewSet(viewsets.ModelViewSet):
         return qs
 
 
+class CronJobRunViewSet(viewsets.ReadOnlyModelViewSet):
+    """Run history for scheduled jobs — the read side of CronJobRun.
+
+    The jobs have recorded every run since day one, but nothing surfaced the
+    data; a failing 03:00 job was invisible until its effects were. Filter
+    with ?job= and ?status=; /summary/ gives the health-at-a-glance view.
+    """
+    queryset = CronJobRun.objects.all()
+    serializer_class = CronJobRunSerializer
+    permission_classes = [require_permission('settings.manage')]
+
+    # Jobs the scheduler is expected to run; a job with no run history at all
+    # is itself a finding worth surfacing in the summary.
+    EXPECTED_JOBS = [
+        'process_webhooks',
+        'process_outgoing_webhooks',
+        'fetch_support_emails',
+        'process_email_deliveries',
+        'send_abandoned_cart_reminders',
+        'send_review_requests',
+        'process_push_notifications',
+        'prune_system_records',
+    ]
+
+    def get_queryset(self):
+        qs = self.queryset
+        job = self.request.query_params.get('job')
+        status_param = self.request.query_params.get('status')
+        if job:
+            qs = qs.filter(job_name=job)
+        if status_param:
+            qs = qs.filter(status=status_param.upper())
+        return qs[:500]
+
+    @action(detail=False, methods=['get'])
+    def summary(self, request):
+        """Latest run and 24h failure count per job, plus scheduler liveness."""
+        from datetime import timedelta
+        from apps.orders.models import SchedulerLease
+
+        now = timezone.now()
+        day_ago = now - timedelta(hours=24)
+        jobs = []
+        seen = set(self.EXPECTED_JOBS)
+        seen.update(
+            CronJobRun.objects.values_list('job_name', flat=True).distinct()
+        )
+        for job_name in sorted(seen):
+            latest = CronJobRun.objects.filter(job_name=job_name).first()
+            failures_24h = CronJobRun.objects.filter(
+                job_name=job_name, status='FAILED', started_at__gte=day_ago,
+            ).count()
+            jobs.append({
+                'job_name': job_name,
+                'latest_run': CronJobRunSerializer(latest).data if latest else None,
+                'failures_24h': failures_24h,
+                'never_ran': latest is None,
+            })
+
+        lease = SchedulerLease.objects.filter(name='primary').first()
+        scheduler_alive = bool(lease and lease.expires_at > now)
+        return Response({
+            'scheduler_alive': scheduler_alive,
+            'scheduler_lease_expires_at': lease.expires_at.isoformat() if lease else None,
+            'jobs': jobs,
+        })
+
+
+POLICY_SLUG_PREFIX = 'policy-'
+
+
 class PublishedContentPageListView(APIView):
     """GET /api/content-pages/published-slugs/ — slugs + updated_at for published pages (for sitemap)."""
     permission_classes = [AllowAny]
 
     def get(self, request):
-        pages = ContentPage.objects.filter(is_published=True).values('slug', 'updated_at')
+        # Policy pages live at /policies/<slug> (already in the sitemap as
+        # static routes); listing them here would duplicate them as /pages/*.
+        pages = ContentPage.objects.filter(is_published=True).exclude(
+            slug__startswith=POLICY_SLUG_PREFIX
+        ).values('slug', 'updated_at')
         return Response(list(pages))
+
+
+class PublishedPolicyPagesView(APIView):
+    """GET /api/policies/ — slug, title and icon of every published policy page.
+
+    Lets the storefront's policy sidebar reflect edited titles without one
+    request per page.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        pages = ContentPage.objects.filter(
+            is_published=True, slug__startswith=POLICY_SLUG_PREFIX,
+        ).order_by('created_at')
+        out = []
+        for page in pages:
+            layout = page.template_layout if isinstance(page.template_layout, dict) else {}
+            out.append({
+                'slug': page.slug[len(POLICY_SLUG_PREFIX):],
+                'title': page.title,
+                'icon': layout.get('icon', ''),
+                'updated_at': page.updated_at,
+            })
+        return Response(out)
 
 
 class PublishedContentPageDetailView(APIView):
@@ -707,23 +825,46 @@ class ApprovalRequestViewSet(viewsets.ModelViewSet):
         req_type = instance.request_type
         
         if req_type == 'REFUND':
-            
+
             order_id = payload.get('order_id')
             amount_val = payload.get('amount')
             reason = payload.get('reason', '')
             restock = payload.get('restock', False)
-            
-            order = get_object_or_404(Order, id=order_id)
+
+            # Lock the order: the same integrity rules as the direct refund
+            # endpoint must hold here, because approval can happen long after
+            # the request was queued (other refunds may have landed since).
+            order = get_object_or_404(Order.objects.select_for_update(), id=order_id)
             amount = Decimal(str(amount_val))
-            
+
+            def _fail_refund(message):
+                instance.status = 'PENDING'
+                instance.approver = None
+                instance.resolved_at = None
+                instance.save()
+                return Response({"error": message}, status=status.HTTP_400_BAD_REQUEST)
+
+            if not order.payment_id:
+                return _fail_refund("Refund failed: the order has no original transaction ID.")
+            if order.payment_status not in ('PAID', 'PARTIALLY_CAPTURED'):
+                return _fail_refund(
+                    f"Refund failed: order payment status is '{order.payment_status}' "
+                    "(must be Paid or Partially Captured)."
+                )
+
+            already = order.refunds.filter(status__in=['PENDING', 'PROCESSED']).aggregate(s=Sum('amount'))['s'] or Decimal('0.00')
+            remaining = order.total - already
+            if amount <= 0 or amount > remaining:
+                return _fail_refund(
+                    f"Refund failed: {order.currency_code} {amount:.2f} exceeds the remaining "
+                    f"refundable balance ({order.currency_code} {remaining:.2f})."
+                )
+
             try:
                 result = refund_payment(order, amount, reason)
             except PaymentError as exc:
-                instance.status = 'PENDING'
-                instance.save()
-                return Response({"error": f"Payment gateway refund failed: {str(exc)}"}, status=status.HTTP_400_BAD_REQUEST)
-                
-            already = order.refunds.filter(status__in=['PENDING', 'PROCESSED']).aggregate(s=Sum('amount'))['s'] or Decimal('0.00')
+                return _fail_refund(f"Payment gateway refund failed: {str(exc)}")
+
             is_full = (already + amount) >= order.total
             
             refund = Refund.objects.create(

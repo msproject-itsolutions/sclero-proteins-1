@@ -73,6 +73,12 @@ function RateEditorModal({ rate, zoneId, onSave, onClose }) {
   });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  // Rarely-used fields start collapsed, but open automatically when the rate
+  // being edited already uses one of them so nothing is hidden.
+  const [showAdvanced, setShowAdvanced] = useState(() => Boolean(
+    rate && (Number(rate.handling_fee) > 0 || rate.surcharge_postcodes ||
+      Number(rate.surcharge_amount) > 0 || Number(rate.priority) > 0 || rate.description)
+  ));
 
   // Use currency from the rate object (populated by serializer) or fallback to ₹
   const currSym  = r.region_symbol  || '₹';
@@ -105,6 +111,43 @@ function RateEditorModal({ rate, zoneId, onSave, onClose }) {
     FREE:   'No shipping charge is collected. Optionally restrict to a minimum order value below.',
     CUSTOM: 'Custom method — configure the rate manually. Use the description field for internal notes.',
   }[r.rate_type] || '';
+
+  // Live plain-English preview so the admin always knows what customers will
+  // be charged before saving.
+  const summary = (() => {
+    const price = `${currSym}${Number(r.price || 0).toFixed(2)}`;
+    const range = (unit) => `${r.min_value || 0}–${r.max_value || 'any'}${unit}`;
+    let base;
+    if (r.rate_type === 'FREE') {
+      base = r.min_value
+        ? `Orders over ${currSym}${r.min_value} ship free in this zone.`
+        : 'Every order in this zone ships free.';
+    } else if (r.rate_type === 'WEIGHT') {
+      base = `Orders weighing ${range(' kg')} pay ${price}`;
+      if (Number(r.per_unit_price) > 0) base += ` plus ${currSym}${r.per_unit_price} per extra kg`;
+      base += '.';
+    } else if (r.rate_type === 'PRICE') {
+      base = `Orders totalling ${currSym}${r.min_value || 0}–${r.max_value ? `${currSym}${r.max_value}` : 'any'} pay ${price}.`;
+    } else if (r.rate_type === 'QTY') {
+      base = `Orders with ${range(' items')} pay ${price}`;
+      if (Number(r.per_unit_price) > 0) base += ` plus ${currSym}${r.per_unit_price} per extra item`;
+      base += '.';
+    } else {
+      base = `Every order pays ${price}.`;
+    }
+    if (r.rate_type !== 'FREE' && r.free_above) base += ` Shipping is free above ${currSym}${r.free_above}.`;
+    if (Number(r.handling_fee) > 0) base += ` A ${currSym}${r.handling_fee} handling fee is added.`;
+    return base;
+  })();
+
+  const advancedCount = [
+    r.rate_type !== 'FREE' && r.free_above,
+    (r.rate_type === 'WEIGHT' || r.rate_type === 'QTY') && Number(r.per_unit_price) > 0,
+    Number(r.handling_fee) > 0,
+    r.surcharge_postcodes,
+    Number(r.priority) > 0,
+    r.description,
+  ].filter(Boolean).length;
 
   const handle = async () => {
     if (!r.name.trim()) { setErr('Rate name is required.'); return; }
@@ -171,76 +214,99 @@ function RateEditorModal({ rate, zoneId, onSave, onClose }) {
             )}
           </div>
 
-          {/* Price grid — hide for FREE */}
-          {r.rate_type !== 'FREE' && (
-            <div className="grid grid-cols-3 gap-3">
+          {/* Core pricing — only the fields the chosen model actually needs */}
+          {r.rate_type === 'FREE' ? (
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className={LABEL}>Base Price ({currSym})</label>
+                <label className={LABEL}>Minimum Order Value ({currSym}) <span className="normal-case font-normal text-ink-subtle">optional</span></label>
+                <input type="number" step="0.01" min="0" value={r.min_value || ''} onChange={e => setR({...r, min_value: e.target.value})} className={INPUT} placeholder={`e.g. 500 — orders above ${currSym}500 ship free`} />
+              </div>
+              <div>
+                <label className={LABEL}>Est. Delivery Time</label>
+                <input value={r.estimated_days || ''} onChange={e => setR({...r, estimated_days: e.target.value})} className={INPUT} placeholder="e.g. 3–5 days" />
+              </div>
+            </div>
+          ) : (
+            <div className={`grid gap-3 ${['WEIGHT', 'PRICE', 'QTY'].includes(r.rate_type) ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2'}`}>
+              <div>
+                <label className={LABEL}>Price ({currSym})</label>
                 <input type="number" step="0.01" min="0" value={r.price} onChange={e => setR({...r, price: e.target.value})} className={INPUT} placeholder="0.00" />
               </div>
-              <div>
-                <label className={LABEL}>{minLabel}</label>
-                <input type="number" step={r.rate_type === 'QTY' ? '1' : '0.001'} min="0" value={r.min_value || ''} onChange={e => setR({...r, min_value: e.target.value})} className={INPUT} placeholder={minPlaceholder} />
-              </div>
-              <div>
-                <label className={LABEL}>{maxLabel}</label>
-                <input type="number" step={r.rate_type === 'QTY' ? '1' : '0.001'} min="0" value={r.max_value || ''} onChange={e => setR({...r, max_value: e.target.value || ''})} className={INPUT} placeholder={maxPlaceholder} />
-              </div>
-            </div>
-          )}
-
-          {r.rate_type !== 'FREE' && (
-            <div className="grid grid-cols-2 gap-3">
-              {(r.rate_type === 'WEIGHT' || r.rate_type === 'QTY') && (
-                <div>
-                  <label className={LABEL}>Per {r.rate_type === 'WEIGHT' ? 'Additional kg' : 'Additional Item'} ({currSym})</label>
-                  <input type="number" step="0.01" min="0" value={r.per_unit_price || ''} onChange={e => setR({...r, per_unit_price: e.target.value})} className={INPUT} placeholder="0.00" />
-                </div>
+              {['WEIGHT', 'PRICE', 'QTY'].includes(r.rate_type) && (
+                <>
+                  <div>
+                    <label className={LABEL}>{minLabel}</label>
+                    <input type="number" step={r.rate_type === 'QTY' ? '1' : '0.001'} min="0" value={r.min_value || ''} onChange={e => setR({...r, min_value: e.target.value})} className={INPUT} placeholder={minPlaceholder} />
+                  </div>
+                  <div>
+                    <label className={LABEL}>{maxLabel}</label>
+                    <input type="number" step={r.rate_type === 'QTY' ? '1' : '0.001'} min="0" value={r.max_value || ''} onChange={e => setR({...r, max_value: e.target.value || ''})} className={INPUT} placeholder={maxPlaceholder} />
+                  </div>
+                </>
               )}
               <div>
-                <label className={LABEL}>Handling Fee ({currSym}) <span className="normal-case font-normal text-ink-subtle">optional</span></label>
-                <input type="number" step="0.01" min="0" value={r.handling_fee || ''} onChange={e => setR({...r, handling_fee: e.target.value})} className={INPUT} placeholder="0.00" />
+                <label className={LABEL}>Est. Delivery Time</label>
+                <input value={r.estimated_days || ''} onChange={e => setR({...r, estimated_days: e.target.value})} className={INPUT} placeholder="e.g. 3–5 days" />
               </div>
             </div>
           )}
 
-          {r.rate_type === 'FREE' && (
-            <div>
-              <label className={LABEL}>Minimum Order Value for Free Shipping ({currSym}) <span className="normal-case font-normal text-ink-subtle">optional</span></label>
-              <input type="number" step="0.01" min="0" value={r.min_value || ''} onChange={e => setR({...r, min_value: e.target.value})} className={INPUT} placeholder={`e.g. 500 — orders above ${currSym}500 ship free`} />
+          {/* Plain-English preview of the rule being configured */}
+          <div className="flex items-start gap-2 rounded-md border border-edge bg-surface-muted px-3 py-2.5">
+            <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-ink-success" />
+            <p className="text-sm text-ink-secondary">{summary}</p>
+          </div>
+
+          {/* Everything else lives behind one toggle */}
+          <button
+            type="button"
+            onClick={() => setShowAdvanced(v => !v)}
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-accent hover:text-ink-primary transition"
+          >
+            {showAdvanced ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            More options{advancedCount > 0 ? ` (${advancedCount} in use)` : ''}
+          </button>
+
+          {showAdvanced && (
+            <div className="space-y-4 rounded-md border border-edge-subtle bg-surface-subtle p-4">
+              <div className="grid grid-cols-2 gap-3">
+                {r.rate_type !== 'FREE' && (
+                  <div>
+                    <label className={LABEL}>Free Shipping Above ({currSym})</label>
+                    <input type="number" step="0.01" min="0" value={r.free_above || ''} onChange={e => setR({...r, free_above: e.target.value})} className={INPUT} placeholder="e.g. 1000" />
+                  </div>
+                )}
+                {(r.rate_type === 'WEIGHT' || r.rate_type === 'QTY') && (
+                  <div>
+                    <label className={LABEL}>Per {r.rate_type === 'WEIGHT' ? 'Additional kg' : 'Additional Item'} ({currSym})</label>
+                    <input type="number" step="0.01" min="0" value={r.per_unit_price || ''} onChange={e => setR({...r, per_unit_price: e.target.value})} className={INPUT} placeholder="0.00" />
+                  </div>
+                )}
+                <div>
+                  <label className={LABEL}>Handling Fee ({currSym})</label>
+                  <input type="number" step="0.01" min="0" value={r.handling_fee || ''} onChange={e => setR({...r, handling_fee: e.target.value})} className={INPUT} placeholder="0.00" />
+                </div>
+                <div>
+                  <label className={LABEL}>Display Order at Checkout</label>
+                  <input type="number" min="0" value={r.priority || 0} onChange={e => setR({...r, priority: Number(e.target.value)})} className={INPUT} />
+                </div>
+              </div>
+              <div className="grid grid-cols-[1fr_9rem] gap-3">
+                <div>
+                  <label className={LABEL}>Remote/Surcharge Postcodes <span className="normal-case font-normal text-ink-subtle">comma-separated; * means prefix</span></label>
+                  <input value={r.surcharge_postcodes || ''} onChange={e => setR({...r, surcharge_postcodes: e.target.value})} className={INPUT} placeholder="e.g. IV*, 400001" />
+                </div>
+                <div>
+                  <label className={LABEL}>Surcharge ({currSym})</label>
+                  <input type="number" step="0.01" min="0" value={r.surcharge_amount || ''} onChange={e => setR({...r, surcharge_amount: e.target.value})} className={INPUT} placeholder="0.00" />
+                </div>
+              </div>
+              <div>
+                <label className={LABEL}>Internal Notes <span className="normal-case font-normal text-ink-subtle">optional, staff only</span></label>
+                <textarea value={r.description || ''} onChange={e => setR({...r, description: e.target.value})} rows={2} className={INPUT + ' resize-none'} placeholder="Staff notes about this rate…" />
+              </div>
             </div>
           )}
-
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className={LABEL}>Free Shipping Above ({currSym}) <span className="normal-case font-normal text-ink-subtle">optional override</span></label>
-              <input type="number" step="0.01" min="0" value={r.free_above || ''} onChange={e => setR({...r, free_above: e.target.value})} className={INPUT} placeholder="e.g. 1000" />
-            </div>
-            <div>
-              <label className={LABEL}>Est. Delivery Time</label>
-              <input value={r.estimated_days || ''} onChange={e => setR({...r, estimated_days: e.target.value})} className={INPUT} placeholder="e.g. 3–5 days" />
-            </div>
-            <div>
-              <label className={LABEL}>Checkout Order</label>
-              <input type="number" min="0" value={r.priority || 0} onChange={e => setR({...r, priority: Number(e.target.value)})} className={INPUT} />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-[1fr_9rem] gap-3">
-            <div>
-              <label className={LABEL}>Remote/Surcharge Postcodes <span className="normal-case font-normal text-ink-subtle">comma-separated; * means prefix</span></label>
-              <input value={r.surcharge_postcodes || ''} onChange={e => setR({...r, surcharge_postcodes: e.target.value})} className={INPUT} placeholder="e.g. IV*, 400001" />
-            </div>
-            <div>
-              <label className={LABEL}>Surcharge ({currSym})</label>
-              <input type="number" step="0.01" min="0" value={r.surcharge_amount || ''} onChange={e => setR({...r, surcharge_amount: e.target.value})} className={INPUT} placeholder="0.00" />
-            </div>
-          </div>
-
-          <div>
-            <label className={LABEL}>Internal Description <span className="normal-case font-normal text-ink-subtle">optional</span></label>
-            <textarea value={r.description || ''} onChange={e => setR({...r, description: e.target.value})} rows={2} className={INPUT + ' resize-none'} placeholder="Staff notes about this rate…" />
-          </div>
 
           <label className="flex items-center gap-2 text-sm font-semibold text-ink-secondary cursor-pointer">
             <input type="checkbox" checked={r.is_active !== false} onChange={e => setR({...r, is_active: e.target.checked})} className="accent-ink-primary h-4 w-4" />
@@ -291,6 +357,11 @@ function ZoneEditorPanel({ zone, regions, onSave, onClose }) {
   const [cityInput, setCityInput]       = useState('');
   const [postalStart, setPostalStart]   = useState('');
   const [postalEnd, setPostalEnd]       = useState('');
+  // City/postcode targeting is a power feature; keep it out of the way unless
+  // this zone already uses it.
+  const [showFineTargeting, setShowFineTargeting] = useState(() => Boolean(
+    (zone && zone !== 'new') && ((zone.cities || []).length || (zone.postal_ranges || []).length)
+  ));
   const fileRef = useRef();
 
   // States/provinces offered depend on the countries on this zone, so the list
@@ -384,7 +455,7 @@ function ZoneEditorPanel({ zone, regions, onSave, onClose }) {
                   <input value={z.name} onChange={e => setZ({...z, name: e.target.value})} className={INPUT} placeholder="e.g. UK Mainland" />
                 </div>
                 <div>
-                  <label className={LABEL}>Region Routing</label>
+                  <label className={LABEL}>Market</label>
                   <select value={z.region} onChange={e => setZ({...z, region: Number(e.target.value)})} className={INPUT}>
                     {regions.length > 0
                       ? regions.map(r => <option key={r.id} value={r.id}>{r.code} – {r.name}</option>)
@@ -498,7 +569,20 @@ function ZoneEditorPanel({ zone, regions, onSave, onClose }) {
             </div>
           </div>
 
+          {/* Fine-grained targeting — cities and postcodes are rarely needed,
+              so they stay behind one toggle to keep the common path short. */}
+          <button
+            type="button"
+            onClick={() => setShowFineTargeting(v => !v)}
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-accent hover:text-ink-primary transition"
+          >
+            {showFineTargeting ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            Fine-grained targeting — specific cities or postcodes
+            {!showFineTargeting && ((z.cities || []).length || (z.postal_ranges || []).length) ? ` (${(z.cities || []).length + (z.postal_ranges || []).length} in use)` : ''}
+          </button>
+
           {/* Cities */}
+          {showFineTargeting && (<>
           <div className={CARD}>
             <div className={CH}>
               <div className="flex items-center gap-2">
@@ -558,6 +642,7 @@ function ZoneEditorPanel({ zone, regions, onSave, onClose }) {
               <p className="text-[13px] text-ink-subtle">Use the same start and end for one postcode or prefix; use two values for an inclusive range.</p>
             </div>
           </div>
+          </>)}
 
         </div>
       </div>

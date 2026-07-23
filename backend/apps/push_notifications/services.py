@@ -115,7 +115,7 @@ def _finalize_campaigns(now):
 def process_push_batch(batch_size=100):
     """Start due campaigns and send a bounded batch with durable retries."""
     if not push_is_configured():
-        return {'configured': False, 'processed': 0}
+        return {'configured': False, 'processed': 0, 'sent': 0, 'failed': 0}
 
     now = timezone.now()
     _start_due_campaigns(now)
@@ -127,9 +127,15 @@ def process_push_batch(batch_size=100):
     ).order_by('created_at')[:max(1, min(int(batch_size), 500))]
 
     processed = 0
+    sent = 0
+    failed = 0
     for delivery in due:
         delivery.attempts += 1
         _deliver(delivery, now)
         processed += 1
+        if delivery.status == 'SENT':
+            sent += 1
+        else:
+            failed += 1
     _finalize_campaigns(now)
-    return {'configured': True, 'processed': processed}
+    return {'configured': True, 'processed': processed, 'sent': sent, 'failed': failed}
