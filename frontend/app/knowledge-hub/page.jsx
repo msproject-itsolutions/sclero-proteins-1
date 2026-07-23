@@ -3,10 +3,15 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { 
-  BookOpen, Brain, Search, ChevronRight, ChevronDown, Check, 
+  BookOpen, Brain, Search, ChevronRight, ChevronDown,
   Sparkles, Shield, Activity, FileText, ArrowLeft, Heart, Sprout, Award
 } from 'lucide-react';
 import StoreShell from '../../components/StoreShell';
+import GlossaryText from '../../components/GlossaryText';
+import EggOText from '../../components/EggOText';
+import { KNOWLEDGE_ADDITIONS } from './knowledge-additions';
+import { ESC_DETAILED_ARTICLES } from './esc-detailed-articles';
+import { SOIL_TURF_ARTICLES } from './soil-turf-articles';
 
 // Comprehensive Scientific Database of all Knowledge Hub Topics with parameters
 const KNOWLEDGE_BASE = {
@@ -488,6 +493,19 @@ Once the triple helix is formed, collagen molecules begin organising themselves 
   }
 };
 
+Object.assign(KNOWLEDGE_BASE, KNOWLEDGE_ADDITIONS);
+
+Object.entries(ESC_DETAILED_ARTICLES).forEach(([key, article]) => {
+  KNOWLEDGE_BASE[key] = { ...KNOWLEDGE_BASE[key], ...article };
+});
+
+Object.entries(SOIL_TURF_ARTICLES).forEach(([key, article]) => {
+  KNOWLEDGE_BASE[key] = {
+    ...article,
+    content: article.content.replace(/-(hero|support-[123])\.png/g, '-$1.webp')
+  };
+});
+
 // Hierarchical Navigation Map
 const NAVIGATION_MAP = [
   {
@@ -514,26 +532,42 @@ const NAVIGATION_MAP = [
         name: 'B. Biochemistry & Cellular Mechanisms',
         topics: [
           { label: 'Vitamin C Dependency', key: 'vitamin_c_dependency' },
-          { label: 'How Collagen Sends Signals', key: 'collagen_signalling' }
+          { label: 'How Collagen Sends Signals', key: 'collagen_signalling' },
+          { label: 'What Keeps Collagen Stable', key: 'collagen_stability_factors' },
+          { label: 'Collagen & Mineral Interactions', key: 'collagen_mineral_interactions' },
+          { label: 'How the Matrix Repairs', key: 'collagen_matrix_repair' },
+          { label: 'How Fibroblasts Build Collagen', key: 'fibroblast_collagen_building' }
         ]
       },
       {
         name: 'C. Dermatology, Beauty & Anti Ageing',
         topics: [
           { label: 'Skin Firmness Role', key: 'collagen_in_skin' },
-          { label: 'How Collagen Holds Water', key: 'collagen_hydration' }
+          { label: 'How Collagen Holds Water', key: 'collagen_hydration' },
+          { label: 'How Collagen Declines with Age', key: 'collagen_ageing' },
+          { label: 'Stress & Pollution Damage', key: 'stress_pollution_collagen_damage' },
+          { label: 'How Sugar Damages Collagen', key: 'collagen_glycation' },
+          { label: 'Mitochondrial Support', key: 'mitochondria_collagen_support' },
+          { label: 'Inflammation & Breakdown', key: 'inflammation_collagen_breakdown' },
+          { label: 'Oxidative Stress & Loss', key: 'oxidative_stress_collagen_loss' }
         ]
       },
       {
         name: 'D. Joints, Bones & Structural Health',
         topics: [
-          { label: 'Joint Comfort Role', key: 'joint_comfort_collagen' }
+          { label: 'Joint Comfort Role', key: 'joint_comfort_collagen' },
+          { label: 'Bone Strength Role', key: 'collagen_mineral_scaffold' },
+          { label: 'Nutrient Delivery Pathways', key: 'nutrient_delivery_network' },
+          { label: 'Matrix Integrity Framework', key: 'collagen_matrix_integrity' }
         ]
       },
       {
         name: 'E. Sports Science & Performance',
         topics: [
-          { label: 'Exercise Induced Production', key: 'exercise_induced_collagen' }
+          { label: 'Exercise Induced Production', key: 'exercise_induced_collagen' },
+          { label: 'Tendon & Ligament Adaptation', key: 'tendon_ligament_adaptation' },
+          { label: 'Injury Prevention Mechanisms', key: 'collagen_injury_prevention' },
+          { label: 'Muscle Recovery Mechanisms', key: 'collagen_muscle_recovery' }
         ]
       },
       {
@@ -560,18 +594,86 @@ const NAVIGATION_MAP = [
         name: 'B. ESC Absorption & Bioavailability',
         topics: [
           { label: 'Absorbs Better Than Rock', key: 'esc_absorption' },
-          { label: 'High Bioavailability Calcium', key: 'esc_bioavailability' }
+          { label: 'High Bioavailability Calcium', key: 'esc_bioavailability' },
+          { label: 'Nutrient Delivery Pathways', key: 'esc_nutrient_delivery' },
+          { label: 'ESC vs Carbonate vs Citrate', key: 'esc_calcium_comparison' }
+        ]
+      },
+      {
+        name: 'C. ESC Functional Benefits',
+        topics: [
+          { label: 'How ESC Supports Bone Strength', key: 'esc_bone_strength' },
+          { label: 'Joint Comfort & Mobility', key: 'esc_joint_comfort' },
+          { label: 'Cartilage Cushioning', key: 'esc_cartilage_cushioning' },
+          { label: 'Bone-Building Cells', key: 'esc_osteoblast_activation' }
         ]
       },
       {
         name: 'D. ESC + ESM Synergy',
         topics: [
-          { label: 'Why ESC Works Better with ESM', key: 'esc_synergy_story' }
+          { label: 'Why ESC Works Better with ESM', key: 'esc_synergy_story' },
+          { label: 'Collagen Matrix Integrity', key: 'esc_matrix_integrity' },
+          { label: 'Peptides & Mineral Utilisation', key: 'esm_peptide_mineral_use' },
+          { label: 'Multi-Class Collagen Impact', key: 'multitype_collagen_esc' }
+        ]
+      },
+      {
+        name: 'E. ESC Purity, Safety & Processing',
+        topics: [
+          { label: 'ESC Purity & Natural Origin', key: 'esc_purity_safety' },
+          { label: 'Low-Temperature Processing', key: 'esc_low_temperature_processing' }
+        ]
+      }
+    ]
+  },
+  {
+    section: '🌱 Soil & Turf Science',
+    subsections: [
+      {
+        name: 'System 1 — Turf Management Fundamentals',
+        topics: [
+          { label: 'Soil Health', key: 'soil_turf_s1_01_soil_health' },
+          { label: 'pH', key: 'soil_turf_s1_02_ph' },
+          { label: 'Nutrients', key: 'soil_turf_s1_03_nutrients' },
+          { label: 'Fertilisation', key: 'soil_turf_s1_04_fertilisation' },
+          { label: 'Weed Control', key: 'soil_turf_s1_05_weed_control' },
+          { label: 'Pest & Disease Management', key: 'soil_turf_s1_06_pest_disease_management' },
+          { label: 'Thatch Management', key: 'soil_turf_s1_07_thatch_management' },
+          { label: 'Overseeding', key: 'soil_turf_s1_08_overseeding' },
+          { label: 'Irrigation Management', key: 'soil_turf_s1_09_irrigation_management' },
+          { label: 'Mowing Practices', key: 'soil_turf_s1_10_mowing_practices' }
+        ]
+      },
+      {
+        name: 'System 2 — Soil & Turf Science',
+        topics: [
+          { label: 'Lawn Care Basics', key: 'soil_turf_s2_01_lawn_care_basics' },
+          { label: 'Lawn Aeration', key: 'soil_turf_s2_02_lawn_aeration' },
+          { label: 'Soil Conditioning', key: 'soil_turf_s2_03_soil_conditioning' },
+          { label: 'Soil Biology', key: 'soil_turf_s2_04_soil_biology' },
+          { label: 'Soil Structure', key: 'soil_turf_s2_05_soil_structure' },
+          { label: 'Soil Porosity', key: 'soil_turf_s2_06_soil_porosity' },
+          { label: 'Soil Aggregates', key: 'soil_turf_s2_07_soil_aggregates' },
+          { label: 'Soil Compaction', key: 'soil_turf_s2_08_soil_compaction' },
+          { label: 'Water Infiltration', key: 'soil_turf_s2_09_water_infiltration' },
+          { label: 'Water Retention', key: 'soil_turf_s2_10_water_retention' },
+          { label: 'Soil Drainage', key: 'soil_turf_s2_11_soil_drainage' },
+          { label: 'Root Development', key: 'soil_turf_s2_12_root_development' },
+          { label: 'Turf Density', key: 'soil_turf_s2_13_turf_density' },
+          { label: 'Turf Resilience', key: 'soil_turf_s2_14_turf_resilience' },
+          { label: 'Chlorophyll & Greening', key: 'soil_turf_s2_15_chlorophyll_greening' },
+          { label: 'Nutrient Efficiency', key: 'soil_turf_s2_16_nutrient_efficiency' }
         ]
       }
     ]
   }
 ];
+
+const TOPIC_COUNT = NAVIGATION_MAP.reduce(
+  (total, section) => total + section.subsections.reduce((count, subsection) => count + subsection.topics.length, 0),
+  0
+);
+const COLLECTION_COUNT = NAVIGATION_MAP.reduce((total, section) => total + section.subsections.length, 0);
 
 export default function KnowledgeHub() {
   const [activeKey, setActiveKey] = useState('collagen_structure');
@@ -585,6 +687,7 @@ export default function KnowledgeHub() {
   const activeArticle = useMemo(() => {
     return KNOWLEDGE_BASE[activeKey] || KNOWLEDGE_BASE['collagen_structure'];
   }, [activeKey]);
+  const isSoilArticle = activeArticle.category === 'Soil & Turf Science';
 
   const toggleSubsection = (subName) => {
     setExpandedSubsections(prev => ({
@@ -626,20 +729,24 @@ export default function KnowledgeHub() {
 
   return (
     <StoreShell>
-      <title>Sclero Knowledge Hub | Collagen &amp; Calcium Science</title>
-      <meta name="description" content="Explore peer-reviewed structural cell biology, absorption kinetics, and bioavailability research backing eggshell membrane bioactives." />
+      <title>Sclero Knowledge Hub | Collagen, Calcium, Soil &amp; Turf Science</title>
+      <meta name="description" content="Explore structured guides to collagen, eggshell calcium, soil health and turf management in the Sclero Knowledge Hub." />
       {/* Banner / Hero Section */}
       <div className="bg-brand-bg border-b border-edge py-14 md:py-20">
         <div className="container-page text-center">
           <span className="kicker flex items-center justify-center gap-1.5 font-bold uppercase tracking-widest text-[#C89838]">
             <Brain className="h-4 w-4" /> Avian Research &amp; Clinical Bioactives
           </span>
-          <h1 className="text-heading-1 mt-3 font-display text-3xl md:text-4xl font-extrabold text-ink-primary">
-            Sclero Knowledge Hub
+          <h1 className="text-heading-1 brand-heading-gradient mt-3 font-display text-3xl md:text-4xl font-extrabold">
+            <EggOText text="Sclero Knowledge Hub" />
           </h1>
           <p className="mt-4 text-xs md:text-sm text-ink-secondary max-w-2xl mx-auto leading-relaxed">
-            Explore peer-reviewed structural cell biology, absorption kinetics, and bioavailability research backing eggshell membrane bioactives and porous minerals.
+            Explore structured guides to collagen biology, eggshell calcium, soil health, turf management and the science behind resilient living systems.
           </p>
+          <div className="mt-5 flex items-center justify-center gap-3 text-[10px] font-bold uppercase tracking-wider text-ink-muted">
+            <span className="rounded-full border border-edge bg-surface px-3 py-1.5">{TOPIC_COUNT} topics</span>
+            <span className="rounded-full border border-edge bg-surface px-3 py-1.5">{COLLECTION_COUNT} collections</span>
+          </div>
         </div>
       </div>
 
@@ -730,7 +837,7 @@ export default function KnowledgeHub() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
           {/* DESKTOP INDEX PANEL - SIDEBAR (Hidden on Mobile) */}
-          <aside className="hidden lg:block lg:col-span-3 bg-surface border border-edge rounded-lg p-5 space-y-4 max-h-[80vh] overflow-y-auto sticky top-24 shadow-sm">
+          <aside className="premium-card hidden lg:block lg:col-span-3 rounded-lg p-5 space-y-4 max-h-[80vh] overflow-y-auto sticky top-24">
             <div className="relative">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-ink-muted" />
               <input
@@ -792,7 +899,7 @@ export default function KnowledgeHub() {
           </aside>
 
           {/* MAIN READER PANEL */}
-          <main id="main-reader-panel" className="lg:col-span-9 bg-white border border-edge rounded-lg p-6 md:p-10 space-y-8 shadow-sm">
+          <main key={activeKey} id="main-reader-panel" className="premium-panel lg:col-span-9 rounded-lg p-6 md:p-10 space-y-8">
             <div>
               {/* Category Breadcrumbs */}
               <div className="flex items-center gap-2 text-[10px] uppercase font-bold text-brand-muted mb-2 tracking-wider">
@@ -808,19 +915,19 @@ export default function KnowledgeHub() {
               {/* Scientific Specs Badge Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-brand-bg p-4 border border-edge rounded-md mb-6">
                 <div className="space-y-0.5">
-                  <span className="text-[9px] uppercase tracking-wider text-ink-muted font-bold">Origin Class</span>
+                  <span className="text-[9px] uppercase tracking-wider text-ink-muted font-bold">{activeArticle.specLabels?.origin || 'Origin Class'}</span>
                   <p className="text-xs text-ink-primary font-semibold flex items-center gap-1.5">
                     <Sprout className="h-3.5 w-3.5 text-[#C89838]" /> {activeArticle.specs.origin}
                   </p>
                 </div>
                 <div className="space-y-0.5">
-                  <span className="text-[9px] uppercase tracking-wider text-ink-muted font-bold">Molecular weight</span>
+                  <span className="text-[9px] uppercase tracking-wider text-ink-muted font-bold">{activeArticle.specLabels?.weight || 'Molecular weight'}</span>
                   <p className="text-xs text-ink-primary font-semibold flex items-center gap-1.5">
                     <Activity className="h-3.5 w-3.5 text-ink-success" /> {activeArticle.specs.weight}
                   </p>
                 </div>
                 <div className="space-y-0.5">
-                  <span className="text-[9px] uppercase tracking-wider text-ink-muted font-bold">Primary Target</span>
+                  <span className="text-[9px] uppercase tracking-wider text-ink-muted font-bold">{activeArticle.specLabels?.target || 'Primary Target'}</span>
                   <p className="text-xs text-ink-primary font-semibold flex items-center gap-1.5">
                     <Award className="h-3.5 w-3.5 text-brand-muted" /> {activeArticle.specs.target}
                   </p>
@@ -828,18 +935,39 @@ export default function KnowledgeHub() {
               </div>
 
               {/* Article Summary Box */}
-              <p className="text-xs md:text-sm leading-relaxed text-ink-primary border-l-4 border-brand-muted pl-4 bg-surface-muted py-4 rounded-r-md">
-                {activeArticle.desc}
+              <p data-glossary-scan className="text-xs md:text-sm leading-relaxed text-ink-primary border-l-4 border-brand-muted pl-4 bg-surface-muted py-4 rounded-r-md">
+                <GlossaryText text={activeArticle.desc} />
               </p>
             </div>
 
+            <div className="flex items-center gap-2 text-[10px] font-semibold text-ink-muted" aria-label="Glossary help">
+              <BookOpen className="h-3.5 w-3.5 text-brand-muted" aria-hidden="true" />
+              <span>Dotted terms open plain-language definitions. Hover or click on desktop; tap on mobile.</span>
+            </div>
+
             {/* Markdown Styled Body */}
-            <div className="border-t border-edge-subtle pt-6 prose prose-xs max-w-none text-xs md:text-sm text-ink-secondary leading-relaxed space-y-6">
+            <div data-glossary-scan className="border-t border-edge-subtle pt-6 prose prose-xs max-w-none text-xs md:text-sm text-ink-secondary leading-relaxed space-y-6">
               {activeArticle.content.split('\n\n').map((paragraph, pIdx) => {
+                if (paragraph.startsWith('[[image|')) {
+                  const [imagePath, caption, role] = paragraph.slice(2, -2).split('|').slice(1);
+                  return (
+                    <figure key={pIdx} className={`my-7 overflow-hidden rounded-lg border border-edge bg-brand-bg ${role === 'hero' ? 'shadow-elevated' : 'shadow-sm'}`}>
+                      <img
+                        src={imagePath}
+                        alt={caption}
+                        loading="lazy"
+                        className={`w-full object-cover ${role === 'icons' ? 'max-h-[32rem] object-contain p-4' : 'aspect-[3/2]'}`}
+                      />
+                      <figcaption className="border-t border-edge-subtle px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wide text-ink-muted">
+                        {caption}
+                      </figcaption>
+                    </figure>
+                  );
+                }
                 if (paragraph.startsWith('### ')) {
                   return (
                     <h3 key={pIdx} className="text-sm font-bold text-ink-primary uppercase tracking-wide pt-4 mb-2 border-b border-edge-subtle pb-1">
-                      {paragraph.replace('### ', '')}
+                      <GlossaryText text={paragraph.replace('### ', '')} />
                     </h3>
                   );
                 }
@@ -849,35 +977,41 @@ export default function KnowledgeHub() {
                       {paragraph.split('\n').map((li, liIdx) => {
                         const cleanLi = li.replace('- ', '').trim();
                         // Find bold text indicators
-                        const boldParts = cleanLi.split(':');
-                        if (boldParts.length > 1) {
+                        const colonIndex = cleanLi.indexOf(':');
+                        if (colonIndex > 0) {
+                          const label = cleanLi.slice(0, colonIndex).replace(/\*\*/g, '');
+                          const detail = cleanLi.slice(colonIndex + 1);
                           return (
                             <li key={liIdx} className="leading-relaxed">
-                              <strong className="text-ink-primary font-semibold">{boldParts[0]}:</strong>
-                              {boldParts.slice(1).join(':')}
+                              <strong className="text-ink-primary font-semibold"><GlossaryText text={label} />:</strong>
+                              <GlossaryText text={detail} />
                             </li>
                           );
                         }
-                        return <li key={liIdx}>{cleanLi}</li>;
+                        return <li key={liIdx}><GlossaryText text={cleanLi} /></li>;
                       })}
                     </ul>
                   );
                 }
                 return (
                   <p key={pIdx} className="whitespace-pre-line leading-relaxed">
-                    {paragraph}
+                    <GlossaryText text={paragraph} />
                   </p>
                 );
               })}
             </div>
 
-            {/* Scientific Outcome Highlight Box */}
+            {/* Science and safety context */}
             <div className="border border-brand-success/20 bg-brand-success/5 rounded p-5 flex items-start gap-3 mt-6">
-              <Check className="h-5 w-5 text-ink-success shrink-0 mt-0.5" />
+              <Shield className="h-5 w-5 text-ink-success shrink-0 mt-0.5" />
               <div>
-                <h4 className="text-xs font-bold text-ink-primary mb-1">Scientific Outcome &amp; Efficacy</h4>
+                <h4 className="text-xs font-bold text-ink-primary mb-1">
+                  {isSoilArticle ? 'Application & safety note' : 'Science & safety note'}
+                </h4>
                 <p className="text-[11px] text-ink-secondary leading-relaxed">
-                  Purification preserves this biological structural matrix. By maintaining the natural ratio of calcite columns, fibrous collagen scaffolds, and bioactive elastin fractions, Sclero inputs achieve superior absorption and utility compared to geological limestone or synthetic minerals.
+                  {isSoilArticle
+                    ? 'Field outcomes vary with climate, grass species, soil conditions and application method. Follow product labels, local regulations and site-specific professional guidance when applying fertilisers, pesticides or soil amendments.'
+                    : 'This library is educational and is not medical advice. Ingredient behaviour depends on composition, processing, dose, diet and individual physiology. Product-specific benefit claims should be supported by analytical and human evidence and reviewed against local regulations.'}
                 </p>
               </div>
             </div>

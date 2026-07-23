@@ -5,6 +5,7 @@ import { useGlossary } from '../../components/GlossaryContext';
 import StoreShell from '../../components/StoreShell';
 import { BookOpen, Search, HelpCircle, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
+import EggOText from '../../components/EggOText';
 
 export default function GlossaryPage() {
   const { terms } = useGlossary();
@@ -25,8 +26,10 @@ export default function GlossaryPage() {
   // Filter terms by search query and category
   const filteredTerms = useMemo(() => {
     return terms.filter((t) => {
-      const matchesSearch = t.term.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                            t.definition.toLowerCase().includes(searchQuery.toLowerCase());
+      const normalizedQuery = searchQuery.toLowerCase();
+      const matchesSearch = t.term.toLowerCase().includes(normalizedQuery) ||
+                            t.definition.toLowerCase().includes(normalizedQuery) ||
+                            (t.internal_code || '').toLowerCase().includes(normalizedQuery);
       const matchesCategory = selectedCategory === 'All' || t.category === selectedCategory;
       return matchesSearch && matchesCategory;
     });
@@ -52,9 +55,9 @@ export default function GlossaryPage() {
   }, [filteredTerms]);
 
   return (
-    <StoreShell>
-      <title>Sclero Glossary | Avian Bioactives &amp; Active Nutrition Dictionary</title>
-      <meta name="description" content="Explore Sclero Proteins technical dictionary. Learn about collagen types I, V, X, calcite crystal lattices, and bio-mineralization science." />
+        <StoreShell>
+      <title>Sclero Glossary | Collagen, ESC, Soil &amp; Turf Science</title>
+      <meta name="description" content="Explore Sclero Proteins terminology across collagen biology, eggshell calcium science, soil health, and turf management." />
       
       <main className="min-h-screen bg-brand-bg py-12 md:py-20">
         <div className="container-page max-w-5xl">
@@ -62,9 +65,9 @@ export default function GlossaryPage() {
           {/* Header Section */}
           <div className="text-center max-w-3xl mx-auto mb-12">
             <span className="kicker">Scientific Terminology</span>
-            <h1 className="text-display mt-3">Sclero Glossary</h1>
+            <h1 className="text-display brand-heading-gradient mt-3"><EggOText text="Sclero Glossary" /></h1>
             <p className="mt-4 text-xs md:text-sm text-ink-secondary leading-relaxed">
-              Understand the science behind Sclero Proteins. Explore definitions of our avian-derived ingredients, bioactives, extraction technologies, and clinical parameters.
+              Explore clear definitions across collagen biology, eggshell calcium science, soil health, turf management, bioactives, and applied nutrition.
             </p>
           </div>
 
@@ -115,7 +118,7 @@ export default function GlossaryPage() {
                       <article
                         key={item.id}
                         id={`term-${item.term.toLowerCase().replace(/\s+/g, '-')}`}
-                        className="bg-white border border-edge rounded-lg p-6 hover:shadow-card hover:border-edge-strong transition-all duration-300"
+                        className="premium-card rounded-lg p-6"
                       >
                         <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                           <h3 className="font-display text-base font-bold text-ink-primary tracking-wide">

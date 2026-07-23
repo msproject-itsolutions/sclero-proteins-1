@@ -1,5 +1,4 @@
 import React from 'react';
-import { useSelector } from 'react-redux';
 
 /**
  * Brand mark — the official Sclero Proteins swan-"S" symbol.
@@ -7,13 +6,10 @@ import { useSelector } from 'react-redux';
  * Sizing is driven by the passed `className` (e.g. "h-8 w-8") so every
  * existing caller keeps working unchanged.
  */
-export default function Logo({ className = 'h-8 w-8', alt = 'Sclero Proteins' }) {
-  const branding = useSelector((state) => state.region.branding);
-  const logoSrc = branding?.logoUrl || '/logo-mark.png';
-
+export default function Logo({ className = 'h-8 w-8', alt = 'Sclero Proteins', src = '/logo-mark.png' }) {
   return (
     <img
-      src={logoSrc}
+      src={src}
       alt={alt}
       className={`${className} select-none object-contain`}
       decoding="async"
@@ -38,17 +34,15 @@ export function LogoLockup({
   alt = 'Sclero Proteins',
   assetSrc = null,
   showMarkWithAsset = false,
+  markSrc = '/logo-mark.png',
+  wordmarkSrc = '/logo-header-wordmark.png',
 }) {
-  const branding = useSelector((state) => state.region.branding);
-  const logoSrc = branding?.logoUrl || '/logo-mark.png';
-  const wordmarkSrc = branding?.logoHeaderWordmarkUrl || branding?.logoWordmarkUrl || '/logo-header-wordmark.png';
-
   if (assetSrc) {
     if (showMarkWithAsset) {
       return (
         <span className="flex items-center gap-3">
           <img
-            src={logoSrc}
+            src={markSrc}
             alt=""
             aria-hidden="true"
             className={`${markClass} shrink-0 select-none object-contain`}
@@ -80,7 +74,7 @@ export function LogoLockup({
   return (
     <span className="flex items-center gap-2.5">
       <img
-        src={logoSrc}
+        src={markSrc}
         alt=""
         aria-hidden="true"
         className={`${markClass} shrink-0 select-none object-contain`}

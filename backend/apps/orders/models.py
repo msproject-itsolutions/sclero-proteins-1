@@ -113,7 +113,10 @@ class Order(models.Model):
     # Payment info
     payment_method = models.CharField(max_length=50) # Stripe, Razorpay, PayPal
     payment_id = models.CharField(max_length=255, blank=True, null=True, db_index=True)
-    payment_status = models.CharField(max_length=30, choices=PAYMENT_STATUS, default='PAID', db_index=True)
+    # Defaults to PENDING: an order must never be born "paid". Checkout flips
+    # this explicitly only after the gateway confirms the charge — a PAID
+    # default made the order.paid webhook fire before payment verification.
+    payment_status = models.CharField(max_length=30, choices=PAYMENT_STATUS, default='PENDING', db_index=True)
     payment_capture_mode = models.CharField(max_length=20, choices=CAPTURE_MODE, default='AUTO')
     payment_authorized_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     payment_captured_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)

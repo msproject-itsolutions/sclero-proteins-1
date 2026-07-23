@@ -209,7 +209,7 @@ def _wrap_branded_html(subject, body, raw_html_inside=False):
     except Exception:
         logo_url = ''
     if not logo_url and site_url:
-        logo_url = f"{site_url}/logo-header-tagline-clean.png"
+        logo_url = f"{site_url}/logo-header-tagline-v2.png"
     elif logo_url.startswith('/') and site_url:
         logo_url = f"{site_url}{logo_url}"
     company_number = _escape(getattr(settings, 'COMPANY_REGISTRATION_NUMBER', ''))
@@ -232,13 +232,16 @@ def _wrap_branded_html(subject, body, raw_html_inside=False):
     <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"
            style="max-width:600px;width:100%;background:#FFFFFF;border-radius:14px;overflow:hidden;
                   box-shadow:0 2px 6px rgba(31,42,68,0.08);">
+      <tr><td style="background:#101871;height:5px;font-size:0;line-height:0;">&nbsp;</td></tr>
       <tr>
-        <td style="background:#1F2A44;padding:22px 28px;color:#FFFFFF;">
-          <a href="{site_url}" style="color:#FFFFFF;text-decoration:none;display:inline-block;">
+        <!-- White header band: the logo artwork is navy-on-transparent, so it
+             must sit on a light surface to be visible. Brand navy accent bar above. -->
+        <td style="background:#FFFFFF;padding:22px 28px;border-bottom:1px solid #E6EAF2;">
+          <a href="{site_url}" style="color:#101871;text-decoration:none;display:inline-block;">
             <!-- Logo, with the wordmark as alt text: many clients block images
                  by default, so the brand must still read without it. -->
-            <img src="{logo_url}" alt="Sclero Proteins" width="150"
-                 style="display:block;border:0;outline:none;text-decoration:none;height:auto;max-width:150px;" />
+            <img src="{logo_url}" alt="Sclero Proteins — no one gives you more" width="170"
+                 style="display:block;border:0;outline:none;text-decoration:none;height:auto;max-width:170px;" />
           </a>
         </td>
       </tr>
@@ -250,9 +253,9 @@ def _wrap_branded_html(subject, body, raw_html_inside=False):
             Sclero Proteins Ltd · Registered in England &amp; Wales {company_number} · GSTIN {gstin}
           </p>
           <p style="margin:0;">
-            <a href="{site_url}/policies/privacy" style="color:#6E5BFF;text-decoration:none;">Privacy</a> ·
-            <a href="{site_url}/policies/terms" style="color:#6E5BFF;text-decoration:none;">Terms</a> ·
-            <a href="{site_url}/account" style="color:#6E5BFF;text-decoration:none;">Manage your account</a>
+            <a href="{site_url}/policies/privacy" style="color:#890071;text-decoration:none;">Privacy</a> ·
+            <a href="{site_url}/policies/terms" style="color:#890071;text-decoration:none;">Terms</a> ·
+            <a href="{site_url}/account" style="color:#890071;text-decoration:none;">Manage your account</a>
           </p>
         </td>
       </tr>
@@ -263,6 +266,29 @@ def _wrap_branded_html(subject, body, raw_html_inside=False):
   </td></tr>
 </table>
 </body></html>'''
+
+
+def send_branded_email(subject, body, recipient_email):
+    """Send a one-off plain-text email wrapped in the branded HTML chrome.
+
+    For system emails that have no admin-managed template (sign-in codes,
+    magic links) so every message a customer receives carries the same
+    branding. Raises on failure — callers own their retry/fallback policy.
+    """
+    smtp = _get_smtp_config()
+    connection = get_connection(
+        host=smtp['host'], port=smtp['port'],
+        username=smtp['username'], password=smtp['password'],
+        use_tls=smtp['use_tls'], use_ssl=smtp['use_ssl'],
+        timeout=smtp['timeout'],
+    )
+    msg = EmailMultiAlternatives(
+        subject=subject, body=body,
+        from_email=smtp['from_email'], to=[recipient_email],
+        connection=connection,
+    )
+    msg.attach_alternative(_wrap_branded_html(subject, body), 'text/html')
+    msg.send(fail_silently=False)
 
 
 def send_templated_email(event, region, recipient_email, context,

@@ -28,24 +28,6 @@ import { normalizeHomepageSettings } from '../lib/homepageContent';
 import { safePublicHref } from '../lib/safeUrl';
 import { firstApiError, validateEnquiry } from '../lib/formValidation';
 
-const EDUCATION_FALLBACKS = [
-  {
-    title: 'Understanding joint mobility nutrition',
-    author: 'Sclero Advisory',
-    description: 'A practical guide to collagen, cartilage support, and the cofactors that help them work together.',
-  },
-  {
-    title: 'How to read supplement labels with confidence',
-    author: 'Clinical Education',
-    description: 'Learn how to spot filler-heavy formulas and compare active ingredient levels in minutes.',
-  },
-  {
-    title: 'Why low-heat processing matters',
-    author: 'Product Research',
-    description: 'See how ingredient handling can affect the integrity of delicate protein structures.',
-  },
-];
-
 const ICON_MAP = {
   FlaskConical,
   ShieldCheck,
@@ -85,8 +67,8 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
   const [activeShowcase, setActiveShowcase] = useState(showcaseTabs[0]?.key || 'bestsellers');
 
   const educationEntries = useMemo(
-    () => (initialBlogs.length > 0 ? initialBlogs : EDUCATION_FALLBACKS),
-    [initialBlogs]
+    () => (initialBlogs.length > 0 ? initialBlogs : homepageSettings.educationSection.fallbackEntries),
+    [homepageSettings.educationSection.fallbackEntries, initialBlogs]
   );
 
   const productShowcases = useMemo(
@@ -139,13 +121,29 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
     <StoreShell cartOpenSignal={cartOpenTrigger}>
       <HeroSection />
 
+      {homepageSettings.highlightStrip.enabled !== false && (
+      <section className="homepage-highlights" aria-label="Sclero Proteins highlights">
+        <div className="container-page grid gap-2 py-4 sm:grid-cols-2 lg:grid-cols-4">
+          {homepageSettings.highlightStrip.items.map((item) => {
+            const Icon = resolveIcon(item.icon, ShieldCheck);
+            return (
+              <div key={item.label} className="homepage-highlights__item">
+                <span className="homepage-highlights__icon"><Icon className="h-4 w-4" /></span>
+                <span>{item.label}</span>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+      )}
+
       {homepageSettings.trustSection.enabled !== false && (
-      <section className="border-b border-edge bg-white">
+      <section className="home-section-glow border-b border-edge">
         <div className="container-page py-10 md:py-12">
           <div className="grid gap-8 lg:grid-cols-[0.92fr_1.08fr] lg:items-start lg:gap-10">
             <div className="reveal max-w-[40rem] pt-1">
               <span className="kicker">{homepageSettings.trustSection.kicker}</span>
-              <h2 className="mt-3 max-w-[11ch] text-[clamp(2.4rem,4vw,3.65rem)] font-bold leading-[0.98] tracking-[-0.04em] text-ink-primary">
+              <h2 className="brand-heading-gradient mt-3 max-w-[11ch] text-[clamp(2.4rem,4vw,3.65rem)] font-bold leading-[0.98] tracking-[-0.04em]">
                 {homepageSettings.trustSection.title}
               </h2>
               <p className="mt-4 max-w-[34rem] text-[1.02rem] leading-[1.8] text-ink-secondary md:text-[1.08rem]">
@@ -157,8 +155,8 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
               {homepageSettings.trustSection.cards.map((item) => {
                 const Icon = resolveIcon(item.icon, FlaskConical);
                 return (
-                  <div key={item.title} className="reveal rounded-[24px] border border-edge bg-surface-subtle p-5 shadow-card lg:min-h-[228px]">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-ink-accent shadow-card">
+                  <div key={item.title} className="premium-card reveal rounded-[24px] p-5 lg:min-h-[228px]">
+                    <div className="energy-icon flex h-12 w-12 items-center justify-center rounded-full text-ink-accent">
                       <Icon className="h-5 w-5" />
                     </div>
                     <h3 className="mt-5 text-[1.12rem] font-bold leading-[1.2] text-ink-primary">{item.title}</h3>
@@ -173,7 +171,7 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
       )}
 
       {homepageSettings.productShowcase.enabled !== false && (
-      <section className="section bg-white pb-16 pt-10 md:pb-20 md:pt-12">
+      <section className="energy-white-section section bg-white pb-16 pt-10 md:pb-20 md:pt-12">
         <div className="container-page">
           <div className="reveal flex flex-wrap items-center gap-3">
             {showcaseTabs.map((tab) => (
@@ -215,7 +213,7 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
       )}
 
       {homepageSettings.quizSection.enabled !== false && (
-      <section className="section bg-surface-subtle">
+      <section className="energy-wave home-section-glow section">
         <div className="container-page">
           <div className="grid items-center gap-10 lg:grid-cols-[1.1fr_0.9fr]">
             <div className="reveal max-w-2xl">
@@ -225,8 +223,8 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
                 {homepageSettings.quizSection.description}
               </p>
             </div>
-            <div className="reveal rounded-[28px] border border-edge bg-white p-8 shadow-card">
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-gradient text-white shadow-card">
+            <div className="premium-card reveal rounded-[24px] p-8">
+              <div className="energy-icon energy-icon--strong flex h-14 w-14 items-center justify-center rounded-full text-white shadow-card">
                 {React.createElement(resolveIcon(homepageSettings.quizSection.icon, HeartHandshake), { className: 'h-6 w-6' })}
               </div>
               <p className="mt-4 text-sm leading-[1.8] text-ink-secondary">
@@ -246,7 +244,7 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
       )}
 
       {homepageSettings.chooseSection.enabled !== false && (
-      <section className="section bg-white">
+      <section className="energy-white-section section bg-white">
         <div className="container-page">
           <div className="reveal max-w-2xl">
             <span className="kicker">{homepageSettings.chooseSection.kicker}</span>
@@ -260,8 +258,8 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
             {homepageSettings.chooseSection.cards.map((card) => {
               const Icon = resolveIcon(card.icon, FlaskConical);
               return (
-                <div key={card.title} className="reveal rounded-[28px] border border-edge bg-white p-7 shadow-card">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-subtle text-ink-accent">
+                <div key={card.title} className="premium-card reveal rounded-[24px] p-7">
+                  <div className="energy-icon flex h-12 w-12 items-center justify-center rounded-full text-ink-accent">
                     <Icon className="h-5 w-5" />
                   </div>
                   <h3 className="mt-5 text-xl font-bold text-ink-primary">{card.title}</h3>
@@ -275,7 +273,7 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
       )}
 
       {homepageSettings.comparisonSection.enabled !== false && (
-      <section className="section bg-surface-subtle">
+      <section className="energy-tint-section section bg-surface-subtle">
         <div className="container-page">
           <div className="reveal text-center">
             <span className="kicker">{homepageSettings.comparisonSection.kicker}</span>
@@ -285,8 +283,10 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
             </p>
           </div>
 
-          <div className="reveal mt-10 overflow-hidden rounded-[32px] border border-edge bg-white shadow-elevated">
-            <div className="grid grid-cols-[1.1fr_1fr_1fr] border-b border-edge bg-surface-subtle">
+          {/* Stacks into per-row cards on mobile; minmax(0, …) tracks stop long
+              words from forcing the columns wider than the panel. */}
+          <div className="premium-panel reveal mt-10 overflow-hidden rounded-[28px]">
+            <div className="hidden border-b border-edge bg-surface-subtle sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)]">
               <div className="px-5 py-5 text-sm font-semibold text-ink-primary sm:px-7">{homepageSettings.comparisonSection.headers.left}</div>
               <div className="bg-brand-gradient px-5 py-5 text-sm font-bold text-white sm:px-7">{homepageSettings.comparisonSection.headers.middle}</div>
               <div className="px-5 py-5 text-sm font-semibold text-ink-primary sm:px-7">{homepageSettings.comparisonSection.headers.right}</div>
@@ -295,16 +295,20 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
             {homepageSettings.comparisonSection.rows.map((row, index) => (
               <div
                 key={row.label}
-                className={`grid grid-cols-[1.1fr_1fr_1fr] ${index !== homepageSettings.comparisonSection.rows.length - 1 ? 'border-b border-edge' : ''}`}
+                className={`sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)] ${index !== homepageSettings.comparisonSection.rows.length - 1 ? 'border-b border-edge' : ''}`}
               >
-                <div className="px-5 py-5 text-sm font-semibold text-ink-primary sm:px-7">{row.label}</div>
-                <div className="bg-brand-gradient-soft px-5 py-5 text-sm leading-[1.75] text-ink-primary sm:px-7">
+                <div className="break-words px-5 pt-5 text-sm font-semibold text-ink-primary sm:py-5 sm:px-7">{row.label}</div>
+                <div className="break-words bg-brand-gradient-soft mt-3 px-5 py-3 text-sm leading-[1.75] text-ink-primary sm:mt-0 sm:py-5 sm:px-7">
+                  <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-ink-accent sm:hidden">{homepageSettings.comparisonSection.headers.middle}</p>
                   <span className="inline-flex items-start gap-2">
                     <Check className="mt-0.5 h-4 w-4 shrink-0 text-ink-accent" />
                     {row.sclero}
                   </span>
                 </div>
-                <div className="px-5 py-5 text-sm leading-[1.75] text-ink-secondary sm:px-7">{row.others}</div>
+                <div className="break-words px-5 py-3 pb-5 text-sm leading-[1.75] text-ink-secondary sm:py-5 sm:px-7">
+                  <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-ink-subtle sm:hidden">{homepageSettings.comparisonSection.headers.right}</p>
+                  {row.others}
+                </div>
               </div>
             ))}
           </div>
@@ -313,11 +317,11 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
       )}
 
       {homepageSettings.ingredientsSection.enabled !== false && (
-      <section className="section bg-surface-subtle">
+      <section className="energy-wave home-section-glow section">
         <div className="container-page">
           <div className="grid items-center gap-12 lg:grid-cols-[0.95fr_1.05fr] lg:gap-16">
             <div className="reveal order-2 lg:order-1">
-              <div className="overflow-hidden rounded-[34px] border border-edge bg-white shadow-elevated">
+              <div className="gradient-ring overflow-hidden rounded-[28px] border border-edge bg-white shadow-elevated">
                 <img
                   src={homepageSettings.ingredientsSection.imageUrl}
                   alt={homepageSettings.ingredientsSection.imageAlt}
@@ -333,9 +337,9 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
               </p>
               <div className="mt-8 space-y-4">
                 {homepageSettings.ingredientsSection.cards.map((item) => (
-                  <div key={item.title} className="rounded-[24px] border border-edge bg-white p-5 shadow-card">
+                  <div key={item.title} className="premium-card rounded-[20px] p-5">
                     <div className="flex items-start gap-4">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-surface-subtle text-ink-accent">
+                      <div className="energy-icon flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-ink-accent">
                         <Leaf className="h-5 w-5" />
                       </div>
                       <div>
@@ -353,9 +357,9 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
       )}
 
       {homepageSettings.conversionSection.enabled !== false && (
-      <section className="section bg-white">
+      <section className="energy-white-section section bg-white">
         <div className="container-page">
-          <div className="grid items-center gap-10 overflow-hidden rounded-[34px] border border-edge bg-[linear-gradient(90deg,#FFFFFF_0%,#F6F4FB_52%,#E8F5FF_100%)] p-8 shadow-elevated lg:grid-cols-[0.9fr_1.1fr] lg:p-10">
+          <div className="conversion-spotlight premium-panel grid items-center gap-10 overflow-hidden rounded-[28px] p-8 lg:grid-cols-[0.9fr_1.1fr] lg:p-10">
             <div className="reveal">
               <span className="kicker">{homepageSettings.conversionSection.kicker}</span>
               <h2 className="text-heading-1 mt-3">{homepageSettings.conversionSection.title}</h2>
@@ -364,10 +368,10 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
               </p>
 
               <div className="mt-6 flex flex-wrap gap-3">
-                <Link href={homepageSettings.conversionSection.primaryCtaUrl} className="btn-primary px-7 py-3.5 text-sm">
+                <Link href={safePublicHref(homepageSettings.conversionSection.primaryCtaUrl) || '/products'} className="btn-primary px-7 py-3.5 text-sm">
                   {homepageSettings.conversionSection.primaryCtaLabel}
                 </Link>
-                <Link href={homepageSettings.conversionSection.secondaryCtaUrl} className="btn-ghost px-7 py-3.5 text-sm">
+                <Link href={safePublicHref(homepageSettings.conversionSection.secondaryCtaUrl) || '/contact'} className="btn-ghost px-7 py-3.5 text-sm">
                   {homepageSettings.conversionSection.secondaryCtaLabel}
                 </Link>
               </div>
@@ -394,7 +398,7 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
               <div className="mt-6 rounded-[24px] border border-edge bg-white p-5">
                 <div className="flex items-center gap-2 text-sm font-semibold text-ink-accent">
                   <Sparkles className="h-4 w-4" />
-                  Cleaner labels. Easier comparison. Stronger buying confidence.
+                  {homepageSettings.conversionSection.proofSummary}
                 </div>
                 <div className="mt-4 grid gap-3 sm:grid-cols-3">
                   {homepageSettings.conversionSection.proofHighlights.map((item) => (
@@ -412,12 +416,11 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
       )}
 
       {homepageSettings.faqSection.enabled !== false && (
-      <section className="section border-y border-edge bg-white">
+      <section className="home-section-glow section border-y border-edge">
         <div className="container-page">
           <div className="reveal text-center">
-            <h2 className="text-[40px] font-extrabold leading-[1.1] tracking-tight text-ink-primary sm:text-[52px]">
-              {homepageSettings.faqSection.kicker}
-            </h2>
+            <span className="kicker">{homepageSettings.faqSection.kicker}</span>
+            <h2 className="text-heading-1 mt-3">{homepageSettings.faqSection.title}</h2>
             <p className="mx-auto mt-4 max-w-xl text-body">{homepageSettings.faqSection.description}</p>
           </div>
 
@@ -425,17 +428,17 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
             {homepageSettings.faqSection.items.map((faq, index) => {
               const isOpen = expandedFaq === index;
               return (
-                <div key={faq.question} className="reveal overflow-hidden rounded-[18px] bg-surface-subtle">
+                <div key={faq.question} className="reveal overflow-hidden rounded-[18px] border border-edge bg-white shadow-card">
                   <button
                     type="button"
                     onClick={() => setExpandedFaq(isOpen ? null : index)}
                     aria-expanded={isOpen}
                     className="flex w-full items-center justify-between gap-4 px-6 py-6 text-left"
                   >
-                    <span className="text-sm font-semibold uppercase tracking-[0.06em] leading-[1.5] text-ink-primary">
+                    <span className="text-sm font-semibold leading-[1.5] text-ink-primary">
                       {faq.question}
                     </span>
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-ink-primary/40 text-ink-primary">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-edge bg-surface-subtle text-ink-accent">
                       {isOpen ? <Minus className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
                     </span>
                   </button>
@@ -451,7 +454,7 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
       )}
 
       {homepageSettings.educationSection.enabled !== false && (
-      <section id="blog" className="section bg-white">
+      <section id="blog" className="energy-white-section section bg-white">
         <div className="container-page">
           <div className="mb-12 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div className="reveal max-w-2xl">
@@ -472,14 +475,14 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
               const excerpt = entry.meta_description || entry.content || entry.description;
 
               return (
-                <article key={entry.slug || entry.title} className="reveal flex h-full flex-col rounded-[28px] border border-edge bg-surface-subtle p-7 shadow-card">
+                <article key={entry.slug || entry.title} className="premium-card reveal flex h-full flex-col rounded-[24px] p-7">
                   <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-ink-accent">
                     <FlaskConical className="h-3.5 w-3.5" /> {entry.author || 'Sclero Proteins'}
                   </div>
                   <h3 className="mt-5 text-[24px] font-bold leading-[1.15] text-ink-primary">{entry.title}</h3>
                   <p className="mt-4 flex-1 text-sm leading-[1.8] text-ink-secondary line-clamp-4">{excerpt}</p>
                   <Link href={href} className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-ink-primary transition-colors hover:text-ink-accent">
-                    Read guide <ArrowRight className="h-4 w-4" />
+                    {homepageSettings.educationSection.readLabel} <ArrowRight className="h-4 w-4" />
                   </Link>
                 </article>
               );
@@ -490,9 +493,9 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
       )}
 
       {homepageSettings.inquirySection.enabled !== false && (
-      <section className="section bg-surface-subtle">
+      <section className="energy-wave home-section-glow section">
         <div className="container-page">
-          <div className="grid gap-8 rounded-[32px] border border-edge bg-white p-8 shadow-card md:p-10 lg:grid-cols-[0.9fr_1.1fr]">
+          <div className="inquiry-spotlight premium-panel grid gap-8 rounded-[28px] p-8 md:p-10 lg:grid-cols-[0.9fr_1.1fr]">
             <div className="reveal">
               <span className="kicker">{homepageSettings.inquirySection.kicker}</span>
               <h2 className="text-heading-1 mt-3">{homepageSettings.inquirySection.title}</h2>
@@ -514,7 +517,7 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
                   <div className="grid gap-4 sm:grid-cols-2">
                     <input
                       type="text"
-                      placeholder="Your name"
+                      placeholder={homepageSettings.inquirySection.namePlaceholder}
                       autoComplete="name"
                       value={inquiryName}
                       onChange={(e) => setInquiryName(e.target.value)}
@@ -523,7 +526,7 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
                     />
                     <input
                       type="email"
-                      placeholder="Email address"
+                      placeholder={homepageSettings.inquirySection.emailPlaceholder}
                       autoComplete="email"
                       value={inquiryEmail}
                       onChange={(e) => setInquiryEmail(e.target.value)}
@@ -532,7 +535,7 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
                     />
                   </div>
                   <textarea
-                    placeholder="Tell us how we can help"
+                    placeholder={homepageSettings.inquirySection.messagePlaceholder}
                     value={inquiryMessage}
                     onChange={(e) => setInquiryMessage(e.target.value)}
                     rows={5}
@@ -545,7 +548,7 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
                   )}
                   <button type="submit" disabled={inquirySubmitting} className="btn-primary w-full py-3 text-sm disabled:opacity-60">
                     <Send className="h-4 w-4" />
-                    {inquirySubmitting ? 'Sending…' : homepageSettings.inquirySection.buttonLabel}
+                    {inquirySubmitting ? homepageSettings.inquirySection.sendingLabel : homepageSettings.inquirySection.buttonLabel}
                   </button>
                 </form>
               )}
@@ -567,6 +570,7 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
               <X className="h-4 w-4" />
             </button>
             <QuizComponent
+              content={homepageSettings.quizSection.content}
               onComplete={(result) => {
                 setQuizOpen(false);
                 window.location.href = `/products/${result.recommendation.sku}`;
@@ -588,7 +592,7 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
           <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.003 5.324 5.328 0 11.859 0c3.166.001 6.141 1.233 8.378 3.469 2.237 2.235 3.469 5.211 3.468 8.378-.003 6.534-5.328 11.858-11.86 11.858-2.001 0-3.968-.507-5.714-1.478L0 24zm6.577-3.472l.409.243c1.517.901 3.254 1.377 5.023 1.378 5.437 0 9.859-4.422 9.863-9.863.002-2.635-1.023-5.113-2.884-6.975C17.186 3.45 14.705 2.427 12.07 2.425c-5.441 0-9.863 4.42-9.867 9.863-.001 1.83.479 3.618 1.39 5.131l.267.443-1.002 3.66 3.774-.994zM16.14 13.12c-.27-.135-1.602-.79-1.85-.88-.25-.09-.43-.135-.61.135-.18.27-.69.88-.84 1.05-.15.17-.3.19-.57.06-.27-.135-1.14-.42-2.17-1.34-.8-.71-1.34-1.6-1.5-1.87-.16-.27-.02-.42.11-.55.12-.12.27-.3.4-.45.13-.15.18-.25.27-.41.09-.17.05-.31-.02-.45-.07-.14-.61-1.47-.84-2.01-.22-.53-.48-.46-.66-.47-.17-.01-.37-.01-.57-.01-.2 0-.52.075-.79.37-.27.3-1.04 1.02-1.04 2.48 0 1.47 1.07 2.89 1.22 3.09.15.2 2.1 3.2 5.09 4.49.71.3 1.27.49 1.7.63.72.22 1.37.19 1.88.11.57-.08 1.6-.66 1.83-1.28.23-.61.23-1.14.16-1.28-.07-.14-.25-.22-.52-.35z" />
         </svg>
         <span className="absolute right-16 scale-0 whitespace-nowrap rounded-full bg-[#101871] px-3 py-1.5 text-[11px] font-semibold text-white shadow-overlay transition-all group-hover:scale-100">
-          Chat with us
+          {homepageSettings.inquirySection.whatsappLabel}
         </span>
       </a>
       )}

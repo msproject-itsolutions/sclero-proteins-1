@@ -13,9 +13,12 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         with job_run('process_push_notifications') as result:
             summary = process_push_batch(options['batch_size'])
-            result.processed = summary['processed']
+            # Count only successful sends as processed; a delivery that failed
+            # or was DLQ'd must surface in the run history, not hide as SUCCESS.
+            result.processed = summary.get('sent', summary['processed'])
+            result.failed = summary.get('failed', 0)
             result.message = (
-                f"Processed {summary['processed']} push deliveries."
+                f"Sent {result.processed} push deliveries ({result.failed} failed)."
                 if summary['configured']
                 else 'Web Push is disabled because VAPID keys are not configured.'
             )

@@ -12,7 +12,9 @@ from apps.orders.cron import job_run
 from apps.orders.email_service import send_order_email
 from apps.orders.models import Order
 
-JOB_NAME = 'review_requests'
+# Matches the management-command name so run history, monitoring filters and
+# the scheduler's interval table all refer to one identifier.
+JOB_NAME = 'send_review_requests'
 DEFAULT_DAYS = 30
 
 

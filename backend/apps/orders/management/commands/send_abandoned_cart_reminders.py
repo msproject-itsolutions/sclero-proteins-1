@@ -12,7 +12,9 @@ from apps.orders.cron import job_run
 from apps.orders.email_service import send_templated_email
 from apps.orders.models import Cart
 
-JOB_NAME = 'abandoned_cart_reminders'
+# Matches the management-command name so run history, monitoring filters and
+# the scheduler's interval table all refer to one identifier.
+JOB_NAME = 'send_abandoned_cart_reminders'
 DEFAULT_AGE_HOURS = 24
 # Don't chase a cart forever, and don't email carts abandoned months ago.
 MAX_AGE_HOURS = 24 * 14

@@ -139,6 +139,15 @@ class BaseGatewayAdapter:
         """
         raise NotImplementedError(f"{self.code} has no browser payment collection.")
 
+    def test_connection(self):
+        if self.code == 'COD':
+            return {'ok': True, 'message': 'Cash on Delivery requires no external connection.'}
+        if not self.gateway or not self.gateway.secret_key:
+            raise PaymentError('Add the required credentials before testing this gateway.')
+        if self.gateway.mode != 'LIVE':
+            return {'ok': True, 'message': 'Credentials are saved. Switch to live mode to verify them with the provider.'}
+        raise PaymentError(f'{self.code} does not expose a connection test.')
+
     def verify_webhook_signature(self, raw_body: bytes, headers: dict, secret: str) -> bool:
         """
         Gateway-specific verification of the webhook request.
@@ -221,6 +230,12 @@ class RazorpayAdapter(BaseGatewayAdapter):
             "razorpay_order_id": rzp_order.get("id"),
             "publishable_key": self.gateway.publishable_key or "",
         }
+
+    def test_connection(self):
+        if not self.gateway.publishable_key or not self.gateway.secret_key:
+            raise PaymentError('Razorpay Key ID and Key Secret are required.')
+        self._request('GET', '/payments?count=1')
+        return {'ok': True, 'message': 'Razorpay credentials verified successfully.'}
 
     def _verify_handshake(self, payload):
         """Verify the browser callback really came from Razorpay.
@@ -416,6 +431,12 @@ class StripeAdapter(BaseGatewayAdapter):
             "publishable_key": self.gateway.publishable_key or "",
         }
 
+    def test_connection(self):
+        if not self.gateway.secret_key:
+            raise PaymentError('Stripe secret key is required.')
+        self._request('GET', '/balance')
+        return {'ok': True, 'message': 'Stripe credentials verified successfully.'}
+
     def charge(self, order, payload):
         """Verify a PaymentIntent the client already confirmed.
 
@@ -549,6 +570,135 @@ class StripeAdapter(BaseGatewayAdapter):
 
 class PayPalAdapter(BaseGatewayAdapter):
     code = "PAYPAL"
+    supports_live = True
+    TIMEOUT = 20
+
+    @property
+    def API_BASE(self):
+        return 'https://api-m.sandbox.paypal.com' if self.gateway.mode == 'TEST' else 'https://api-m.paypal.com'
+
+    def _token(self):
+        client_id = self.gateway.publishable_key or ''
+        client_secret = self.gateway.secret_key or ''
+        if not client_id or not client_secret:
+            raise PaymentError('PayPal Client ID and Client Secret are required.')
+        try:
+            response = requests.post(
+                f'{self.API_BASE}/v1/oauth2/token',
+                auth=(client_id, client_secret),
+                data={'grant_type': 'client_credentials'},
+                headers={'Accept': 'application/json'},
+                timeout=self.TIMEOUT,
+            )
+            body = response.json()
+        except (requests.RequestException, ValueError) as exc:
+            raise PaymentError('Could not reach PayPal. Please try again.') from exc
+        if response.status_code >= 400 or not body.get('access_token'):
+            raise PaymentError(body.get('error_description') or 'PayPal rejected these credentials.')
+        return body['access_token']
+
+    def _request(self, method, path, payload=None, idempotency_key=''):
+        headers = {
+            'Authorization': f'Bearer {self._token()}',
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+        }
+        if idempotency_key:
+            headers['PayPal-Request-Id'] = idempotency_key
+        try:
+            response = requests.request(
+                method, f'{self.API_BASE}{path}', json=payload,
+                headers=headers, timeout=self.TIMEOUT,
+            )
+            body = response.json() if response.content else {}
+        except (requests.RequestException, ValueError) as exc:
+            raise PaymentError('Could not reach PayPal. Please try again.') from exc
+        if response.status_code >= 400:
+            details = body.get('details') or []
+            message = details[0].get('description') if details else body.get('message')
+            raise PaymentError(message or 'PayPal rejected the request.')
+        return body
+
+    def test_connection(self):
+        self._token()
+        return {'ok': True, 'message': 'PayPal credentials verified successfully.'}
+
+    def create_intent(self, amount, currency_code, metadata=None):
+        if not self._is_live:
+            return {'sandbox': True, 'paypal_order_id': None,
+                    'client_id': self.gateway.publishable_key or ''}
+        metadata = metadata or {}
+        order = self._request(
+            'POST', '/v2/checkout/orders',
+            {
+                'intent': 'CAPTURE',
+                'purchase_units': [{
+                    'reference_id': str(metadata.get('order_id') or metadata.get('cart_id') or 'checkout'),
+                    'custom_id': str(metadata.get('order_id') or ''),
+                    'amount': {
+                        'currency_code': (currency_code or '').upper(),
+                        'value': f'{Decimal(str(amount)):.2f}',
+                    },
+                }],
+            },
+            idempotency_key=f"paypal_intent_{metadata.get('order_id') or metadata.get('cart_id') or int(time.time())}",
+        )
+        return {
+            'paypal_order_id': order.get('id'),
+            'client_id': self.gateway.publishable_key or '',
+        }
+
+    def charge(self, order, payload):
+        if not self._is_live:
+            return self._sandbox_charge(order, payload)
+        paypal_order_id = (payload or {}).get('payment_id') or ''
+        if not paypal_order_id:
+            raise PaymentError('A PayPal order reference is required.')
+        remote = self._request('GET', f'/v2/checkout/orders/{paypal_order_id}')
+        if remote.get('status') == 'APPROVED':
+            remote = self._request(
+                'POST', f'/v2/checkout/orders/{paypal_order_id}/capture', {},
+                idempotency_key=f'paypal_capture_{order.id}',
+            )
+        if remote.get('status') != 'COMPLETED':
+            raise PaymentError(f"PayPal payment is not complete (status: {remote.get('status', 'unknown')}).")
+        purchase_units = remote.get('purchase_units') or []
+        captures = ((purchase_units[0].get('payments') or {}).get('captures') or []) if purchase_units else []
+        capture = captures[0] if captures else {}
+        amount = capture.get('amount') or (purchase_units[0].get('amount') if purchase_units else {}) or {}
+        if Decimal(str(amount.get('value') or '0')) != Decimal(str(order.total)):
+            raise PaymentError('The PayPal amount does not match the order total.')
+        if (amount.get('currency_code') or '').upper() != (order.currency_code or '').upper():
+            raise PaymentError('The PayPal currency does not match the order.')
+        return {
+            'status': 'SUCCESS',
+            'transaction_id': capture.get('id') or paypal_order_id,
+            'raw': {'gateway': self.code, 'mode': 'LIVE', 'paypal_order_id': paypal_order_id},
+        }
+
+    def refund(self, order, amount, reason=''):
+        if not (self.gateway and self.gateway.supports_refunds):
+            raise PaymentError('PayPal refunds are disabled for this gateway.')
+        if not self._is_live:
+            return self._sandbox_refund(order, amount, reason)
+        if not order.payment_id:
+            raise PaymentError('This order has no PayPal capture reference to refund.')
+        body = self._request(
+            'POST', f'/v2/payments/captures/{order.payment_id}/refund',
+            {
+                'amount': {
+                    'value': f'{Decimal(str(amount)):.2f}',
+                    'currency_code': (order.currency_code or '').upper(),
+                },
+                'note_to_payer': (reason or 'Refund from Sclero Proteins')[:255],
+            },
+            idempotency_key=f'paypal_refund_{order.id}_{to_minor_units(amount, order.currency_code)}',
+        )
+        return {
+            'status': 'REFUNDED' if body.get('status') in ('COMPLETED', 'PENDING') else 'FAILED',
+            'refund_id': body.get('id', ''),
+            'raw': {'gateway': self.code, 'mode': 'LIVE', 'paypal_status': body.get('status')},
+        }
 
     def verify_webhook_signature(self, raw_body: bytes, headers: dict, secret: str) -> bool:
         webhook_id = (self.gateway.extra_config or {}).get('webhook_id') or os.getenv('PAYPAL_WEBHOOK_ID', '')

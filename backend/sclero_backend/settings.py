@@ -33,6 +33,11 @@ if not SECRET_KEY:
 if not DEBUG and SECRET_KEY.startswith(('django-insecure-', 'CHANGE_ME')):
     raise ImproperlyConfigured('SECRET_KEY must be a real production secret.')
 
+# Optional dedicated Fernet key for payment/shipping credentials. Keep this
+# stable across deployments; rotating it requires a controlled secret migration.
+# When omitted, a deterministic key is derived from SECRET_KEY.
+INTEGRATION_ENCRYPTION_KEY = os.getenv('INTEGRATION_ENCRYPTION_KEY', '')
+
 ALLOWED_HOSTS = [
     host.strip()
     for host in os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')

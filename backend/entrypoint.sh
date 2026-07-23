@@ -23,6 +23,9 @@ if [ "${SKIP_STARTUP_MAINTENANCE:-False}" != "True" ]; then
   # Re-run collectstatic at boot so a bad static manifest prevents an unhealthy
   # release from being marked ready.
   python manage.py collectstatic --noinput
+
+  # Idempotent: creates missing policy pages only, never overwrites admin edits.
+  python manage.py seed_policy_pages
 fi
 
 exec "$@"

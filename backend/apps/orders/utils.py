@@ -151,11 +151,11 @@ def generate_invoice_pdf(order):
     
     styles = getSampleStyleSheet()
     
-    # Custom Brand Colors
-    BRAND_INK = colors.HexColor('#1A1A1A')
-    BRAND_BRONZE = colors.HexColor('#6E4F13')
-    TEXT_MUTED = colors.HexColor('#6E6A61')
-    BORDER_COLOR = colors.HexColor('#E8E6E1')
+    # Sclero Proteins brand palette (matches the storefront and logo artwork).
+    BRAND_INK = colors.HexColor('#101871')      # brand navy — headings, table header band
+    BRAND_ACCENT = colors.HexColor('#F5A227')   # brand orange — accent rules
+    TEXT_MUTED = colors.HexColor('#6B7280')
+    BORDER_COLOR = colors.HexColor('#E6EAF2')
 
     # Font names — use registered Unicode fonts, fall back to Helvetica
     FONT = 'InvoiceFont' if 'InvoiceFont' in pdfmetrics.getRegisteredFontNames() else 'Helvetica'
@@ -209,15 +209,15 @@ def generate_invoice_pdf(order):
     tax_name = escape(str(getattr(order.region, 'tax_name', '') or 'Tax'))
     invoice_title = f"{tax_name.upper()} INVOICE"
     
-    # Find logo path
-    logo_path = Path(settings.BASE_DIR) / '..' / 'frontend' / 'public' / 'logo-full.png'
+    # Find logo path — v2 asset has the complete tagline descenders.
+    logo_path = Path(settings.BASE_DIR) / '..' / 'frontend' / 'public' / 'logo-full-v2.png'
     logo_path = logo_path.resolve()
-    
+
     logo_img = None
     if logo_path.exists():
         try:
-            # Proportions: width = 1.5 inch, height = 1.5 * (856/938) = 1.37 inch
-            logo_img = RLImage(str(logo_path), width=1.5*inch, height=1.37*inch)
+            # Proportions: width = 1.5 inch, height = 1.5 * (1251/1359) = 1.38 inch
+            logo_img = RLImage(str(logo_path), width=1.5*inch, height=1.38*inch)
         except Exception:
             logo_img = None
  
@@ -399,7 +399,7 @@ def generate_invoice_pdf(order):
     totals_table.setStyle(TableStyle([
         ('ALIGN', (0,0), (-1,-1), 'LEFT'),
         ('ALIGN', (1,0), (1,-1), 'RIGHT'),
-        ('LINEBELOW', (0,-1), (1,-1), 1.5, BRAND_BRONZE),
+        ('LINEBELOW', (0,-1), (1,-1), 1.5, BRAND_ACCENT),
         ('TOPPADDING', (0,0), (-1,-1), 4),
         ('BOTTOMPADDING', (0,0), (-1,-1), 4),
     ]))

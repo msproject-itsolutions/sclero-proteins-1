@@ -1,4 +1,5 @@
 import React from 'react';
+import { redirect } from 'next/navigation';
 import StoreShell from '../../../components/StoreShell';
 import { getApiUrl } from '../../../lib/api';
 import { parseMarkdownBlocks, renderInlineMarkdown } from '../../../lib/markdown';
@@ -58,6 +59,11 @@ function MarkdownContent({ content }) {
 
 export default async function ContentPageView({ params }) {
   const { slug } = await params;
+  // Policy pages live in the CMS as `policy-<slug>` rows but render with the
+  // dedicated policy layout at /policies/<slug>.
+  if (slug?.startsWith('policy-')) {
+    redirect(`/policies/${slug.slice('policy-'.length)}`);
+  }
   const page = await fetchPage(slug);
 
   if (!page) {

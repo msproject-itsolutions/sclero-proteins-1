@@ -1,22 +1,51 @@
 import io
+from pathlib import Path
+from django.conf import settings
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.units import inch
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
+
+# Sclero Proteins brand palette — keep in sync with the storefront and invoices.
+BRAND_NAVY = colors.HexColor('#101871')
+BRAND_PURPLE = colors.HexColor('#890071')
+TEXT_MUTED = colors.HexColor('#6B7280')
+TABLE_BORDER = colors.HexColor('#E6EAF2')
+TABLE_HEAD_BG = colors.HexColor('#F4F6FB')
+
+
+def _brand_logo():
+    """Header lockup (wordmark + tagline) for generated documents, if present."""
+    logo_path = (Path(settings.BASE_DIR) / '..' / 'frontend' / 'public' / 'logo-header-tagline-v2.png').resolve()
+    if not logo_path.exists():
+        return None
+    try:
+        # 938 x 249 source — 1.9in wide keeps it crisp without dominating.
+        return RLImage(str(logo_path), width=1.9 * inch, height=1.9 * inch * 249 / 938)
+    except Exception:
+        return None
+
 
 def generate_pdf_report(sales_data, marketing_data, customer_data):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
     story = []
     styles = getSampleStyleSheet()
-    
+
+    logo = _brand_logo()
+    if logo:
+        logo.hAlign = 'LEFT'
+        story.append(logo)
+        story.append(Spacer(1, 14))
+
     # Custom styles
     title_style = ParagraphStyle(
         'DocTitle',
         parent=styles['Heading1'],
         fontSize=22,
         leading=26,
-        textColor=colors.HexColor('#0F172A'),
+        textColor=BRAND_NAVY,
         spaceAfter=15
     )
     section_style = ParagraphStyle(
@@ -24,7 +53,7 @@ def generate_pdf_report(sales_data, marketing_data, customer_data):
         parent=styles['Heading2'],
         fontSize=14,
         leading=18,
-        textColor=colors.HexColor('#6366F1'),
+        textColor=BRAND_PURPLE,
         spaceBefore=15,
         spaceAfter=10
     )
@@ -33,7 +62,7 @@ def generate_pdf_report(sales_data, marketing_data, customer_data):
         parent=styles['Normal'],
         fontSize=10,
         leading=14,
-        textColor=colors.HexColor('#475569'),
+        textColor=TEXT_MUTED,
         spaceAfter=8
     )
 
@@ -53,11 +82,11 @@ def generate_pdf_report(sales_data, marketing_data, customer_data):
     ]
     t = Table(sales_table_data, colWidths=[240, 240])
     t.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F8FAFC')),
-        ('TEXTCOLOR', (0,0), (-1,0), colors.HexColor('#0F172A')),
+        ('BACKGROUND', (0,0), (-1,0), TABLE_HEAD_BG),
+        ('TEXTCOLOR', (0,0), (-1,0), BRAND_NAVY),
         ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
         ('BOTTOMPADDING', (0,0), (-1,0), 6),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E2E8F0')),
+        ('GRID', (0,0), (-1,-1), 0.5, TABLE_BORDER),
         ('PADDING', (0,0), (-1,-1), 8),
     ]))
     story.append(t)
@@ -76,10 +105,10 @@ def generate_pdf_report(sales_data, marketing_data, customer_data):
         ])
     t_m = Table(marketing_table_data, colWidths=[150, 90, 90, 80, 90])
     t_m.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F8FAFC')),
-        ('TEXTCOLOR', (0,0), (-1,0), colors.HexColor('#0F172A')),
+        ('BACKGROUND', (0,0), (-1,0), TABLE_HEAD_BG),
+        ('TEXTCOLOR', (0,0), (-1,0), BRAND_NAVY),
         ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E2E8F0')),
+        ('GRID', (0,0), (-1,-1), 0.5, TABLE_BORDER),
         ('PADDING', (0,0), (-1,-1), 6),
     ]))
     story.append(t_m)
@@ -96,10 +125,10 @@ def generate_pdf_report(sales_data, marketing_data, customer_data):
     ]
     t_c = Table(customer_table_data, colWidths=[240, 240])
     t_c.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F8FAFC')),
-        ('TEXTCOLOR', (0,0), (-1,0), colors.HexColor('#0F172A')),
+        ('BACKGROUND', (0,0), (-1,0), TABLE_HEAD_BG),
+        ('TEXTCOLOR', (0,0), (-1,0), BRAND_NAVY),
         ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E2E8F0')),
+        ('GRID', (0,0), (-1,-1), 0.5, TABLE_BORDER),
         ('PADDING', (0,0), (-1,-1), 8),
     ]))
     story.append(t_c)

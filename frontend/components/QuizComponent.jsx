@@ -3,157 +3,16 @@
 import React, { useState } from 'react';
 import { ChevronRight, RotateCcw } from 'lucide-react';
 
-const QUIZ_STEPS = [
-  {
-    id: 'goal',
-    title: 'What\'s your primary health goal?',
-    subtitle: 'Help us recommend the best products for you',
-    options: [
-      {
-        value: 'beauty',
-        label: 'Skin, Hair & Nails',
-        icon: '✨',
-        description: 'Glow, strength & elasticity',
-      },
-      {
-        value: 'joints',
-        label: 'Joints & Mobility',
-        icon: '💪',
-        description: 'Comfort & flexibility',
-      },
-      {
-        value: 'overall',
-        label: 'Overall Health',
-        icon: '❤️',
-        description: 'General wellness & vitality',
-      },
-      {
-        value: 'recovery',
-        label: 'Active Recovery',
-        icon: '🏃',
-        description: 'Post-workout support',
-      },
-    ],
-  },
-  {
-    id: 'timeframe',
-    title: 'When do you want to see results?',
-    subtitle: 'Collagen works best with consistency',
-    options: [
-      {
-        value: '4-8weeks',
-        label: '4-8 weeks',
-        icon: '⚡',
-        description: 'Fast-track results',
-      },
-      {
-        value: '8-12weeks',
-        label: '8-12 weeks',
-        icon: '📅',
-        description: 'Standard timeline (recommended)',
-      },
-      {
-        value: '12+weeks',
-        label: '12+ weeks',
-        icon: '🌱',
-        description: 'Long-term commitment',
-      },
-    ],
-  },
-  {
-    id: 'lifestyle',
-    title: 'What\'s your lifestyle like?',
-    subtitle: 'This helps us match the right product format',
-    options: [
-      {
-        value: 'active',
-        label: 'Very Active',
-        icon: '🏋️',
-        description: 'Regular exercise & training',
-      },
-      {
-        value: 'moderate',
-        label: 'Moderately Active',
-        icon: '🚴',
-        description: 'Some movement & exercise',
-      },
-      {
-        value: 'sedentary',
-        label: 'Mostly Sedentary',
-        icon: '🪑',
-        description: 'Limited physical activity',
-      },
-    ],
-  },
-  {
-    id: 'preferences',
-    title: 'Any dietary preferences?',
-    subtitle: 'We\'ll find products that match your needs',
-    options: [
-      {
-        value: 'vegan',
-        label: 'Vegan',
-        icon: '🌱',
-        description: 'Plant-based only',
-      },
-      {
-        value: 'gluten-free',
-        label: 'Gluten-Free',
-        icon: '🌾',
-        description: 'No gluten',
-      },
-      {
-        value: 'none',
-        label: 'No Restrictions',
-        icon: '✅',
-        description: 'Open to all products',
-      },
-    ],
-  },
-];
-
-// Product recommendations based on quiz answers
-const PRODUCT_RECOMMENDATIONS = {
-  'beauty-8-12weeks-active-none': {
-    sku: 'COMBO-COLLAGEN-60',
-    name: 'Combo Collagen®',
-    match: '95%',
-    reason: 'Perfect for active beauty seekers on standard timeline',
-  },
-  'beauty-8-12weeks-active-vegan': {
-    sku: 'COMBO-COLLAGEN-60',
-    name: 'Combo Collagen® (Vegan-Friendly)',
-    match: '92%',
-    reason: 'Best vegan option for beauty & activity',
-  },
-  'joints-8-12weeks-active-none': {
-    sku: 'BJC-BONE-JOINT',
-    name: 'BJC® Bone & Joint Care',
-    match: '98%',
-    reason: 'Specifically designed for active joint support',
-  },
-  'overall-8-12weeks-moderate-none': {
-    sku: 'OVOSHELL-COLLAGEN-60',
-    name: 'OvoShell Collagen™',
-    match: '88%',
-    reason: 'Comprehensive wellness formula for all-around health',
-  },
-  'recovery-8-12weeks-active-none': {
-    sku: 'BJC-BONE-JOINT',
-    name: 'BJC® Bone & Joint Care',
-    match: '96%',
-    reason: 'Ideal for post-workout recovery and muscle support',
-  },
-};
-
-export default function QuizComponent({ onComplete = () => {}, variant = 'modal' }) {
+export default function QuizComponent({ onComplete = () => {}, content }) {
   const [currentStep, setCurrentStep] = useState(0);
   const [answers, setAnswers] = useState({});
   const [recommendation, setRecommendation] = useState(null);
   const [isCompleted, setIsCompleted] = useState(false);
 
-  const step = QUIZ_STEPS[currentStep];
-  const isLastStep = currentStep === QUIZ_STEPS.length - 1;
+  const steps = content?.steps || [];
+  const recommendations = Object.fromEntries((content?.recommendations || []).map((item) => [item.key, item]));
+  const step = steps[currentStep];
+  const isLastStep = currentStep === steps.length - 1;
 
   const handleSelectOption = (value) => {
     const newAnswers = {
@@ -173,14 +32,9 @@ export default function QuizComponent({ onComplete = () => {}, variant = 'modal'
         .join('-');
 
       const rec =
-        PRODUCT_RECOMMENDATIONS[key] ||
-        PRODUCT_RECOMMENDATIONS[`${newAnswers.goal}-8-12weeks-active-none`] ||
-        {
-          sku: 'COMBO-COLLAGEN-60',
-          name: 'Combo Collagen®',
-          match: '85%',
-          reason: 'Great all-around collagen supplement',
-        };
+        recommendations[key] ||
+        recommendations[`${newAnswers.goal}-8-active-none`] ||
+        content?.fallbackRecommendation;
 
       setRecommendation(rec);
       setIsCompleted(true);
@@ -207,6 +61,8 @@ export default function QuizComponent({ onComplete = () => {}, variant = 'modal'
     onComplete({ recommendation, answers });
   };
 
+  if (!step && !isCompleted) return null;
+
   if (isCompleted) {
     return (
       <div className="rounded-lg border border-edge bg-surface p-8 text-center shadow-card">
@@ -218,16 +74,16 @@ export default function QuizComponent({ onComplete = () => {}, variant = 'modal'
         </div>
 
         {/* Recommendation */}
-        <h2 className="mb-2 font-display text-2xl font-medium text-ink-primary">Perfect Match Found!</h2>
+        <h2 className="mb-2 font-display text-2xl font-medium text-ink-primary">{content.resultTitle}</h2>
         <p className="mb-6 text-sm text-ink-muted">
-          Based on your answers, we found the ideal product for you
+          {content.resultDescription}
         </p>
 
         {/* Product Card */}
         <div className="mb-6 rounded-md border border-edge bg-surface p-6 shadow-card">
           <div className="mb-4 text-center">
             <span className="inline-block rounded-xs bg-surface-muted px-4 py-2 text-xs font-semibold uppercase tracking-wide text-ink-accent">
-              {recommendation.match} Match
+              {recommendation.match} {content.matchLabel}
             </span>
           </div>
 
@@ -238,23 +94,23 @@ export default function QuizComponent({ onComplete = () => {}, variant = 'modal'
             onClick={handleAddToCart}
             className="btn-primary mb-2 w-full px-6 py-3 text-sm"
           >
-            Add to Cart
+            {content.addToCartLabel}
           </button>
           <button
             onClick={handleReset}
             className="btn-ghost flex w-full items-center justify-center gap-2 px-6 py-3 text-sm"
           >
             <RotateCcw className="h-4 w-4" />
-            Start Over
+            {content.startOverLabel}
           </button>
         </div>
 
         {/* Your Answers Summary */}
         <div className="rounded-md bg-surface-muted p-4 text-left">
-          <p className="kicker mb-3">Your Preferences</p>
+          <p className="kicker mb-3">{content.preferencesLabel}</p>
           <div className="space-y-2 text-xs">
             {Object.entries(answers).map(([key, value]) => {
-              const stepData = QUIZ_STEPS.find((s) => s.id === key);
+              const stepData = steps.find((s) => s.id === key);
               const option = stepData?.options.find((o) => o.value === value);
               return (
                 <div key={key} className="flex justify-between">
@@ -274,8 +130,8 @@ export default function QuizComponent({ onComplete = () => {}, variant = 'modal'
       {/* Progress Indicator */}
       <div className="mb-8">
         <div className="mb-2 flex justify-between text-xs font-medium text-ink-muted">
-          <span>Question {currentStep + 1}</span>
-          <span>{currentStep + 1} of {QUIZ_STEPS.length}</span>
+          <span>{content.questionLabel} {currentStep + 1}</span>
+          <span>{currentStep + 1} {content.ofLabel} {steps.length}</span>
         </div>
         <div className="h-1 overflow-hidden rounded-full bg-edge-subtle">
           <div
@@ -319,14 +175,14 @@ export default function QuizComponent({ onComplete = () => {}, variant = 'modal'
           disabled={currentStep === 0}
           className="btn-ghost flex-1 px-6 py-3 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Back
+          {content.backLabel}
         </button>
         <button
           onClick={() => handleSelectOption(answers[step.id])}
           disabled={!answers[step.id]}
           className="btn-primary flex-1 flex items-center justify-center gap-2 px-6 py-3 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {isLastStep ? 'Get Recommendation' : 'Next'}
+          {isLastStep ? content.recommendationLabel : content.nextLabel}
           <ChevronRight className="h-4 w-4" />
         </button>
       </div>

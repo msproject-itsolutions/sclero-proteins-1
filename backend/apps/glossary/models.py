@@ -7,6 +7,13 @@ class GlossaryTerm(models.Model):
         db_index=True,
         help_text="The technical term, abbreviation, or industry phrase."
     )
+    internal_code = models.CharField(
+        max_length=150,
+        blank=True,
+        default='',
+        db_index=True,
+        help_text="Optional internal knowledge-hub identifier for the term."
+    )
     definition = models.TextField(help_text="Detailed, easy-to-understand definition of the term.")
     category = models.CharField(
         max_length=100, 

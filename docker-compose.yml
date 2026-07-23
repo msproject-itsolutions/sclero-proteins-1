@@ -105,13 +105,24 @@ services:
       SCHEDULE_CART_SECONDS: ${SCHEDULE_CART_SECONDS:-3600}
       SCHEDULE_REVIEW_SECONDS: ${SCHEDULE_REVIEW_SECONDS:-86400}
       SCHEDULE_PUSH_SECONDS: ${SCHEDULE_PUSH_SECONDS:-60}
+      SCHEDULE_PRUNE_SECONDS: ${SCHEDULE_PRUNE_SECONDS:-86400}
       SCHEDULER_LEASE_SECONDS: ${SCHEDULER_LEASE_SECONDS:-300}
+      SCHEDULER_HEARTBEAT_FILE: /tmp/scheduler-heartbeat
     volumes:
       - media:/app/media
       - ./secrets/vapid_private.pem:/run/secrets/vapid_private.pem:ro
     depends_on:
       backend:
         condition: service_healthy
+    # The loop stamps /tmp/scheduler-heartbeat every ~5s; a stale stamp means
+    # the scheduler is alive but hung (blocked job), which `restart` alone
+    # would never notice. 300s tolerance covers a long batch run.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,sys,time; p=os.environ.get('SCHEDULER_HEARTBEAT_FILE','/tmp/scheduler-heartbeat'); sys.exit(0 if os.path.exists(p) and time.time()-os.path.getmtime(p)<300 else 1)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
     stop_grace_period: 30s
     mem_limit: ${SCHEDULER_MEMORY_LIMIT:-384m}
     cpus: ${SCHEDULER_CPUS:-0.5}

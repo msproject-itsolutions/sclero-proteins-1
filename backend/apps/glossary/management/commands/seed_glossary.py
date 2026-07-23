@@ -1,5 +1,6 @@
 from django.core.management.base import BaseCommand
 from django.db import transaction
+from apps.glossary.expanded_glossary import EXPANDED_GLOSSARY_TERMS
 from apps.glossary.models import GlossaryTerm
 
 class Command(BaseCommand):
@@ -424,11 +425,21 @@ class Command(BaseCommand):
             }
         ]
 
+        # The supplied expansion includes the existing soil/turf entries. Merge
+        # case-insensitively so running this command remains safe and idempotent.
+        merged_glossary = {
+            item["term"].casefold(): {**item, "internal_code": item.get("internal_code", "")}
+            for item in glossary_data
+        }
+        for item in EXPANDED_GLOSSARY_TERMS:
+            merged_glossary[item["term"].casefold()] = item
+
         with transaction.atomic():
-            for item in glossary_data:
+            for item in merged_glossary.values():
                 term, created = GlossaryTerm.objects.update_or_create(
                     term=item["term"],
                     defaults={
+                        "internal_code": item.get("internal_code", ""),
                         "definition": item["definition"],
                         "category": item["category"]
                     }

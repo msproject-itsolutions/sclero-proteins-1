@@ -57,14 +57,12 @@ def _verify_otp_value(stored, candidate):
 
 
 def _send_email_otp(email, code, subject='Your Sclero Proteins sign-in code'):
-    from django.core.mail import send_mail
-    send_mail(
+    from apps.orders.email_service import send_branded_email
+    send_branded_email(
         subject,
         f'Your verification code is {code}. It expires in 10 minutes. '
         'If you did not request this code, ignore this email.',
-        settings.DEFAULT_FROM_EMAIL,
-        [email],
-        fail_silently=False,
+        email,
     )
 
 def get_tokens_for_user(user):
@@ -762,17 +760,16 @@ class MagicLinkRequestView(APIView):
             logger.exception('Templated magic-link email failed for user %s.', user.pk)
             sent = False
         if not sent:
-            # No template configured / send failed — fall back to a plain email.
+            # No template configured / send failed — fall back to a branded
+            # system email so sign-in mail matches the rest of the platform.
             try:
-                from django.core.mail import send_mail
-                from django.conf import settings
-                sent_count = send_mail(
+                from apps.orders.email_service import send_branded_email
+                send_branded_email(
                     'Your Sclero Proteins sign-in link',
                     f'Click to sign in (valid 15 minutes):\n\n{link}\n\nIf you didn\'t request this, ignore this email.',
-                    getattr(settings, 'DEFAULT_FROM_EMAIL', ''),
-                    [email], fail_silently=False,
+                    email,
                 )
-                sent = bool(sent_count)
+                sent = True
             except Exception:
                 logger.exception('Fallback magic-link email failed for user %s.', user.pk)
         if settings.DEBUG:
