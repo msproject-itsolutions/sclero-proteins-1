@@ -278,6 +278,42 @@ class SchedulerLeaseTests(TestCase):
         self.assertTrue(SchedulerCommand._renew_lease('owner-two', 300))
         self.assertEqual(SchedulerLease.objects.get(name='primary').owner, 'owner-two')
 
+    def test_scheduler_stands_by_until_lease_frees(self):
+        """A held lease must cause waiting (redeploy handoff), never a crash."""
+        import os as _os
+        from unittest.mock import patch
+        from django.core.management import call_command
+
+        calls = {'n': 0}
+
+        def fake_renew(owner, lease_seconds):
+            calls['n'] += 1
+            if calls['n'] <= 2:
+                return False  # lease held by the previous scheduler — wait
+            if calls['n'] == 3:
+                return True   # lease freed — acquire and start running
+            raise SystemExit  # reached the run loop; end the test
+
+        with patch.dict(_os.environ, {'SCHEDULER_LEASE_WAIT_SECONDS': '1'}), \
+             patch.object(SchedulerCommand, '_renew_lease', staticmethod(fake_renew)), \
+             patch('apps.orders.management.commands.run_scheduler.call_command'):
+            with self.assertRaises(SystemExit):
+                call_command('run_scheduler')
+        # Two held-lease attempts happened without raising CommandError, then
+        # the scheduler acquired the lease and entered its run loop.
+        self.assertGreaterEqual(calls['n'], 4)
+
+    def test_once_mode_fails_fast_when_lease_is_held(self):
+        # A long-running scheduler stands by until a lingering lease expires
+        # (so redeploys don't crash-loop), but --once keeps fail-fast semantics
+        # for scripts and manual runs.
+        from django.core.management import call_command
+        from django.core.management.base import CommandError as DjangoCommandError
+
+        self.assertTrue(SchedulerCommand._renew_lease('other-owner', 300))
+        with self.assertRaises(DjangoCommandError):
+            call_command('run_scheduler', '--once')
+
 
 class EmailRetryTests(TestCase):
     def setUp(self):
