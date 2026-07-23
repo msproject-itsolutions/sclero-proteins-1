@@ -2581,10 +2581,16 @@ function SmtpSettingsCard({ authFetch }) {
   };
 
   const save = () => {
+    // The From address must be a real address ("Name <email>" is also fine) —
+    // a bare display name is silently rejected by most mail servers.
+    if (cfg.DEFAULT_FROM_EMAIL && !cfg.DEFAULT_FROM_EMAIL.includes('@')) {
+      setError('The From address must be an email, e.g. support@scleroproteins.co.uk or "Sclero Proteins <support@scleroproteins.co.uk>".');
+      return Promise.reject(new Error('invalid_from'));
+    }
     setSaving(true);
     setNotice('');
     setError('');
-    authFetch('/api/admin/settings/SMTP_SETTINGS/', {
+    return authFetch('/api/admin/settings/SMTP_SETTINGS/', {
       method: 'PUT',
       body: JSON.stringify({
         key: 'SMTP_SETTINGS',
@@ -2603,25 +2609,34 @@ function SmtpSettingsCard({ authFetch }) {
         if (cfg.EMAIL_HOST_PASSWORD) setPasswordConfigured(true);
         set('EMAIL_HOST_PASSWORD', '');
       })
-      .catch((e) => setError(e.message || 'Could not save email settings.'))
+      .catch((e) => {
+        if (e.message !== 'invalid_from') setError(e.message || 'Could not save email settings.');
+        throw e;
+      })
       .finally(() => setSaving(false));
   };
 
+  // Always test what is on screen: save the form first, then send. Otherwise a
+  // stale saved config gets tested while the admin looks at different values.
   const sendTest = () => {
-    setTesting(true);
-    setNotice('');
-    setError('');
-    authFetch('/api/admin/smtp-test/', {
-      method: 'POST',
-      body: JSON.stringify({ email: testEmail }),
-    })
-      .then(async (r) => {
-        const d = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(d.error || 'Test send failed.');
-        setNotice(d.message || 'Test email sent.');
+    save()
+      .then(() => {
+        setTesting(true);
+        setNotice('');
+        setError('');
+        return authFetch('/api/admin/smtp-test/', {
+          method: 'POST',
+          body: JSON.stringify({ email: testEmail }),
+        })
+          .then(async (r) => {
+            const d = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(d.error || 'Test send failed.');
+            setNotice(d.message || 'Test email sent.');
+          })
+          .catch((e) => setError(e.message))
+          .finally(() => setTesting(false));
       })
-      .catch((e) => setError(e.message))
-      .finally(() => setTesting(false));
+      .catch(() => {});
   };
 
   if (loading) return null;
