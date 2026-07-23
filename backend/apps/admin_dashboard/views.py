@@ -194,7 +194,7 @@ class SmtpTestView(APIView):
         if not target:
             return Response({'error': 'Provide an email address to send the test to.'},
                             status=status.HTTP_400_BAD_REQUEST)
-        from apps.orders.email_service import send_branded_email
+        from apps.orders.email_service import send_branded_email, _get_smtp_config
         try:
             send_branded_email(
                 'Sclero Proteins email test',
@@ -204,7 +204,15 @@ class SmtpTestView(APIView):
                 target,
             )
         except Exception as exc:  # surface the SMTP server's own reason to the admin
-            return Response({'error': f'Send failed: {exc}'}, status=status.HTTP_502_BAD_GATEWAY)
+            # Name the server that was actually tried, so a stale saved config
+            # is immediately visible instead of a bare "timed out".
+            try:
+                smtp = _get_smtp_config()
+                mode = 'SSL' if smtp['use_ssl'] else ('TLS' if smtp['use_tls'] else 'plain')
+                where = f" (tried {smtp['host']}:{smtp['port']} over {mode})"
+            except Exception:
+                where = ''
+            return Response({'error': f'Send failed: {exc}{where}'}, status=status.HTTP_502_BAD_GATEWAY)
         return Response({'message': f'Test email sent to {target}. Check the inbox (and spam folder).'})
 
 
