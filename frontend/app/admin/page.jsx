@@ -2523,6 +2523,180 @@ const EMAIL_EVENTS = [
   ['password_reset', 'Password reset'],
   ['contact_received', 'Contact form received'],
 ];
+/* SMTP delivery settings — stored in SystemSetting('SMTP_SETTINGS'), which the
+   email service reads on every send. The password is write-only: the API
+   redacts it on read and keeps the stored value when submitted blank. */
+const SMTP_PRESETS = [
+  { label: 'Microsoft 365 / Outlook (GoDaddy email)', host: 'smtp.office365.com', port: '587', tls: true, ssl: false },
+  { label: 'GoDaddy classic Workspace email', host: 'smtpout.secureserver.net', port: '465', tls: false, ssl: true },
+  { label: 'Gmail / Google Workspace', host: 'smtp.gmail.com', port: '587', tls: true, ssl: false },
+];
+
+function SmtpSettingsCard({ authFetch }) {
+  const [cfg, setCfg] = useState({
+    EMAIL_HOST: '', EMAIL_PORT: '587', EMAIL_USE_TLS: true, EMAIL_USE_SSL: false,
+    EMAIL_HOST_USER: '', EMAIL_HOST_PASSWORD: '', DEFAULT_FROM_EMAIL: '',
+  });
+  const [passwordConfigured, setPasswordConfigured] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [testEmail, setTestEmail] = useState('');
+  const [testing, setTesting] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [error, setError] = useState('');
+
+  const asBool = (v) => v === true || ['true', '1', 'yes'].includes(String(v).toLowerCase());
+
+  useEffect(() => {
+    authFetch('/api/admin/settings/SMTP_SETTINGS/')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const v = d?.value || {};
+        setCfg((prev) => ({
+          ...prev,
+          EMAIL_HOST: v.EMAIL_HOST || '',
+          EMAIL_PORT: String(v.EMAIL_PORT || '587'),
+          EMAIL_USE_TLS: v.EMAIL_USE_TLS === undefined ? true : asBool(v.EMAIL_USE_TLS),
+          EMAIL_USE_SSL: asBool(v.EMAIL_USE_SSL),
+          EMAIL_HOST_USER: v.EMAIL_HOST_USER || '',
+          EMAIL_HOST_PASSWORD: '',
+          DEFAULT_FROM_EMAIL: v.DEFAULT_FROM_EMAIL || '',
+        }));
+        setPasswordConfigured((d?.sensitive_fields_configured || []).includes('EMAIL_HOST_PASSWORD'));
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [authFetch]);
+
+  const set = (key, value) => setCfg((prev) => ({ ...prev, [key]: value }));
+
+  const applyPreset = (preset) => {
+    setCfg((prev) => ({
+      ...prev,
+      EMAIL_HOST: preset.host,
+      EMAIL_PORT: preset.port,
+      EMAIL_USE_TLS: preset.tls,
+      EMAIL_USE_SSL: preset.ssl,
+    }));
+  };
+
+  const save = () => {
+    setSaving(true);
+    setNotice('');
+    setError('');
+    authFetch('/api/admin/settings/SMTP_SETTINGS/', {
+      method: 'PUT',
+      body: JSON.stringify({
+        key: 'SMTP_SETTINGS',
+        value: {
+          ...cfg,
+          EMAIL_PORT: String(cfg.EMAIL_PORT || '587'),
+          EMAIL_USE_TLS: Boolean(cfg.EMAIL_USE_TLS),
+          EMAIL_USE_SSL: Boolean(cfg.EMAIL_USE_SSL),
+        },
+        description: 'SMTP mail server used for all transactional email',
+      }),
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error('The server rejected the settings.');
+        setNotice('Email settings saved. Send a test below to confirm delivery.');
+        if (cfg.EMAIL_HOST_PASSWORD) setPasswordConfigured(true);
+        set('EMAIL_HOST_PASSWORD', '');
+      })
+      .catch((e) => setError(e.message || 'Could not save email settings.'))
+      .finally(() => setSaving(false));
+  };
+
+  const sendTest = () => {
+    setTesting(true);
+    setNotice('');
+    setError('');
+    authFetch('/api/admin/smtp-test/', {
+      method: 'POST',
+      body: JSON.stringify({ email: testEmail }),
+    })
+      .then(async (r) => {
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || 'Test send failed.');
+        setNotice(d.message || 'Test email sent.');
+      })
+      .catch((e) => setError(e.message))
+      .finally(() => setTesting(false));
+  };
+
+  if (loading) return null;
+
+  return (
+    <div className="mb-6 rounded-md border border-edge bg-white p-5 shadow-card">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h3 className="text-base font-semibold text-ink-primary">Email delivery (SMTP)</h3>
+          <p className="mt-1 text-sm text-brand-muted">
+            The mail server used for every store email — order confirmations, sign-in links,
+            shipping updates. Use a preset, enter your mailbox login, save, then send a test.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {SMTP_PRESETS.map((p) => (
+            <button key={p.host} type="button" onClick={() => applyPreset(p)}
+              className="rounded-full border border-dashed border-edge px-2.5 py-1 text-[12px] font-semibold text-ink-muted hover:border-ink-primary hover:text-ink-primary">
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+        <div>
+          <label className="kicker mb-1 block">SMTP host</label>
+          <input value={cfg.EMAIL_HOST} onChange={(e) => set('EMAIL_HOST', e.target.value)} className="w-full rounded-sm border border-edge p-2.5" placeholder="e.g. smtp.office365.com" />
+        </div>
+        <div>
+          <label className="kicker mb-1 block">Port</label>
+          <input value={cfg.EMAIL_PORT} onChange={(e) => set('EMAIL_PORT', e.target.value)} className="w-full rounded-sm border border-edge p-2.5" placeholder="587" />
+        </div>
+        <div className="flex items-end gap-4 pb-1">
+          <label className="flex cursor-pointer items-center gap-1.5 font-semibold text-ink-primary">
+            <input type="checkbox" checked={cfg.EMAIL_USE_TLS} onChange={(e) => set('EMAIL_USE_TLS', e.target.checked)} className="h-4 w-4 accent-ink-primary" /> TLS
+          </label>
+          <label className="flex cursor-pointer items-center gap-1.5 font-semibold text-ink-primary">
+            <input type="checkbox" checked={cfg.EMAIL_USE_SSL} onChange={(e) => set('EMAIL_USE_SSL', e.target.checked)} className="h-4 w-4 accent-ink-primary" /> SSL
+          </label>
+        </div>
+        <div>
+          <label className="kicker mb-1 block">Username (mailbox)</label>
+          <input value={cfg.EMAIL_HOST_USER} onChange={(e) => set('EMAIL_HOST_USER', e.target.value)} className="w-full rounded-sm border border-edge p-2.5" placeholder="support@scleroproteins.co.uk" autoComplete="off" />
+        </div>
+        <div>
+          <label className="kicker mb-1 block">Password {passwordConfigured && <span className="normal-case font-normal text-ink-success">— configured, blank keeps current</span>}</label>
+          <input type="password" value={cfg.EMAIL_HOST_PASSWORD} onChange={(e) => set('EMAIL_HOST_PASSWORD', e.target.value)} className="w-full rounded-sm border border-edge p-2.5" placeholder={passwordConfigured ? '••••••••' : 'Mailbox password'} autoComplete="new-password" />
+        </div>
+        <div>
+          <label className="kicker mb-1 block">From address</label>
+          <input value={cfg.DEFAULT_FROM_EMAIL} onChange={(e) => set('DEFAULT_FROM_EMAIL', e.target.value)} className="w-full rounded-sm border border-edge p-2.5" placeholder="support@scleroproteins.co.uk" />
+        </div>
+      </div>
+
+      {notice && <p className="mt-3 rounded-lg border border-brand-success/30 bg-brand-success/10 px-3 py-2 text-sm font-semibold text-ink-success">{notice}</p>}
+      {error && <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-ink-danger">{error}</p>}
+
+      <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-edge-subtle pt-4">
+        <button onClick={save} disabled={saving} className="btn-primary px-5 py-2.5 text-sm uppercase">{saving ? 'Saving…' : 'Save email settings'}</button>
+        <div className="ml-auto flex items-center gap-2">
+          <input value={testEmail} onChange={(e) => setTestEmail(e.target.value)} placeholder="Send test to…" className="w-56 rounded-sm border border-edge p-2 text-sm" />
+          <button onClick={sendTest} disabled={testing || !testEmail.trim()} className="rounded-lg border border-edge px-4 py-2 text-sm font-semibold text-ink-primary hover:border-ink-primary disabled:opacity-40">
+            {testing ? 'Sending…' : 'Send test email'}
+          </button>
+        </div>
+      </div>
+      <p className="mt-3 text-[12px] leading-relaxed text-ink-muted">
+        Microsoft 365 note: if the test fails with an authentication error, enable
+        &quot;Authenticated SMTP&quot; for the mailbox in the Microsoft 365 admin center, then retry.
+      </p>
+    </div>
+  );
+}
+
 function EmailsTab({ authFetch, regions }) {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -2592,6 +2766,8 @@ function EmailsTab({ authFetch, regions }) {
 
   return (
     <div>
+      <SmtpSettingsCard authFetch={authFetch} />
+
       <div className="mb-4 flex items-center justify-between">
         <p className="text-sm text-brand-muted">{templates.length} templates · region-specific (GST / VAT)</p>
         <button onClick={() => setForm({ event: 'order_confirmation', region: '', subject: '', body: '', is_active: true })} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-sm uppercase font-semibold"><Plus className="h-4 w-4" /> New template</button>
@@ -2619,8 +2795,8 @@ function EmailsTab({ authFetch, regions }) {
       </div>
 
       {form && (
-        <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
-          <div className="w-full max-w-4xl bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-start overflow-y-auto bg-surface-overlay p-4 backdrop-blur-sm sm:p-6 lg:p-8">
+          <div className="my-6 w-full max-w-4xl bg-white rounded-lg border border-edge p-6 shadow-overlay space-y-4">
             <div className="flex justify-between items-center pb-2 border-b border-edge-subtle">
               <h3 className="text-lg font-semibold text-ink-primary">{form.id ? 'Edit' : 'New'} email template</h3>
               <button onClick={() => setForm(null)}><X className="h-5 w-5 text-brand-muted" /></button>
