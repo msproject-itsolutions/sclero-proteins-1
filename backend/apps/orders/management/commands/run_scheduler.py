@@ -27,8 +27,33 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         owner = uuid.uuid4().hex
         lease_seconds = max(int(os.getenv('SCHEDULER_LEASE_SECONDS', '300')), 60)
-        if not self._renew_lease(owner, lease_seconds):
-            raise CommandError('Another scheduler holds the active database lease.')
+        wait_seconds = max(int(os.getenv('SCHEDULER_LEASE_WAIT_SECONDS', '10')), 1)
+        heartbeat_path = os.getenv('SCHEDULER_HEARTBEAT_FILE', '/tmp/scheduler-heartbeat')
+        stop = threading.Event()
+
+        def request_stop(*_args):
+            stop.set()
+
+        signal.signal(signal.SIGTERM, request_stop)
+        signal.signal(signal.SIGINT, request_stop)
+
+        # During a redeploy the previous scheduler container may be killed
+        # mid-job, leaving its lease to linger for up to SCHEDULER_LEASE_SECONDS.
+        # Stand by until it frees — heartbeating so the container healthcheck
+        # stays green — instead of crash-looping and failing the deployment.
+        # --once keeps fail-fast semantics for manual runs and scripts.
+        announced = False
+        while not self._renew_lease(owner, lease_seconds):
+            if options['once']:
+                raise CommandError('Another scheduler holds the active database lease.')
+            if not announced:
+                self.stdout.write('Another scheduler holds the lease; standing by until it is released.')
+                announced = True
+            self._touch_heartbeat(heartbeat_path)
+            stop.wait(wait_seconds)
+            if stop.is_set():
+                self.stdout.write('Scheduler stopped while waiting for the lease.')
+                return
 
         intervals = {
             'process_webhooks': int(os.getenv('SCHEDULE_WEBHOOK_SECONDS', '60')),
@@ -42,14 +67,6 @@ class Command(BaseCommand):
         }
         intervals = {name: max(seconds, 30) for name, seconds in intervals.items()}
         due = {name: 0.0 for name in intervals}
-        stop = threading.Event()
-        heartbeat_path = os.getenv('SCHEDULER_HEARTBEAT_FILE', '/tmp/scheduler-heartbeat')
-
-        def request_stop(*_args):
-            stop.set()
-
-        signal.signal(signal.SIGTERM, request_stop)
-        signal.signal(signal.SIGINT, request_stop)
         self.stdout.write('Scheduler started.')
 
         try:
