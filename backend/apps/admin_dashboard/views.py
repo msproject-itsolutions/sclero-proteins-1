@@ -463,17 +463,11 @@ class MarketingIntegrationViewSet(viewsets.ModelViewSet):
 
 
 class ContentPageViewSet(viewsets.ModelViewSet):
-    """Existing storefront pages: list, read, edit, delete — but not create.
-
-    The storefront's pages are a fixed set; new ones need a matching route and
-    template, so creating them from the admin produced pages that could not be
-    reached. Seed commands still create pages via the ORM, which is unaffected.
-    """
+    """Read-only page records while the CMS publishing workflow is disabled."""
     queryset = ContentPage.objects.all().order_by('-created_at')
     serializer_class = ContentPageSerializer
     permission_classes = [require_permission('settings.manage')]
-    http_method_names = ['get', 'put', 'patch', 'delete', 'head', 'options']
-
+    http_method_names = ['get', 'head', 'options']
     def get_queryset(self):
         qs = self.queryset
         q = self.request.query_params.get('q')

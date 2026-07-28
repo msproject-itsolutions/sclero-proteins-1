@@ -4013,7 +4013,6 @@ function ContentOverviewTab({ authFetch, go }) {
 
   const cards = [
     { key: 'pages', title: 'Banners', detail: `${counts.banners} slides`, icon: ImageIcon },
-    { key: 'pages', tab: 'policies', title: 'Policy Pages', detail: 'Privacy, Terms, Refunds & more', icon: ShieldCheck },
     { key: 'blogs', title: 'Blog', detail: `${counts.blogs} articles`, icon: Film },
     { key: 'navigation', title: 'Menus', detail: 'Header and footer links', icon: MenuIcon },
     { key: 'glossary', title: 'Glossary Manager', detail: `${counts.glossary} terms`, icon: BookOpen },
@@ -6878,7 +6877,7 @@ function HeroColorField({ label, value, fallback, onChange }) {
 /* Pages + Banners merged surface per spec 2026-06-24; policy pages added as a
    second sub-tab so every legal/info page is editable from the console. */
 function PagesAndBannersTab({ authFetch, initialTab = 'banners' }) {
-  const allowedTabs = ['banners', 'policies'];
+  const allowedTabs = ['banners'];
   const [subTab, setSubTab] = useState(allowedTabs.includes(initialTab) ? initialTab : 'banners');
 
   useEffect(() => {
@@ -6887,7 +6886,6 @@ function PagesAndBannersTab({ authFetch, initialTab = 'banners' }) {
 
   const SUB_TABS = [
     { key: 'banners', label: 'Banners' },
-    { key: 'policies', label: 'Policy Pages' },
   ];
 
   return (
@@ -6902,10 +6900,45 @@ function PagesAndBannersTab({ authFetch, initialTab = 'banners' }) {
       </div>
       <div className="mt-4">
         {subTab === 'banners' && <HeroBannersTab authFetch={authFetch} />}
-        {subTab === 'policies' && <PolicyPagesTab authFetch={authFetch} />}
       </div>
     </div>
   );
+}
+
+function StorePagesTab({ authFetch }) {
+  const [pages, setPages] = useState([]);
+  const [editing, setEditing] = useState(null);
+  const [error, setError] = useState('');
+  const load = useCallback(() => {
+    authFetch('/api/admin/content-pages/')
+      .then((r) => r.ok ? r.json() : Promise.reject())
+      .then((d) => setPages((Array.isArray(d) ? d : d.results || []).filter((p) => !p.slug.startsWith(POLICY_SLUG_PREFIX))))
+      .catch(() => setPages([]));
+  }, [authFetch]);
+  useEffect(() => { load(); }, [load]);
+  const startNew = () => setEditing({ title: '', slug: '', content: '', page_type: 'STANDARD', is_published: false, meta_title: '', meta_description: '' });
+  const save = async () => {
+    const title = editing?.title?.trim();
+    const slug = slugify(editing?.slug || title);
+    if (!title || !slug) { setError('A title and URL slug are required.'); return; }
+    if (slug.startsWith(POLICY_SLUG_PREFIX)) { setError('Policy pages must be managed in the Policy Pages tab.'); return; }
+    setError('');
+    const response = await authFetch(editing.id ? `/api/admin/content-pages/${editing.id}/` : '/api/admin/content-pages/', {
+      method: editing.id ? 'PATCH' : 'POST',
+      body: JSON.stringify({ ...editing, title, slug }),
+    });
+    if (!response.ok) { setError('Could not save this page. The URL slug may already be in use.'); return; }
+    setEditing(null); load();
+  };
+  const remove = async (page) => {
+    if (!confirm(`Delete “${page.title}”? This cannot be undone.`)) return;
+    await authFetch(`/api/admin/content-pages/${page.id}/`, { method: 'DELETE' }); load();
+  };
+  return <div className="space-y-4">
+    <div className="flex items-center justify-between gap-3"><p className="text-sm text-brand-muted">Published pages are available at <span className="font-mono">/pages/your-slug</span>.</p><button onClick={startNew} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-sm uppercase"><Plus className="h-4 w-4" /> Create page</button></div>
+    <div className="space-y-2">{pages.map((page) => <div key={page.id} className="flex items-center justify-between gap-3 rounded-md border border-edge bg-white p-4"><div><p className="font-semibold text-ink-primary">{page.title}</p><p className="text-xs text-brand-muted font-mono">/pages/{page.slug} · {page.is_published ? 'Published' : 'Draft'}</p></div><div className="flex gap-2"><button onClick={() => setEditing({ ...page })} className="rounded border border-edge p-2 text-ink-secondary hover:text-ink-primary" aria-label={`Edit ${page.title}`}><Pencil className="h-4 w-4" /></button><button onClick={() => remove(page)} className="rounded border border-edge p-2 text-brand-danger" aria-label={`Delete ${page.title}`}><Trash2 className="h-4 w-4" /></button></div></div>)}</div>
+    {editing && <div className="rounded-lg border border-edge bg-white p-5 shadow-card space-y-3"><h3 className="font-semibold text-ink-primary">{editing.id ? 'Edit page' : 'New page'}</h3>{error && <p className="text-sm text-brand-danger">{error}</p>}<input value={editing.title} onChange={(e) => setEditing({ ...editing, title: e.target.value })} placeholder="Page title" className="w-full rounded border border-edge p-2.5 text-sm" /><input value={editing.slug} onChange={(e) => setEditing({ ...editing, slug: e.target.value })} placeholder="URL slug (generated from title if blank)" className="w-full rounded border border-edge p-2.5 text-sm" /><textarea value={editing.content} onChange={(e) => setEditing({ ...editing, content: e.target.value })} placeholder="Page content (Markdown supported)" rows={10} className="w-full rounded border border-edge p-2.5 text-sm" /><div className="grid gap-2 sm:grid-cols-2"><input value={editing.meta_title || ''} onChange={(e) => setEditing({ ...editing, meta_title: e.target.value })} placeholder="SEO title" className="rounded border border-edge p-2.5 text-sm" /><input value={editing.meta_description || ''} onChange={(e) => setEditing({ ...editing, meta_description: e.target.value })} placeholder="SEO description" className="rounded border border-edge p-2.5 text-sm" /></div><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(editing.is_published)} onChange={(e) => setEditing({ ...editing, is_published: e.target.checked })} /> Publish page</label><div className="flex gap-2"><button onClick={save} className="btn-primary px-4 py-2 text-sm uppercase">Save page</button><button onClick={() => setEditing(null)} className="rounded border border-edge px-4 py-2 text-sm">Cancel</button></div></div>}
+  </div>;
 }
 
 /* ------------------------------------------------------------- Policy Pages */

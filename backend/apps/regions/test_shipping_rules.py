@@ -9,6 +9,7 @@ from apps.products.models import Product
 from .models import Region, ShippingRate, ShippingZone
 from .serializers import ShippingRateAdminSerializer
 from .shipping import calculate_shipping, calculate_shipping_options
+from django.core.management import call_command
 
 
 class ShippingRulesTests(TestCase):
@@ -99,3 +100,36 @@ class ShippingRulesTests(TestCase):
         weight, quantity = cart_shipping_metrics(cart)
         self.assertEqual(weight, Decimal('2250'))
         self.assertEqual(quantity, 3)
+
+    def test_seed_creates_checkout_safe_baseline_shipping_without_overwriting_rates(self):
+        self.region.delete()
+        Region.objects.create(
+            code='UK', name='United Kingdom', domain='uk.example.test',
+            currency_code='GBP', currency_symbol='£', tax_name='VAT', tax_rate=20,
+        )
+        Region.objects.create(
+            code='IN', name='India', domain='india.example.test',
+            currency_code='INR', currency_symbol='₹', tax_name='GST', tax_rate=18,
+        )
+        call_command('seed_shipping_defaults', verbosity=0)
+
+        uk = Region.objects.get(code='UK')
+        india = Region.objects.get(code='IN')
+        self.assertEqual(
+            calculate_shipping(uk, country='GB', subtotal='49.99'),
+            Decimal('5.00'),
+        )
+        self.assertEqual(
+            calculate_shipping(uk, country='GB', subtotal='50.00'),
+            Decimal('0.00'),
+        )
+        self.assertEqual(
+            calculate_shipping(india, country='IN', subtotal='2999'),
+            Decimal('150.00'),
+        )
+        rate = ShippingRate.objects.get(name='Standard UK delivery')
+        rate.price = Decimal('9.00')
+        rate.save(update_fields=['price'])
+        call_command('seed_shipping_defaults', verbosity=0)
+        rate.refresh_from_db()
+        self.assertEqual(rate.price, Decimal('9.00'))

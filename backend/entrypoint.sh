@@ -26,6 +26,10 @@ if [ "${SKIP_STARTUP_MAINTENANCE:-False}" != "True" ]; then
 
   # Idempotent: creates missing policy pages only, never overwrites admin edits.
   python manage.py seed_policy_pages
+
+  # A new database must have at least one staff-configurable shipping rule per
+  # market. This command is idempotent and preserves any existing admin setup.
+  python manage.py seed_shipping_defaults
 fi
 
 exec "$@"
