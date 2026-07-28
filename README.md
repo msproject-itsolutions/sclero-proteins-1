@@ -115,6 +115,10 @@ Open `http://localhost:3000/admin?section=settings&tab=shipping`.
 
 Checkout deliberately fails closed when no active matching zone/rate exists; it no longer invents a default shipping charge. Product weight must be maintained for weight-based rules.
 
+On a new deployment, startup creates editable nationwide baseline rules if they
+are missing: UK (£5, free from £50) and India (₹150, free from ₹3,000). They
+are never overwritten; adjust or replace them in the admin panel before launch.
+
 When a product has variants, the selected option is preserved as a distinct cart line. Variant price, option-derived weight, and stock are revalidated on the server at checkout; retired options fail with a customer-safe instruction instead of silently falling back to the base product.
 
 ### Other business settings

@@ -3,7 +3,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
-from apps.regions.models import Region, Warehouse
+from apps.regions.models import Region, ShippingRate, ShippingZone, Warehouse
 from apps.admin_dashboard.models import FeatureToggle
 
 User = get_user_model()
@@ -66,6 +66,38 @@ class Command(BaseCommand):
             }
         )
         self.stdout.write('Regions created (IN, UK)')
+
+        # 2a. A checkout cannot safely manufacture a delivery price when no
+        # rule matches.  Seed the published baseline rules only when they are
+        # absent, so a new production database is purchasable immediately
+        # while staff-owned zones and rates are never overwritten on re-runs.
+        default_shipping = (
+            (r_uk, 'United Kingdom', ['GB'], 'Standard UK delivery', 'Standard delivery', '5.00', '50.00', '3–5 business days'),
+            (r_in, 'India', ['IN'], 'Standard India delivery', 'Standard delivery', '150.00', '3000.00', '3–7 business days'),
+        )
+        for region, zone_name, countries, rate_name, method, price, free_above, eta in default_shipping:
+            zone, _ = ShippingZone.objects.get_or_create(
+                region=region,
+                name=zone_name,
+                defaults={
+                    'countries': countries,
+                    'description': 'Baseline nationwide rate. Manage in Admin → Shipping & Delivery.',
+                    'is_active': True,
+                },
+            )
+            ShippingRate.objects.get_or_create(
+                zone=zone,
+                name=rate_name,
+                defaults={
+                    'method': method,
+                    'rate_type': 'FLAT',
+                    'price': price,
+                    'free_above': free_above,
+                    'estimated_days': eta,
+                    'is_active': True,
+                },
+            )
+        self.stdout.write('Default shipping rules verified (UK, IN)')
 
         # 3. Create Warehouses
         w_in, _ = Warehouse.objects.get_or_create(
