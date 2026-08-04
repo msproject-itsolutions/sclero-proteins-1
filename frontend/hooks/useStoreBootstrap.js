@@ -38,16 +38,16 @@ export default function useStoreBootstrap() {
       fetch(getApiUrl('/api/geo/'))
         .then((r) => (r.ok ? r.json() : null))
         .then((geo) => {
-          // India only on a confident signal (Cloudflare/MaxMind/IP lookup).
-          // 'fallback' means the country is unknown — those visitors belong on
-          // the UK site per routing policy, regardless of the DB default region.
-          const isIndia = Boolean(geo && geo.region_code === 'IN' && geo.source !== 'fallback');
+          // The .com domain defaults to India. A confident non-Indian location
+          // may still be routed to the UK, while an unavailable geo service
+          // must never silently override that India default.
+          const isIndia = !geo || geo.source === 'fallback' || geo.region_code === 'IN';
           const target = hostForRegion(isIndia ? 'IN' : 'UK');
           const { pathname, search } = window.location;
           window.location.replace(`https://${target}${pathname}${search}`);
         })
         .catch(() => {
-          window.location.replace(`https://${hostForRegion('UK')}${window.location.pathname}`);
+          window.location.replace(`https://${hostForRegion('IN')}${window.location.pathname}`);
         });
       return;
     }

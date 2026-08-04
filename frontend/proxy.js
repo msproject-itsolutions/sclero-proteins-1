@@ -68,11 +68,10 @@ export function proxy(request) {
   const override = (request.cookies.get(REGION_COOKIE)?.value || '').toUpperCase();
   const wantsIN = override ? override === 'IN' : country === 'IN';
 
-  // .com is a pure geo-router: it forwards to a ccTLD. When an edge country is
-  // available (Cloudflare/Vercel) or the shopper has chosen, redirect instantly.
-  // Otherwise (plain VPS, no edge geo) pass through so the client can resolve the
-  // country server-side via /api/geo/ (IP/MaxMind) and redirect — see the
-  // .com handler in useStoreBootstrap.
+  // .com is a geo-router with India as the default. An explicit choice always
+  // wins; a confident non-Indian edge location is routed to the UK. When this
+  // shared VPS has no geo header, pass through so the client can apply the
+  // same India fallback — see useStoreBootstrap.
   if (host === COM_HOST) {
     if (!override && !country) {
       return NextResponse.next();
