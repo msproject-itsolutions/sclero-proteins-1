@@ -1,6 +1,7 @@
 from django.core.validators import RegexValidator
 from django.db import models
 from django.conf import settings
+from django.utils import timezone
 from apps.regions.models import Region
 from apps.common.fields import EncryptedJSONField, EncryptedTextField
 
@@ -45,6 +46,18 @@ class SystemSetting(models.Model):
 
     def __str__(self):
         return self.key
+
+
+class InstagramReelsConnection(models.Model):
+    """Singleton-style Meta connection used only to retrieve the brand's Reels."""
+    instagram_user_id = models.CharField(max_length=64, blank=True, default='')
+    access_token = EncryptedTextField(blank=True, default='')
+    is_enabled = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Instagram Reels connection'
+        verbose_name_plural = 'Instagram Reels connection'
 
 
 class HeroBannerSlide(models.Model):
@@ -143,6 +156,12 @@ class PaymentGateway(models.Model):
         ('TEST', 'Test / Sandbox'),
         ('LIVE', 'Live'),
     ]
+    VERIFICATION_STATUS_CHOICES = [
+        ('PENDING_VERIFICATION', 'Pending verification'),
+        ('CONNECTED', 'Connected'),
+        ('CONNECTION_FAILED', 'Connection failed'),
+        ('CONFIGURATION_ERROR', 'Configuration error'),
+    ]
 
     code = models.CharField(max_length=20, choices=GATEWAY_CHOICES, db_index=True)
     display_name = models.CharField(max_length=100, help_text="Label shown to customers at checkout")
@@ -166,6 +185,12 @@ class PaymentGateway(models.Model):
 
     supports_refunds = models.BooleanField(default=True)
     sort_order = models.PositiveIntegerField(default=0, help_text="Display order at checkout (lower first)")
+    verification_status = models.CharField(
+        max_length=30, choices=VERIFICATION_STATUS_CHOICES,
+        default='PENDING_VERIFICATION', db_index=True,
+    )
+    verification_message = models.TextField(blank=True, default='')
+    last_verified_at = models.DateTimeField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -185,6 +210,19 @@ class PaymentGateway(models.Model):
     def __str__(self):
         state = "ON" if self.is_enabled else "off"
         return f"{self.display_name} [{self.region.code}] ({state}/{self.mode})"
+
+    def mark_verification(self, ok, message='', configuration_error=False):
+        self.verification_status = (
+            'CONNECTED' if ok else ('CONFIGURATION_ERROR' if configuration_error else 'CONNECTION_FAILED')
+        )
+        self.verification_message = str(message)[:2000]
+        self.last_verified_at = timezone.now()
+        if not ok:
+            self.is_enabled = False
+        self.save(update_fields=[
+            'verification_status', 'verification_message', 'last_verified_at',
+            'is_enabled', 'updated_at',
+        ])
 
 
 class EmailTemplate(models.Model):

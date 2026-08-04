@@ -1,3 +1,9 @@
+import logging
+from urllib.parse import urlparse
+
+import requests
+from django.conf import settings
+from django.core.cache import cache
 from django.shortcuts import get_object_or_404
 from django.db.models import Q, Sum
 from django.utils import timezone
@@ -8,7 +14,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 from apps.users.permissions import require_permission
 from apps.regions.models import Region
-from .models import FeatureToggle, SystemSetting, HeroBannerSlide, PaymentGateway, EmailTemplate, MarketingIntegration, ContentPage, BlogPost, ApprovalRequest
+from .models import FeatureToggle, SystemSetting, HeroBannerSlide, PaymentGateway, EmailTemplate, MarketingIntegration, ContentPage, BlogPost, ApprovalRequest, InstagramReelsConnection
 from .store_config import (
     get_store_tax_mode,
     set_store_tax_mode,
@@ -27,6 +33,7 @@ from .serializers import (
     BlogPostSerializer,
     ApprovalRequestSerializer,
     CronJobRunSerializer,
+    InstagramReelsConnectionSerializer,
 )
 from django.http import HttpResponse
 from .reporting import generate_pdf_report
@@ -38,6 +45,12 @@ from apps.orders.payments import refund_payment, PaymentError
 from apps.regions.models import Warehouse
 from apps.inventory.models import StockLevel
 from apps.products.models import Product, ProductRegionConfig
+
+
+logger = logging.getLogger(__name__)
+
+
+logger = logging.getLogger(__name__)
 
 
 class StoreConfigView(APIView):
@@ -295,6 +308,30 @@ class PaymentGatewayViewSet(viewsets.ModelViewSet):
             return self.queryset.filter(region__code=region_code.upper())
         return self.queryset
 
+    def _verify_after_save(self, gateway):
+        from apps.orders.payments import PaymentError, get_adapter
+
+        if not gateway.is_configured:
+            gateway.mark_verification(
+                False, 'Add the required credentials before enabling this gateway.',
+                configuration_error=True,
+            )
+            return
+        try:
+            result = get_adapter(gateway).test_connection()
+        except PaymentError as exc:
+            gateway.mark_verification(False, str(exc))
+            return
+        gateway.mark_verification(True, result.get('message', 'Verification successful.'))
+
+    def perform_create(self, serializer):
+        gateway = serializer.save()
+        self._verify_after_save(gateway)
+
+    def perform_update(self, serializer):
+        gateway = serializer.save()
+        self._verify_after_save(gateway)
+
     @action(detail=False, methods=['get'])
     def catalog(self, request):
         from .provider_catalog import payment_provider_catalog
@@ -310,7 +347,9 @@ class PaymentGatewayViewSet(viewsets.ModelViewSet):
         try:
             result = get_adapter(gateway).test_connection()
         except PaymentError as exc:
+            gateway.mark_verification(False, str(exc))
             return Response({'ok': False, 'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        gateway.mark_verification(True, result.get('message', 'Verification successful.'))
         return Response(result)
 
     @action(detail=False, methods=['get'], permission_classes=[AllowAny])
@@ -673,6 +712,94 @@ class PublicSiteSettingView(APIView):
         if not setting:
             return Response({"key": key, "value": None})
         return Response({"key": setting.key, "value": setting.value, "updated_at": setting.updated_at})
+
+
+class InstagramReelsView(APIView):
+    """Provide the connected Instagram Professional account's Reels safely."""
+    permission_classes = [AllowAny]
+    throttle_scope = 'instagram'
+    cache_key = 'public:instagram-reels:v1'
+    graph_base = 'https://graph.facebook.com'
+
+    @staticmethod
+    def _safe_next_url(value):
+        parsed = urlparse(value or '')
+        return parsed.scheme == 'https' and parsed.netloc == 'graph.facebook.com'
+
+    def get(self, request):
+        cached = cache.get(self.cache_key)
+        if cached is not None:
+            return Response({'reels': cached, 'configured': True, 'cached': True})
+
+        connection = InstagramReelsConnection.objects.order_by('-updated_at').first()
+        if connection and not connection.is_enabled:
+            return Response({'reels': [], 'configured': False, 'cached': False})
+        user_id = connection.instagram_user_id if connection else settings.INSTAGRAM_GRAPH_USER_ID
+        access_token = connection.access_token if connection else settings.INSTAGRAM_GRAPH_ACCESS_TOKEN
+        if not user_id or not access_token:
+            return Response({'reels': [], 'configured': False, 'cached': False})
+
+        reels = []
+        url = f'{self.graph_base}/v22.0/{user_id}/media'
+        params = {
+            'fields': 'id,caption,media_type,media_product_type,permalink,thumbnail_url,timestamp',
+            'limit': min(settings.INSTAGRAM_REELS_MAX_ITEMS, 100),
+            'access_token': access_token,
+        }
+        try:
+            while url and len(reels) < settings.INSTAGRAM_REELS_MAX_ITEMS:
+                response = requests.get(url, params=params, timeout=8)
+                response.raise_for_status()
+                payload = response.json()
+                for media in payload.get('data', []):
+                    if media.get('media_product_type') != 'REELS' or not media.get('permalink'):
+                        continue
+                    reels.append({
+                        'id': str(media.get('id', '')),
+                        'url': media['permalink'],
+                        'title': (media.get('caption') or 'Watch our latest Reel').splitlines()[0][:120],
+                        'thumbnailUrl': media.get('thumbnail_url', ''),
+                        'publishedAt': media.get('timestamp', ''),
+                    })
+                    if len(reels) >= settings.INSTAGRAM_REELS_MAX_ITEMS:
+                        break
+                next_url = payload.get('paging', {}).get('next')
+                url = next_url if self._safe_next_url(next_url) else None
+                # Meta's cursor link carries its own signed query parameters.
+                params = None
+        except (requests.RequestException, ValueError, TypeError):
+            logger.warning('Unable to refresh Instagram Reels feed', exc_info=True)
+            return Response({'reels': [], 'configured': True, 'cached': False, 'available': False})
+
+        cache.set(self.cache_key, reels, timeout=settings.INSTAGRAM_REELS_CACHE_SECONDS)
+        return Response({'reels': reels, 'configured': True, 'cached': False, 'available': True})
+
+
+class InstagramReelsConnectionAdminView(APIView):
+    """One secure, Admin Panel-managed Meta connection for the storefront feed."""
+    permission_classes = [require_permission('settings.manage')]
+
+    def get_object(self):
+        return InstagramReelsConnection.objects.order_by('-updated_at').first()
+
+    def get(self, request):
+        connection = self.get_object()
+        if connection:
+            return Response(InstagramReelsConnectionSerializer(connection).data)
+        return Response({
+            'instagram_user_id': '',
+            'access_token_configured': bool(settings.INSTAGRAM_GRAPH_ACCESS_TOKEN),
+            'is_enabled': True,
+            'using_environment_fallback': bool(settings.INSTAGRAM_GRAPH_USER_ID and settings.INSTAGRAM_GRAPH_ACCESS_TOKEN),
+        })
+
+    def put(self, request):
+        connection = self.get_object()
+        serializer = InstagramReelsConnectionSerializer(connection, data=request.data, partial=True) if connection else InstagramReelsConnectionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        saved = serializer.save()
+        cache.delete(InstagramReelsView.cache_key)
+        return Response(InstagramReelsConnectionSerializer(saved).data)
 
 
 class ReportAnalyticsView(APIView):

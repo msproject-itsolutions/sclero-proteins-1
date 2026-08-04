@@ -220,7 +220,13 @@ class MyOrdersView(generics.ListAPIView):
     def get_queryset(self):
         user = self.request.user
         return (
-            Order.objects.filter(Q(user=user) | Q(email__iexact=user.email))
+            # A shopper should only see a completed sale in order history.
+            # Unpaid attempts are retained for recovery/reconciliation but are
+            # deliberately not presented as an order.
+            Order.objects.filter(
+                Q(user=user) | Q(email__iexact=user.email),
+                payment_status__in=['PAID', 'PARTIALLY_CAPTURED', 'REFUNDED'],
+            )
             .prefetch_related(
                 Prefetch('items', queryset=OrderItem.objects.select_related('product')),
                 'refunds',
@@ -760,6 +766,14 @@ class CheckoutView(views.APIView):
                 else f"VAT: {settings.UK_VAT_NUMBER}"
             ),
             "invoice_type": "GST Tax Invoice" if region_code == 'IN' else "VAT Receipt",
+            "hsn_summary": [
+                {
+                    "hsn_code": item.product.hsn_code or '',
+                    "quantity": item.quantity,
+                    "tax_amount": str(item.tax_amount),
+                }
+                for item in order.items.select_related('product')
+            ] if region_code == 'IN' else [],
         }
         
         Invoice.objects.create(
@@ -986,6 +1000,12 @@ class OrderAdminViewSet(viewsets.ModelViewSet):
         queryset = Order.objects.select_related('user', 'region', 'invoice').prefetch_related(
             Prefetch('items', queryset=OrderItem.objects.select_related('product')),
             'refunds', 'payment_logs',
+        )
+        # The Orders workspace is for money-received sales only. Pending or
+        # failed attempts remain available to the recovery/reconciliation
+        # workflow, never mixed into fulfilment work.
+        queryset = queryset.filter(
+            payment_status__in=['PAID', 'PARTIALLY_CAPTURED', 'REFUNDED']
         )
         
         # Enforce Regional Restrictions for Country Managers
@@ -1224,7 +1244,7 @@ class OrderAdminViewSet(viewsets.ModelViewSet):
                 # fire the new order_shipped template (best-effort each).
                 _send_order_event_with_logging('shipment_dispatched', order.id)
                 _send_order_event_with_logging('order_shipped', order.id)
-            elif new_status == 'DELIVERED':
+            elif new_status in ('DELIVERED', 'COMPLETED'):
                 # Stamp the delivery time once — the review-request job counts
                 # 30 days from here, and re-saving the order must not reset it.
                 if not order.delivered_at:
@@ -1372,6 +1392,10 @@ class OrderAdminViewSet(viewsets.ModelViewSet):
         )
 
         pdf_rel_path, inv_num = generate_invoice_pdf(order)
+        if pdf_rel_path:
+            invoice_obj.pdf_file = pdf_rel_path
+            invoice_obj.invoice_number = inv_num
+            invoice_obj.save(update_fields=['pdf_file', 'invoice_number'])
         full_path = os.path.join(settings.MEDIA_ROOT, pdf_rel_path)
 
         if os.path.exists(full_path):
@@ -1409,6 +1433,7 @@ class OrderAdminViewSet(viewsets.ModelViewSet):
         processing_orders = queryset.filter(status='PROCESSING').count()
         shipped_orders = queryset.filter(status='SHIPPED').count()
         delivered_orders = queryset.filter(status='DELIVERED').count()
+        completed_orders = queryset.filter(status='COMPLETED').count()
 
         return Response({
             'total_orders': total_orders,
@@ -1417,6 +1442,7 @@ class OrderAdminViewSet(viewsets.ModelViewSet):
             'processing_orders': processing_orders,
             'shipped_orders': shipped_orders,
             'delivered_orders': delivered_orders,
+            'completed_orders': completed_orders,
         })
 
 
@@ -1470,16 +1496,37 @@ class OrderAdminViewSet(viewsets.ModelViewSet):
 
 
 class AbandonedCheckoutsView(generics.ListAPIView):
-    """Carts that hold items but never converted to an order — abandoned checkouts.
+    """Unpaid attempts and carts that hold items — abandoned checkouts.
     Gated by 'orders.view'."""
     permission_classes = [require_permission('orders.view')]
 
     def list(self, request):
+        # A checkout attempt which reached a gateway but has not received a
+        # confirmed payment is intentionally shown here, not in Orders. The
+        # reconciliation worker and signed webhooks move it to Orders only
+        # after the gateway confirms the full payment.
+        pending_orders = (
+            Order.objects.filter(payment_status__in=['PENDING', 'AUTHORIZED', 'FAILED'])
+            .select_related('region').prefetch_related('items__product')
+        )
+        out = [
+            {
+                'id': f'payment-{order.id}', 'order_id': order.id,
+                'entity_type': 'PAYMENT_ATTEMPT', 'session_id': f'payment-{order.payment_id or order.id}',
+                'region': order.region.code, 'currency': order.currency_code,
+                'email': order.email, 'item_count': sum(item.quantity for item in order.items.all()),
+                'items': [{'name': item.product.name, 'qty': item.quantity} for item in order.items.all()],
+                'value': str(order.total), 'recovery_status': 'AWAITING_PAYMENT',
+                'recovery_attempts': 0, 'last_recovery_at': None,
+                'created_at': order.created_at.isoformat(), 'updated_at': order.updated_at.isoformat(),
+                'payment_method': order.payment_method, 'payment_status': order.payment_status,
+            }
+            for order in pending_orders
+        ]
         # A cart that still holds items is an in-progress / abandoned checkout
         # (the checkout flow clears the cart on a successful order).
         carts = (Cart.objects.filter(items__isnull=False).distinct()
                  .select_related('region', 'user').prefetch_related('items__product'))
-        out = []
         for c in carts:
             items = list(c.items.all())
             if not items:
@@ -1491,6 +1538,7 @@ class AbandonedCheckoutsView(generics.ListAPIView):
                 total += price * it.quantity
             out.append({
                 'id': c.id, 'session_id': c.session_id, 'region': c.region.code,
+                'entity_type': 'CART',
                 'currency': c.region.currency_code,
                 'email': c.user.email if c.user else None,
                 'item_count': sum(i.quantity for i in items),

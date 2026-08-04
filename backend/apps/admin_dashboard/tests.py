@@ -2,10 +2,10 @@ from django.test import TestCase
 from django.db import connection
 
 from apps.regions.models import Region
-from .models import HeroBannerSlide, MarketingIntegration, PaymentGateway, SystemSetting
+from .models import HeroBannerSlide, InstagramReelsConnection, MarketingIntegration, PaymentGateway, SystemSetting
 from .serializers import (
     HeroBannerSlideSerializer, MarketingIntegrationSerializer,
-    PaymentGatewayAdminSerializer, SystemSettingSerializer,
+    InstagramReelsConnectionSerializer, PaymentGatewayAdminSerializer, SystemSettingSerializer,
 )
 
 
@@ -69,6 +69,23 @@ class SecretSerializationTests(TestCase):
         self.assertNotIn('extra_config', data)
         self.assertTrue(data['credential_status']['secret_key'])
         self.assertTrue(data['credential_status']['webhook_secret'])
+
+    def test_instagram_reels_token_is_encrypted_and_write_only(self):
+        instagram_connection = InstagramReelsConnection.objects.create(
+            instagram_user_id='17841400000000000',
+            access_token='instagram-private-token',
+        )
+        with connection.cursor() as cursor:
+            cursor.execute(
+                'SELECT access_token FROM admin_dashboard_instagramreelsconnection WHERE id = %s',
+                [instagram_connection.id],
+            )
+            raw_token = cursor.fetchone()[0]
+        self.assertTrue(raw_token.startswith('enc:v1:'))
+        self.assertNotIn('instagram-private-token', raw_token)
+        data = InstagramReelsConnectionSerializer(instagram_connection).data
+        self.assertNotIn('access_token', data)
+        self.assertTrue(data['access_token_configured'])
 
 
 class HeroBannerSettingsTests(TestCase):

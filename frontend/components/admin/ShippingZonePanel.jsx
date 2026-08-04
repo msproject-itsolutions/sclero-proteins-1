@@ -61,9 +61,9 @@ function RateTypeBadge({ type }) {
 }
 
 /* ════════════════════════════════════════════
-   Rate Editor — rendered as bottom-sheet modal
+   Rate Editor — rendered as a dedicated admin workspace
    ════════════════════════════════════════════ */
-function RateEditorModal({ rate, zoneId, onSave, onClose }) {
+function RateEditorPage({ rate, zoneId, onSave, onClose }) {
   const [r, setR] = useState(rate || {
     zone: zoneId, name: '', method: 'Standard Shipping', rate_type: 'FLAT',
     price: '0.00', min_value: '', max_value: '',
@@ -156,7 +156,7 @@ function RateEditorModal({ rate, zoneId, onSave, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-surface-overlay backdrop-blur-sm p-0 sm:p-4">
+    <div className="admin-action-page flex flex-col items-center">
       <div className="w-full sm:max-w-xl bg-white rounded-t-lg sm:rounded-lg shadow-overlay border border-edge overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-edge flex-shrink-0">
@@ -876,9 +876,9 @@ export default function ShippingZonePanel({
         />
       )}
 
-      {/* Rate Editor (modal) */}
+      {/* Rate editor workspace */}
       {editingRate && (
-        <RateEditorModal
+        <RateEditorPage
           rate={editingRate}
           zoneId={editingRate.zone}
           onSave={onSaveRate}

@@ -42,19 +42,19 @@ export default function AboutPage() {
       <main>
         <section className="border-b border-edge bg-surface section">
           <div className="container-page">
-            <div className="grid gap-10 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
+            <div className="mx-auto max-w-3xl text-center">
               <div>
                 <p className="kicker mb-4">Our Story</p>
-                <h1 className="text-display max-w-3xl">
+                <h1 className="text-display brand-heading-gradient mx-auto max-w-3xl">
                   We built <EggOText text="Sclero" /> to make wellness shopping feel more <em className="text-italic-accent">clear, trustworthy, and human</em>.
                 </h1>
-                <p className="mt-5 max-w-2xl text-[16px] leading-[1.85] text-ink-secondary">
+                <p className="mx-auto mt-5 max-w-2xl text-[16px] leading-[1.85] text-ink-secondary">
                   Sclero Proteins was shaped around a simple idea: people deserve better guidance when choosing products for collagen support, joint care, and everyday wellness. Instead of creating more noise, we want to create more clarity.
                 </p>
-                <p className="mt-4 max-w-2xl text-[16px] leading-[1.85] text-ink-secondary">
+                <p className="mx-auto mt-4 max-w-2xl text-[16px] leading-[1.85] text-ink-secondary">
                   That means cleaner presentation, easier product discovery, and a shopping experience that helps customers feel confident from the first visit through to checkout.
                 </p>
-                <div className="mt-7 flex flex-wrap gap-3">
+                <div className="mt-7 flex flex-wrap justify-center gap-3">
                   <Link href="/products" className="btn-primary px-6 py-3 text-sm">
                     <ShoppingBag className="h-4 w-4" />
                     Shop products
@@ -64,23 +64,13 @@ export default function AboutPage() {
                   </Link>
                 </div>
               </div>
-
-              <div className="gradient-ring overflow-hidden rounded-[28px] border border-edge bg-white shadow-elevated">
-                <img
-                  src="/about/founder-garden.jpg"
-                  alt="Sclero Proteins founder standing in the garden outside the company premises"
-                  className="h-full min-h-[420px] w-full object-cover"
-                  width={1200}
-                  height={1800}
-                />
-              </div>
             </div>
           </div>
         </section>
 
         <section className="bg-white section">
           <div className="container-page">
-            <div className="max-w-3xl">
+            <div className="mx-auto max-w-3xl text-center">
               <p className="kicker">What Matters To Us</p>
               <h2 className="text-heading-1 mt-3">A stronger product story starts with honesty, consistency, and care.</h2>
               <p className="mt-4 text-[15px] leading-[1.8] text-ink-secondary">
@@ -107,7 +97,7 @@ export default function AboutPage() {
 
         <section className="bg-white section pt-0">
           <div className="container-page">
-            <div className="max-w-3xl">
+            <div className="mx-auto max-w-3xl text-center">
               <p className="kicker">Behind The Brand</p>
               <h2 className="text-heading-1 mt-3">The people and the place behind every batch.</h2>
               <p className="mt-4 text-[15px] leading-[1.8] text-ink-secondary">

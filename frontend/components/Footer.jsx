@@ -5,10 +5,12 @@ import Link from 'next/link';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   Globe,
+  Facebook,
   Instagram,
   Linkedin,
   Mail,
   Send,
+  Twitter,
   Youtube,
 } from 'lucide-react';
 import { getApiUrl, postJson } from '../lib/api';
@@ -129,7 +131,9 @@ export default function Footer() {
   };
 
   const socials = [
-    { icon: Instagram, label: 'Instagram', href: socialLinks.instagram },
+    { icon: Instagram, label: 'Instagram', href: socialLinks.instagram || 'https://www.instagram.com/scleroproteins/' },
+    { icon: Facebook, label: 'Facebook', href: socialLinks.facebook },
+    { icon: Twitter, label: 'X (Twitter)', href: socialLinks.twitter || socialLinks.x },
     { icon: Linkedin, label: 'LinkedIn', href: socialLinks.linkedin },
     { icon: Youtube, label: 'YouTube', href: socialLinks.youtube },
   ].filter((social) => /^https?:\/\//i.test(social.href || ''));

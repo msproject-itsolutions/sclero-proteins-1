@@ -504,9 +504,9 @@ function VariantsEditor({ editing, onChange, media }) {
         </div>
       )}
 
-      {/* Image picker overlay */}
+      {/* Variant image selection workspace */}
       {showImagePicker !== null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-overlay backdrop-blur-sm p-4">
+        <div className="admin-action-page flex flex-col items-center">
           <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-overlay">
             <div className="mb-4 flex items-center justify-between">
               <p className="font-semibold text-ink-primary">Pick image for variant</p>

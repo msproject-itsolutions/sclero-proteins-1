@@ -59,6 +59,7 @@ class Order(models.Model):
         ('PROCESSING', 'Processing'),
         ('SHIPPED', 'Shipped'),
         ('DELIVERED', 'Delivered'),
+        ('COMPLETED', 'Completed'),
         ('CANCELLED', 'Cancelled'),
         ('REFUNDED', 'Refunded'),
     ]

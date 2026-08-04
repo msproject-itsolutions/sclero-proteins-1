@@ -23,6 +23,7 @@ import StoreShell from '../components/StoreShell';
 import HeroSection from '../components/HeroSection';
 import ProductCatalog from '../components/ProductCatalog';
 import QuizComponent from '../components/QuizComponent';
+import InstagramReelsSection from '../components/InstagramReelsSection';
 import { postJson } from '../lib/api';
 import { normalizeHomepageSettings } from '../lib/homepageContent';
 import { safePublicHref } from '../lib/safeUrl';
@@ -218,7 +219,7 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
           <div className="grid items-center gap-10 lg:grid-cols-[1.1fr_0.9fr]">
             <div className="reveal max-w-2xl">
               <span className="kicker">{homepageSettings.quizSection.kicker}</span>
-              <h2 className="text-heading-1 mt-3">{homepageSettings.quizSection.title}</h2>
+              <h2 className="text-heading-1 mt-3 text-[#101871]">{homepageSettings.quizSection.title}</h2>
               <p className="mt-4 max-w-xl text-body">
                 {homepageSettings.quizSection.description}
               </p>
@@ -248,7 +249,7 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
         <div className="container-page">
           <div className="reveal max-w-2xl">
             <span className="kicker">{homepageSettings.chooseSection.kicker}</span>
-            <h2 className="text-heading-1 mt-3">{homepageSettings.chooseSection.title}</h2>
+            <h2 className="text-heading-1 mt-3 text-[#101871]">{homepageSettings.chooseSection.title}</h2>
             <p className="mt-4 text-body">
               {homepageSettings.chooseSection.description}
             </p>
@@ -277,7 +278,7 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
         <div className="container-page">
           <div className="reveal text-center">
             <span className="kicker">{homepageSettings.comparisonSection.kicker}</span>
-            <h2 className="text-heading-1 mt-3">{homepageSettings.comparisonSection.title}</h2>
+            <h2 className="text-heading-1 mt-3 text-[#101871]">{homepageSettings.comparisonSection.title}</h2>
             <p className="mx-auto mt-4 max-w-3xl text-body">
               {homepageSettings.comparisonSection.description}
             </p>
@@ -331,7 +332,7 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
             </div>
             <div className="reveal order-1 lg:order-2">
               <span className="kicker">{homepageSettings.ingredientsSection.kicker}</span>
-              <h2 className="text-heading-1 mt-3">{homepageSettings.ingredientsSection.title}</h2>
+              <h2 className="text-heading-1 mt-3 text-[#101871]">{homepageSettings.ingredientsSection.title}</h2>
               <p className="mt-5 text-body">
                 {homepageSettings.ingredientsSection.description}
               </p>
@@ -362,7 +363,7 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
           <div className="conversion-spotlight premium-panel grid items-center gap-10 overflow-hidden rounded-[28px] p-8 lg:grid-cols-[0.9fr_1.1fr] lg:p-10">
             <div className="reveal">
               <span className="kicker">{homepageSettings.conversionSection.kicker}</span>
-              <h2 className="text-heading-1 mt-3">{homepageSettings.conversionSection.title}</h2>
+              <h2 className="text-heading-1 mt-3 text-[#101871]">{homepageSettings.conversionSection.title}</h2>
               <p className="mt-4 max-w-xl text-body">
                 {homepageSettings.conversionSection.description}
               </p>
@@ -420,7 +421,7 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
         <div className="container-page">
           <div className="reveal text-center">
             <span className="kicker">{homepageSettings.faqSection.kicker}</span>
-            <h2 className="text-heading-1 mt-3">{homepageSettings.faqSection.title}</h2>
+            <h2 className="text-heading-1 mt-3 text-[#101871]">{homepageSettings.faqSection.title}</h2>
             <p className="mx-auto mt-4 max-w-xl text-body">{homepageSettings.faqSection.description}</p>
           </div>
 
@@ -459,7 +460,7 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
           <div className="mb-12 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div className="reveal max-w-2xl">
               <span className="kicker">{homepageSettings.educationSection.kicker}</span>
-              <h2 className="text-heading-1 mt-3">{homepageSettings.educationSection.title}</h2>
+              <h2 className="text-heading-1 mt-3 text-[#101871]">{homepageSettings.educationSection.title}</h2>
               <p className="mt-4 text-body">
                 {homepageSettings.educationSection.description}
               </p>
@@ -492,13 +493,17 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
       </section>
       )}
 
+      {homepageSettings.instagramReels?.enabled !== false && (
+        <InstagramReelsSection settings={homepageSettings.instagramReels} />
+      )}
+
       {homepageSettings.inquirySection.enabled !== false && (
       <section className="energy-wave home-section-glow section">
         <div className="container-page">
           <div className="inquiry-spotlight premium-panel grid gap-8 rounded-[28px] p-8 md:p-10 lg:grid-cols-[0.9fr_1.1fr]">
             <div className="reveal">
               <span className="kicker">{homepageSettings.inquirySection.kicker}</span>
-              <h2 className="text-heading-1 mt-3">{homepageSettings.inquirySection.title}</h2>
+              <h2 className="text-heading-1 mt-3 text-[#101871]">{homepageSettings.inquirySection.title}</h2>
               <p className="mt-4 max-w-md text-body">
                 {homepageSettings.inquirySection.description}
               </p>

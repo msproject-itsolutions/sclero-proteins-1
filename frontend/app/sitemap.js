@@ -29,6 +29,18 @@ async function fetchProducts() {
   }
 }
 
+async function fetchBlogPosts() {
+  try {
+    const res = await fetch(`${API_URL}/api/blog-posts/`, { cache: 'no-store' });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const list = Array.isArray(data) ? data : (data.results || []);
+    return list.filter((post) => post && post.slug);
+  } catch {
+    return [];
+  }
+}
+
 export default async function sitemap() {
   const routes = [
     '',
@@ -37,6 +49,9 @@ export default async function sitemap() {
     '/about',
     '/contact',
     '/blog',
+    '/faq',
+    '/glossary',
+    '/knowledge-hub',
     '/policies/privacy',
     '/policies/terms',
     '/policies/shipping',
@@ -54,9 +69,10 @@ export default async function sitemap() {
 
   // Dynamic entries — fetched in parallel. If the backend is unreachable at
   // build time, each helper returns [] so the sitemap still ships static routes.
-  const [pages, products] = await Promise.all([
+  const [pages, products, posts] = await Promise.all([
     fetchPublishedPages(),
     fetchProducts(),
+    fetchBlogPosts(),
   ]);
 
   const pageEntries = pages.map((p) => ({
@@ -73,5 +89,12 @@ export default async function sitemap() {
     priority: 0.8,
   }));
 
-  return [...base, ...productEntries, ...pageEntries];
+  const blogEntries = posts.map((post) => ({
+    url: `${BASE_URL}/blog/${post.slug}`,
+    lastModified: post.updated_at || post.published_at ? new Date(post.updated_at || post.published_at) : new Date(),
+    changeFrequency: 'monthly',
+    priority: 0.7,
+  }));
+
+  return [...base, ...productEntries, ...blogEntries, ...pageEntries];
 }

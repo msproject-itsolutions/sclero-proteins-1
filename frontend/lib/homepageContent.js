@@ -320,6 +320,14 @@ export const DEFAULT_HOMEPAGE_SETTINGS = {
       },
     ],
   },
+  instagramReels: {
+    enabled: true,
+    kicker: 'Follow our journey',
+    title: 'Sclero Proteins on Instagram',
+    description: 'Product stories, science-led wellness notes, and everyday routines from @scleroproteins.',
+    profileUrl: 'https://www.instagram.com/scleroproteins/',
+    reels: [],
+  },
   inquirySection: {
     enabled: true,
     kicker: 'Need Help Choosing?',

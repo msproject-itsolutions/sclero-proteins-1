@@ -45,7 +45,7 @@ from apps.admin_dashboard.views import (
     ApprovalRequestViewSet, PublishedContentPageListView, PublishedContentPageDetailView,
     CronJobRunViewSet, PublishedPolicyPagesView,
     PublishedBlogPostListView, PublishedBlogPostDetailView, PublicSiteSettingView,
-    StoreConfigView, TaxSettingsAdminView, SmtpTestView,
+    StoreConfigView, TaxSettingsAdminView, SmtpTestView, InstagramReelsView, InstagramReelsConnectionAdminView,
 )
 from apps.audit.views import AuditLogViewSet
 from apps.enquiries.views import BulkEnquiryCreateView, BulkEnquiryAdminViewSet, NewsletterSubscribeView
@@ -117,10 +117,12 @@ urlpatterns = [
     path('api/detect-region/', detect_region, name='detect_region'),
     path('api/geo/', geo_detect, name='geo_detect'),
     path('api/store-config/', StoreConfigView.as_view(), name='store_config'),
+    path('api/instagram/reels/', InstagramReelsView.as_view(), name='instagram_reels'),
     path('api/shipping/lookup/', PostcodeLookupView.as_view(), name='shipping_lookup'),
     path('api/shipping/calculate/', ShippingCalculateView.as_view(), name='shipping_calculate'),
     path('api/admin/tax-settings/', TaxSettingsAdminView.as_view(), name='admin_tax_settings'),
     path('api/admin/smtp-test/', SmtpTestView.as_view(), name='admin_smtp_test'),
+    path('api/admin/instagram-reels/', InstagramReelsConnectionAdminView.as_view(), name='admin_instagram_reels'),
     path('api/newsletter/subscribe/', NewsletterSubscribeView.as_view(), name='newsletter_subscribe'),
     path('api/push/config/', PushConfigurationView.as_view(), name='push_config'),
     path('api/push/subscriptions/', PushSubscriptionView.as_view(), name='push_subscriptions'),

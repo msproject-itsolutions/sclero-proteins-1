@@ -297,6 +297,31 @@ class ShippingProviderAdminViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(region__code=region_code.upper())
         return queryset
 
+    def _verify_after_save(self, provider):
+        from .providers import ShippingProviderError, get_shipping_adapter
+
+        if not provider.is_configured:
+            provider.mark_connection(False, 'Complete all required credentials and pickup settings before enabling this provider.')
+            provider.is_enabled = False
+            provider.save(update_fields=['is_enabled', 'updated_at'])
+            return
+        try:
+            get_shipping_adapter(provider).test_connection()
+        except ShippingProviderError as exc:
+            provider.mark_connection(False, str(exc))
+            provider.is_enabled = False
+            provider.save(update_fields=['is_enabled', 'updated_at'])
+            return
+        provider.mark_connection(True)
+
+    def perform_create(self, serializer):
+        provider = serializer.save()
+        self._verify_after_save(provider)
+
+    def perform_update(self, serializer):
+        provider = serializer.save()
+        self._verify_after_save(provider)
+
     @action(detail=False, methods=['get'])
     def catalog(self, request):
         from .providers import shipping_provider_catalog

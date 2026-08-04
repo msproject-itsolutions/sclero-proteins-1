@@ -399,6 +399,7 @@ REST_FRAMEWORK = {
         'analytics': os.getenv('DRF_THROTTLE_ANALYTICS', '10000/min' if DEBUG else '600/min'),
         'media_upload': os.getenv('DRF_THROTTLE_MEDIA_UPLOAD', '1000/hour' if DEBUG else '100/hour'),
         'push': os.getenv('DRF_THROTTLE_PUSH', '1000/hour' if DEBUG else '30/hour'),
+        'instagram': os.getenv('DRF_THROTTLE_INSTAGRAM', '1000/hour' if DEBUG else '120/hour'),
     },
 }
 
@@ -427,6 +428,12 @@ VAPID_PRIVATE_KEY = os.getenv('VAPID_PRIVATE_KEY', '').strip()
 VAPID_SUBJECT = os.getenv('VAPID_SUBJECT', f'mailto:{DEFAULT_FROM_EMAIL}').strip()
 SITE_URL = os.getenv('SITE_URL', '')
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', os.getenv('NEXT_PUBLIC_GOOGLE_CLIENT_ID', '')).strip()
+# Meta / Instagram Graph API values are server-only. Never expose the access
+# token through a NEXT_PUBLIC_* environment variable.
+INSTAGRAM_GRAPH_USER_ID = os.getenv('INSTAGRAM_GRAPH_USER_ID', '').strip()
+INSTAGRAM_GRAPH_ACCESS_TOKEN = os.getenv('INSTAGRAM_GRAPH_ACCESS_TOKEN', '').strip()
+INSTAGRAM_REELS_CACHE_SECONDS = max(60, int(os.getenv('INSTAGRAM_REELS_CACHE_SECONDS', '600')))
+INSTAGRAM_REELS_MAX_ITEMS = min(500, max(1, int(os.getenv('INSTAGRAM_REELS_MAX_ITEMS', '500'))))
 COMPANY_REGISTRATION_NUMBER = os.getenv('COMPANY_REGISTRATION_NUMBER', '').strip()
 UK_VAT_NUMBER = os.getenv('UK_VAT_NUMBER', '').strip()
 IN_GSTIN = os.getenv('IN_GSTIN', '').strip()

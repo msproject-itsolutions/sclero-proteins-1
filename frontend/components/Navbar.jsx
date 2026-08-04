@@ -262,7 +262,7 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
     return pathname === url || pathname.startsWith(`${url}/`);
   };
 
-  const navLinkClass = 'relative whitespace-nowrap px-0.5 py-2 text-[12.5px] font-semibold text-ink-secondary transition-colors hover:text-ink-primary xl:text-[13px]';
+  const navLinkClass = 'relative whitespace-nowrap px-1 py-2 text-sm font-bold tracking-[0.01em] text-ink-secondary transition-colors hover:text-ink-primary xl:text-[15px]';
   return (
     <nav className="energy-navbar sticky top-0 z-40 w-full border-b border-edge/80 bg-white/95 shadow-[0_10px_30px_-24px_rgba(16,24,113,0.55)] backdrop-blur-xl">
       <div className="mx-auto flex h-[92px] max-w-container items-center justify-between gap-3 px-3 sm:px-5 lg:px-4">
@@ -276,7 +276,7 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
             />
           </Link>
 
-          <div className="hidden items-center gap-4 lg:flex xl:gap-5">
+          <div className="hidden items-center gap-5 xl:flex xl:gap-7">
             {navLinks.map((link, index) => {
               const isProducts = link.mega_menu || link.url === '/products';
               const activeClass = isActiveLink(link.url) ? 'text-ink-primary' : '';
@@ -297,7 +297,7 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
                       <span className={`absolute inset-x-1 -bottom-[14px] h-[2px] rounded-full bg-brand-gradient transition-opacity ${isActiveLink(link.url) ? 'opacity-100' : 'opacity-0'}`} />
                     </Link>
                     {showShopMenu && categories.length > 0 && (
-                      <div className="absolute left-0 top-full pt-4">
+                      <div className="animate-fade-in absolute left-0 top-full origin-top-left pt-4">
                         <div className="w-72 rounded-[24px] border border-edge bg-white p-3 shadow-elevated">
                           <Link href="/products" className="block rounded-2xl px-4 py-3 text-sm font-semibold text-ink-primary transition-colors hover:bg-surface-muted">
                             Shop all products
@@ -439,7 +439,7 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
             aria-label="Open navigation menu"
             aria-expanded={mobileOpen}
             aria-controls="mobile-nav-drawer"
-            className="hit-target flex items-center justify-center rounded-full border border-edge bg-white p-2.5 text-ink-primary transition-all hover:border-edge-focus hover:text-ink-accent lg:hidden"
+            className="hit-target flex items-center justify-center rounded-full border border-edge bg-white p-2.5 text-ink-primary transition-all hover:border-edge-focus hover:text-ink-accent xl:hidden"
           >
             <Menu className="h-4 w-4" aria-hidden="true" />
           </button>
@@ -447,7 +447,7 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
       </div>
 
       {mobileOpen && (
-        <div id="mobile-nav-drawer" className="fixed inset-0 z-[80] lg:hidden" role="dialog" aria-modal="true" aria-label="Mobile navigation">
+        <div id="mobile-nav-drawer" className="fixed inset-0 z-[80] xl:hidden" role="dialog" aria-modal="true" aria-label="Mobile navigation">
           <div className="absolute inset-0 bg-surface-overlay backdrop-blur-sm" onClick={closeMobile} />
 
           <nav aria-label="Mobile navigation" className="fixed left-0 top-0 flex h-dvh w-[min(92vw,24rem)] max-w-full flex-col overflow-y-auto bg-white shadow-overlay animate-drawer-in-left">

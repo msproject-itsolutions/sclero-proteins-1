@@ -34,6 +34,25 @@
 
   img {
     user-select: none;
+    max-width: 100%;
+  }
+}
+
+/* Admin actions use dedicated workspaces instead of blocking modal dialogs. */
+.admin-action-page {
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  overflow-y: auto;
+  background: var(--surface-muted, #f8fafc);
+  padding: 1rem;
+}
+
+@media (min-width: 768px) {
+  .admin-action-page {
+    top: 65px;
+    left: 16rem;
+    padding: 1.5rem;
   }
 }
 
@@ -867,26 +886,55 @@
   vertical-align: -0.025em;
 }
 
-/* The egg from the brand mark stands in for the letter: an orange outer
-   shell with a white center, exactly like the egg-style "o" in the logo.
-   The real glyph is kept transparent underneath so spacing and kerning
-   stay typographically correct. */
+/* The branded egg mark is led by a bold navy shell, followed by a slim
+   orange yolk accent that melts naturally into its warm off-white centre. */
 .egg-o__fill {
   position: absolute;
   z-index: 0;
   left: 50%;
   transform: translateX(-50%);
-  border-radius: 50% 50% 50% 50% / 57% 57% 43% 43%;
-  background: linear-gradient(165deg, #FFC85C 0%, #F5A227 46%, #E77D18 100%);
-  box-shadow: 0 1px 4px rgba(23, 18, 80, 0.22);
+  border-radius: 50% 50% 48% 48% / 55% 55% 45% 45%;
+  background: #101871;
+  box-shadow: 0 2px 7px rgba(16, 24, 113, 0.38);
+}
+
+.egg-o__fill::before {
+  content: '';
+  position: absolute;
+  /* Keep the #101871 outline dominant at headline and body sizes. */
+  inset: 0.135em;
+  border-radius: inherit;
+  /* A gentle upper glow makes the orange accent feel richer at the top of the
+     egg, while retaining the darker orange contour around the lower edge. */
+  background:
+    radial-gradient(ellipse at 50% 4%, #ffd878 0%, rgba(255, 193, 77, 0.72) 33%, rgba(255, 193, 77, 0) 62%),
+    radial-gradient(ellipse at 43% 40%, #ffd06d 0%, #f5a227 58%, #e9861c 100%);
 }
 
 .egg-o__fill::after {
   content: '';
   position: absolute;
-  inset: 27% 26%;
+  z-index: 1;
+  /* A slightly smaller centre leaves a fuller, more visible orange accent. */
+  inset: 29%;
   border-radius: inherit;
-  background: #FFFFFF;
+  /* A continuous yolk-like blend: an off-white highlight dot sits naturally
+     inside a warm cream-to-orange transition, without a hard edge. */
+  background: radial-gradient(
+      ellipse at 56% 27%,
+      rgba(255, 254, 248, 0.96) 0%,
+      rgba(255, 252, 242, 0.76) 12%,
+      rgba(255, 252, 242, 0) 31%
+    ),
+    radial-gradient(
+      ellipse at 44% 38%,
+      #fffdf7 0%,
+      #fff7e7 18%,
+      #ffe6b5 34%,
+      #ffc35d 56%,
+      #f5a227 80%,
+      rgba(245, 162, 39, 0) 100%
+    );
 }
 
 /* Anchor the egg to the text baseline so it aligns at any line-height:
@@ -896,14 +944,14 @@
    instead of floating. */
 .egg-o--upper .egg-o__fill {
   bottom: calc((100% - 1em) / 2 + 0.17em);
-  width: 0.64em;
-  height: 0.75em;
+  width: 0.66em;
+  height: 0.76em;
 }
 
 .egg-o--lower .egg-o__fill {
   bottom: calc((100% - 1em) / 2 + 0.17em);
   width: 0.56em;
-  height: 0.6em;
+  height: 0.62em;
 }
 
 .egg-o__glyph {
@@ -912,6 +960,15 @@
   color: transparent;
   -webkit-text-fill-color: transparent;
   text-shadow: none;
+}
+
+@media (max-width: 640px) {
+  /* Prevent iOS form zoom while retaining the compact desktop field scale. */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
 }
 
 ::-webkit-scrollbar {

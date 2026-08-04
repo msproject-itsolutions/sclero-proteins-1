@@ -139,6 +139,15 @@ class BaseGatewayAdapter:
         """
         raise NotImplementedError(f"{self.code} has no browser payment collection.")
 
+    def reconcile_payment(self, payment_id, expected_amount, currency_code):
+        """Return the authoritative state of a previously opened payment.
+
+        This is intentionally a server-to-server lookup. It is used only as a
+        fallback to signed webhooks, so an untrusted browser can never promote
+        an unpaid checkout to a paid order.
+        """
+        return {'state': 'unavailable'}
+
     def test_connection(self):
         if self.code == 'COD':
             return {'ok': True, 'message': 'Cash on Delivery requires no external connection.'}
@@ -308,6 +317,21 @@ class RazorpayAdapter(BaseGatewayAdapter):
                 "method": payment.get("method"),
             },
         }
+
+    def reconcile_payment(self, payment_id, expected_amount, currency_code):
+        if not self._is_live or not (payment_id or '').startswith('pay_'):
+            return {'state': 'unavailable'}
+        payment = self._request('GET', f'/payments/{payment_id}')
+        if (payment.get('currency') or '').upper() != (currency_code or '').upper():
+            raise PaymentError('Gateway payment currency does not match the checkout.')
+        if int(payment.get('amount') or 0) != to_minor_units(expected_amount, currency_code):
+            raise PaymentError('Gateway payment amount does not match the checkout.')
+        state = payment.get('status')
+        if state == 'captured':
+            return {'state': 'paid', 'raw': payment}
+        if state in {'failed', 'refunded'}:
+            return {'state': 'failed', 'raw': payment}
+        return {'state': 'pending', 'raw': payment}
 
     def refund(self, order, amount, reason=""):
         if not (self.gateway and self.gateway.supports_refunds):
@@ -488,6 +512,22 @@ class StripeAdapter(BaseGatewayAdapter):
                 "latest_charge": intent.get("latest_charge"),
             },
         }
+
+    def reconcile_payment(self, payment_id, expected_amount, currency_code):
+        if not self._is_live or not (payment_id or '').startswith('pi_'):
+            return {'state': 'unavailable'}
+        intent = self._request('GET', f'/payment_intents/{payment_id}')
+        if (intent.get('currency') or '').upper() != (currency_code or '').upper():
+            raise PaymentError('Gateway payment currency does not match the checkout.')
+        if int(intent.get('amount_received') or 0) not in (0, to_minor_units(expected_amount, currency_code)):
+            raise PaymentError('Gateway payment amount does not match the checkout.')
+        if intent.get('status') == 'succeeded':
+            if int(intent.get('amount_received') or 0) != to_minor_units(expected_amount, currency_code):
+                raise PaymentError('Gateway payment amount does not match the checkout.')
+            return {'state': 'paid', 'raw': intent}
+        if intent.get('status') in {'canceled', 'requires_payment_method'}:
+            return {'state': 'failed', 'raw': intent}
+        return {'state': 'pending', 'raw': intent}
 
     def refund(self, order, amount, reason=""):
         if not (self.gateway and self.gateway.supports_refunds):
@@ -675,6 +715,21 @@ class PayPalAdapter(BaseGatewayAdapter):
             'transaction_id': capture.get('id') or paypal_order_id,
             'raw': {'gateway': self.code, 'mode': 'LIVE', 'paypal_order_id': paypal_order_id},
         }
+
+    def reconcile_payment(self, payment_id, expected_amount, currency_code):
+        if not self._is_live or not payment_id:
+            return {'state': 'unavailable'}
+        remote = self._request('GET', f'/v2/payments/captures/{payment_id}')
+        amount = remote.get('amount') or {}
+        if (amount.get('currency_code') or '').upper() != (currency_code or '').upper():
+            raise PaymentError('Gateway payment currency does not match the checkout.')
+        if Decimal(str(amount.get('value') or '0')) != Decimal(str(expected_amount)):
+            raise PaymentError('Gateway payment amount does not match the checkout.')
+        if remote.get('status') == 'COMPLETED':
+            return {'state': 'paid', 'raw': remote}
+        if remote.get('status') in {'DENIED', 'DECLINED', 'FAILED'}:
+            return {'state': 'failed', 'raw': remote}
+        return {'state': 'pending', 'raw': remote}
 
     def refund(self, order, amount, reason=''):
         if not (self.gateway and self.gateway.supports_refunds):

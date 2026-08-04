@@ -24,7 +24,7 @@ export default function BulkEnquiryPage() {
       <div className="border-b border-edge bg-surface py-16 md:py-24">
         <div className="mx-auto max-w-5xl px-4 text-center sm:px-6 lg:px-8">
           <p className="kicker mb-4">OvoMatrix™ Solutions</p>
-          <h1 className="text-display">Enquire for Bulk &amp; <em className="text-italic-accent">OEM</em></h1>
+          <h1 className="text-display brand-heading-gradient">Enquire for Bulk &amp; <em className="text-italic-accent">OEM</em></h1>
           <p className="mx-auto mt-5 max-w-xl text-[15px] leading-[1.75] text-ink-secondary">
             High-purity eggshell calcium, collagen complexes, and soil-health minerals for brands,
             formulators, and distributors. Tell us what you need and our team will respond with

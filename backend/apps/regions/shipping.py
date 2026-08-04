@@ -143,22 +143,25 @@ def calculate_shipping_options(region, country='', state='', city='', postcode='
         # zone and rate; checkout must never invent a delivery charge.
         return []
 
-    # A destination belongs to the highest-priority, most-specific matching
-    # zone. Tied zones are combined, allowing several methods in one location.
-    best_key = max((priority, specificity) for priority, specificity, _zone in matched)
-    selected_zones = [zone for priority, specificity, zone in matched if (priority, specificity) == best_key]
-    options = []
-    for zone in selected_zones:
-        for rate in zone.rates.all():
-            if not rate.is_active:
+    # Prefer the most-specific matching zone, but only when it produces at
+    # least one usable rate. A narrow zone with a weight/value band that does
+    # not fit the cart must not prevent a valid nationwide fallback rate.
+    # Tied zones are combined so a location can still offer several methods.
+    tiers = sorted({(priority, specificity) for priority, specificity, _zone in matched}, reverse=True)
+    for tier in tiers:
+        options = []
+        for priority, specificity, zone in matched:
+            if (priority, specificity) != tier:
                 continue
-            option = _rate_option(rate, subtotal, weight_kg, quantity, postcode)
-            if option:
-                options.append(option)
-
-    if not options:
-        return []
-    return sorted(options, key=lambda item: (item['priority'], item['cost'], item['method'].lower()))
+            for rate in zone.rates.all():
+                if not rate.is_active:
+                    continue
+                option = _rate_option(rate, subtotal, weight_kg, quantity, postcode)
+                if option:
+                    options.append(option)
+        if options:
+            return sorted(options, key=lambda item: (item['priority'], item['cost'], item['method'].lower()))
+    return []
 
 
 def calculate_shipping(region, country='', state='', city='', postcode='', subtotal=0,

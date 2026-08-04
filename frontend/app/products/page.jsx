@@ -21,7 +21,7 @@ export default function ProductsPage() {
           <span className="kicker !text-ink-accent">
             Catalog
           </span>
-          <h1 className="mt-3 text-heading-1">
+          <h1 className="mt-3 text-heading-1 brand-heading-gradient">
             All products
           </h1>
           <p className="mt-3 max-w-2xl text-sm text-ink-secondary">

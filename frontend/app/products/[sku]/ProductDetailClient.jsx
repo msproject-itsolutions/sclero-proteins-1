@@ -444,7 +444,7 @@ export default function ProductDetailClient({ sku }) {
                       Third-Party Tested
                     </span>
                   </div>
-                  <h1 className="font-display text-[34px] md:text-[42px] font-medium leading-[1.1] text-ink-primary">{product.name}</h1>
+                  <h1 className="brand-heading-gradient font-display text-[34px] md:text-[42px] font-medium leading-[1.1]">{product.name}</h1>
                   
                   {totalReviews > 0 && (
                     <p className="mt-3 text-sm text-ink-muted">{totalReviews} customer reviews available below.</p>

@@ -20,7 +20,7 @@ export default function FAQPage() {
         <section className="border-b border-edge bg-surface section">
           <div className="container-page text-center">
             <p className="kicker mb-4">Support Hub</p>
-            <h1 className="text-display mx-auto max-w-3xl">
+            <h1 className="text-display brand-heading-gradient mx-auto max-w-3xl">
               Frequently Asked <em className="text-italic-accent">Questions</em>
             </h1>
             <p className="mx-auto mt-5 max-w-xl text-[15px] leading-[1.75] text-ink-secondary">

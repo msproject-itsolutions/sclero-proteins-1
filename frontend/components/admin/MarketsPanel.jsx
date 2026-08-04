@@ -19,7 +19,7 @@ const blankMarket = () => ({
 /* Create/edit dialog for a market's own settings — name, currency, tax.
    Kept to the handful of fields the storefront actually uses, so adding a
    market is a one-minute task rather than a form marathon. */
-function MarketEditorModal({ market, onSaved, onClose, authFetch }) {
+function MarketEditorPage({ market, onSaved, onClose, authFetch }) {
   const isNew = !market?.id;
   const [m, setM] = useState(() => ({ ...blankMarket(), ...(market || {}) }));
   const [saving, setSaving] = useState(false);
@@ -62,7 +62,7 @@ function MarketEditorModal({ market, onSaved, onClose, authFetch }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-surface-overlay backdrop-blur-sm sm:items-center sm:p-4">
+    <div className="admin-action-page flex flex-col items-center">
       <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-lg border border-edge bg-white p-6 shadow-overlay sm:max-w-lg sm:rounded-lg">
         <div className="mb-4 flex items-start justify-between">
           <div>
@@ -373,7 +373,7 @@ export default function MarketsPanel({ authFetch }) {
       </p>
 
       {editingMarket && (
-        <MarketEditorModal
+        <MarketEditorPage
           market={editingMarket === 'new' ? null : editingMarket}
           authFetch={authFetch}
           onClose={() => setEditingMarket(null)}

@@ -31,12 +31,13 @@ const BANNER_SPECS = [
   { slot: 'Mobile', size: '1280 × 840', when: 'up to 640 px' },
 ];
 
-const ORDER_STATUSES = ['PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'REFUNDED'];
+const ORDER_STATUSES = ['PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'COMPLETED', 'CANCELLED', 'REFUNDED'];
 const STATUS_COLOR = {
   PENDING: 'bg-amber-50 text-amber-800 border border-amber-200',
   PROCESSING: 'bg-blue-50 text-blue-700 border border-blue-200',
   SHIPPED: 'bg-indigo-50 text-indigo-700 border border-indigo-200',
   DELIVERED: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+  COMPLETED: 'bg-brand-success/10 text-ink-success border border-brand-success/20',
   CANCELLED: 'bg-slate-50 text-slate-600 border border-slate-200',
   REFUNDED: 'bg-rose-50 text-rose-700 border border-rose-200',
 };
@@ -54,6 +55,7 @@ const RECOVERY_STATUS_COLOR = {
   RECOVERED: 'bg-brand-success/10 text-ink-success',
   DISMISSED: 'bg-edge text-ink-secondary',
 };
+const orderStatusLabel = (status) => status === 'COMPLETED' ? 'Order received' : status;
 
 const formatDateTime = (value) => (value ? new Date(value).toLocaleString() : '—');
 const formatDate = (value) => (value ? new Date(value).toLocaleDateString() : '—');
@@ -1945,7 +1947,7 @@ function OrdersTab({ authFetch, initialStatus = 'ALL', title = 'orders' }) {
           </label>
           <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-sm border border-edge px-3 py-2 text-sm">
             <option value="ALL">All statuses</option>
-            {ORDER_STATUSES.map((s) => <option key={s} value={s}>{s}{getStatusCount(s)}</option>)}
+            {ORDER_STATUSES.map((s) => <option key={s} value={s}>{orderStatusLabel(s)}{getStatusCount(s)}</option>)}
           </select>
           <select value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)} className="rounded-sm border border-edge px-3 py-2 text-sm">
             <option value="ALL">All payments</option>
@@ -1989,7 +1991,7 @@ function OrdersTab({ authFetch, initialStatus = 'ALL', title = 'orders' }) {
                 </td>
                 <td className="px-3 py-3 font-semibold text-ink-primary">{o.currency_code} {o.total}</td>
                 <td className="px-3 py-3 text-brand-muted">{formatDateTime(o.created_at)}</td>
-                <td className="px-3 py-3"><span className={`rounded-xs px-2 py-0.5 text-[13px] font-semibold ${STATUS_COLOR[o.status]}`}>{o.status}</span></td>
+                <td className="px-3 py-3"><span className={`rounded-xs px-2 py-0.5 text-[13px] font-semibold ${STATUS_COLOR[o.status]}`}>{orderStatusLabel(o.status)}</span></td>
                 <td className="px-3 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                   <div className="flex justify-end items-center gap-1.5">
                     <button
@@ -2134,6 +2136,7 @@ function AbandonedTab({ authFetch }) {
               <p className="text-sm font-semibold text-ink-primary">{c.email || 'Guest'} <span className="ml-1 rounded bg-surface-muted px-1.5 py-0.5 text-[12px] font-semibold text-ink-secondary">{c.region}</span></p>
               <p className="text-[13px] text-brand-muted">{c.item_count} item(s) · {(c.items || []).map((i) => `${i.qty || i.quantity}× ${i.name}`).join(', ')}</p>
               <p className="mt-1 font-mono text-[12px] text-ink-subtle">{c.session_id}</p>
+              {c.entity_type === 'PAYMENT_ATTEMPT' && <p className="mt-1 text-[12px] font-semibold text-amber-700">Awaiting confirmed {c.payment_method} payment · checked automatically</p>}
             </div>
             <div className="text-left sm:text-right">
               <p className="text-sm font-semibold text-ink-primary">{c.currency || 'GBP'} {c.value}</p>
@@ -2143,10 +2146,10 @@ function AbandonedTab({ authFetch }) {
           </div>
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-edge-subtle pt-3">
             <span className={`rounded-xs px-2 py-0.5 text-[12px] font-semibold ${RECOVERY_STATUS_COLOR[c.recovery_status] || RECOVERY_STATUS_COLOR.NOT_CONTACTED}`}>{(c.recovery_status || 'NOT_CONTACTED').replace('_', ' ')}</span>
-            <div className="flex flex-wrap gap-2">
+            {c.entity_type !== 'PAYMENT_ATTEMPT' && <div className="flex flex-wrap gap-2">
               <button onClick={() => updateRecovery(c, 'CONTACTED')} className="rounded-sm border border-edge px-3 py-1.5 text-sm font-semibold text-ink-primary hover:border-ink-primary"><MessageSquare className="mr-1 inline h-3.5 w-3.5" />Mark contacted</button>
               <button onClick={() => updateRecovery(c, 'RECOVERED')} className="rounded-sm border border-edge px-3 py-1.5 text-sm font-semibold text-ink-primary hover:border-brand-success"><CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />Recovered</button>
-            </div>
+            </div>}
           </div>
         </div>
       ))}
@@ -2157,7 +2160,7 @@ function AbandonedTab({ authFetch }) {
 
 /* ----------------------------------------------------------- Payments */
 function PaymentsTab({ authFetch, regions }) {
-  const [activeSubTab, setActiveSubTab] = useState('routing'); // routing | webhooks | fraud | refunds
+  const [activeSubTab, setActiveSubTab] = useState('routing'); // routing | webhooks | fraud
   const [gateways, setGateways] = useState([]);
   const [providerCatalog, setProviderCatalog] = useState([]);
   const [webhookEvents, setWebhookEvents] = useState([]);
@@ -2170,9 +2173,6 @@ function PaymentsTab({ authFetch, regions }) {
     block_suspicious_emails: true
   });
   const [savingFraud, setSavingFraud] = useState(false);
-  const [roles, setRoles] = useState([]);
-  const [refundLimits, setRefundLimits] = useState({ role_limits: {}, staff_fallback: {} });
-  const [savingRefundLimits, setSavingRefundLimits] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -2184,11 +2184,7 @@ function PaymentsTab({ authFetch, regions }) {
       authFetch('/api/admin/settings/PAYMENT_FRAUD_RULES/')
         .then((r) => r.ok ? r.json().then(d => d.value) : null)
         .catch(() => null),
-      authFetch('/api/admin/settings/REFUND_LIMITS/')
-        .then((r) => r.ok ? r.json().then(d => d.value) : null)
-        .catch(() => null),
-      authFetch('/api/admin/roles/').then((r) => r.ok ? r.json() : []).catch(() => []),
-    ]).then(([g, catalogData, webhookData, o, fraudData, refundData, roleData]) => {
+    ]).then(([g, catalogData, webhookData, o, fraudData]) => {
       setGateways(Array.isArray(g) ? g : g.results || []);
       setProviderCatalog(Array.isArray(catalogData) ? catalogData : catalogData.results || []);
       setWebhookEvents(Array.isArray(webhookData) ? webhookData : webhookData.results || []);
@@ -2196,8 +2192,6 @@ function PaymentsTab({ authFetch, regions }) {
       if (fraudData) {
         setFraudRules(fraudData);
       }
-      if (refundData) setRefundLimits(refundData);
-      setRoles(Array.isArray(roleData) ? roleData : roleData.results || []);
     }).finally(() => setLoading(false));
   }, [authFetch]);
 
@@ -2246,29 +2240,6 @@ function PaymentsTab({ authFetch, regions }) {
       })
       .then(() => alert('Fraud prevention rules updated successfully!'))
       .finally(() => setSavingFraud(false));
-  };
-
-  const saveRefundLimits = () => {
-    setSavingRefundLimits(true);
-    authFetch('/api/admin/settings/REFUND_LIMITS/', {
-      method: 'PUT',
-      body: JSON.stringify({
-        key: 'REFUND_LIMITS', value: refundLimits,
-        description: 'Maximum direct refund amount by staff role and region',
-      }),
-    })
-      .then((response) => {
-        if (!response.ok) throw new Error('Unable to save refund limits.');
-        alert('Refund authorization limits updated.');
-      })
-      .catch((error) => alert(error.message))
-      .finally(() => setSavingRefundLimits(false));
-  };
-
-  const setRefundLimit = (roleName, regionCode, value) => {
-    const roleLimits = { ...(refundLimits.role_limits || {}) };
-    roleLimits[roleName] = { ...(roleLimits[roleName] || {}), [regionCode]: value };
-    setRefundLimits({ ...refundLimits, role_limits: roleLimits });
   };
 
   const toggle = (g) => authFetch(`/api/admin/payment-gateways/${g.id}/`, { method: 'PATCH', body: JSON.stringify({ is_enabled: !g.is_enabled }) }).then(load);
@@ -2321,7 +2292,6 @@ function PaymentsTab({ authFetch, regions }) {
         <button onClick={() => setActiveSubTab('routing')} className={`px-4 py-1.5 text-sm font-semibold uppercase rounded-sm ${activeSubTab === 'routing' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Gateway Routing &amp; Priority</button>
         <button onClick={() => setActiveSubTab('webhooks')} className={`px-4 py-1.5 text-sm font-semibold uppercase rounded-sm ${activeSubTab === 'webhooks' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Webhook Operations</button>
         <button onClick={() => setActiveSubTab('fraud')} className={`px-4 py-1.5 text-sm font-semibold uppercase rounded-sm ${activeSubTab === 'fraud' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Fraud Prevention Rules</button>
-        <button onClick={() => setActiveSubTab('refunds')} className={`px-4 py-1.5 text-sm font-semibold uppercase rounded-sm ${activeSubTab === 'refunds' ? 'bg-ink-primary text-white' : 'text-ink-primary hover:bg-surface-muted'}`}>Refund Limits</button>
       </div>
 
       {activeSubTab === 'routing' ? (
@@ -2421,39 +2391,7 @@ function PaymentsTab({ authFetch, regions }) {
             </button>
           </div>
         </div>
-      ) : (
-        <div className="rounded-lg border border-edge bg-white p-5 space-y-4">
-          <div>
-            <h3 className="text-sm font-semibold text-ink-primary">Direct Refund Authorization Limits</h3>
-            <p className="mt-1 text-sm text-brand-muted">Set the maximum amount each staff role may refund without approval. Superusers and Admin roles remain unrestricted.</p>
-          </div>
-          <div className="overflow-x-auto rounded-sm border border-edge">
-            <table className="min-w-full text-sm">
-              <thead className="bg-surface-muted text-left text-ink-muted">
-                <tr><th className="px-3 py-2">Role</th>{regions.map((item) => <th key={item.id} className="px-3 py-2">{item.code} ({item.currency_code})</th>)}</tr>
-              </thead>
-              <tbody className="divide-y divide-edge-subtle">
-                {roles.filter((role) => !['Admin', 'Super Admin'].includes(role.name)).map((role) => (
-                  <tr key={role.id}>
-                    <td className="px-3 py-2 font-semibold text-ink-primary">{role.name}</td>
-                    {regions.map((item) => (
-                      <td key={item.id} className="px-3 py-2">
-                        <input type="number" min="0" step="0.01"
-                          value={refundLimits.role_limits?.[role.name]?.[item.code] || ''}
-                          onChange={(event) => setRefundLimit(role.name, item.code, event.target.value)}
-                          className="w-32 rounded-sm border border-edge p-2" placeholder="0.00" />
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <button onClick={saveRefundLimits} disabled={savingRefundLimits} className="btn-primary py-2.5 px-6 font-semibold uppercase text-sm disabled:opacity-50">
-            {savingRefundLimits ? 'Saving...' : 'Save Refund Limits'}
-          </button>
-        </div>
-      )}
+      ) : null}
 
       {form && (
         <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
@@ -2810,7 +2748,7 @@ function EmailsTab({ authFetch, regions }) {
       </div>
 
       {form && (
-        <div className="fixed inset-0 z-50 flex flex-col items-center justify-start overflow-y-auto bg-surface-overlay p-4 backdrop-blur-sm sm:p-6 lg:p-8">
+        <div className="admin-action-page flex flex-col items-center">
           <div className="my-6 w-full max-w-4xl bg-white rounded-lg border border-edge p-6 shadow-overlay space-y-4">
             <div className="flex justify-between items-center pb-2 border-b border-edge-subtle">
               <h3 className="text-lg font-semibold text-ink-primary">{form.id ? 'Edit' : 'New'} email template</h3>
@@ -3117,7 +3055,7 @@ function ShippingTab({ authFetch, regions = [] }) {
       />}
 
       {providerForm && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-surface-overlay p-0 backdrop-blur-sm sm:items-center sm:p-4">
+        <div className="admin-action-page flex flex-col items-center">
           <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-lg border border-edge bg-white p-6 shadow-overlay sm:max-w-xl sm:rounded-lg">
             <div className="mb-5 flex items-start justify-between"><div><h3 className="text-lg font-semibold text-ink-primary">{providerForm.id ? 'Edit' : 'Add'} shipping provider</h3><p className="mt-1 text-sm text-ink-muted">Secrets are encrypted and are never returned after saving.</p></div><button onClick={() => setProviderForm(null)} className="p-2 text-ink-muted"><X className="h-4 w-4" /></button></div>
             <div className="space-y-4 text-sm">
@@ -3360,7 +3298,7 @@ function CustomersTab({ authFetch }) {
         </div>
       )}
 
-      {/* Editing/New Customer Modal */}
+      {/* Editing/new customer workspace */}
       {editingCustomer && (
         <div className="fixed inset-y-0 right-0 left-0 md:left-64 top-0 md:top-[65px] z-25 bg-surface-muted overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-start">
           <div className="w-full max-w-md bg-white rounded-lg border border-edge p-6 shadow-card space-y-4">
@@ -3460,7 +3398,7 @@ function GlossaryTab({ authFetch }) {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [editTerm, setEditTerm] = useState(null); // When editing/creating
-  const [modalOpen, setModalOpen] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
 
   const loadTerms = useCallback(() => {
@@ -3478,12 +3416,12 @@ function GlossaryTab({ authFetch }) {
 
   const handleCreate = () => {
     setEditTerm({ term: '', definition: '', category: '', image_url: '' });
-    setModalOpen(true);
+    setEditorOpen(true);
   };
 
   const handleEdit = (term) => {
     setEditTerm({ ...term });
-    setModalOpen(true);
+    setEditorOpen(true);
   };
 
   const handleDelete = (id) => {
@@ -3530,7 +3468,7 @@ function GlossaryTab({ authFetch }) {
     })
       .then(async (r) => {
         if (r.ok) {
-          setModalOpen(false);
+          setEditorOpen(false);
           setEditTerm(null);
           loadTerms();
         } else {
@@ -3640,15 +3578,15 @@ function GlossaryTab({ authFetch }) {
         </div>
       )}
 
-      {/* CRUD modal */}
-      {modalOpen && editTerm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-overlay backdrop-blur-xs p-4">
+      {/* Glossary editor workspace */}
+      {editorOpen && editTerm && (
+        <div className="admin-action-page flex flex-col items-center">
           <div className="w-full max-w-lg bg-white rounded-lg border border-edge p-6 shadow-overlay space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-edge-subtle pb-3">
               <h3 className="text-md font-semibold text-ink-primary">
                 {editTerm.id ? 'Edit Glossary Term' : 'Add New Glossary Term'}
               </h3>
-              <button onClick={() => setModalOpen(false)} className="text-brand-muted hover:text-ink-primary">
+              <button onClick={() => setEditorOpen(false)} className="text-brand-muted hover:text-ink-primary">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -3732,7 +3670,7 @@ function GlossaryTab({ authFetch }) {
 
             <div className="flex gap-2 justify-end border-t border-edge-subtle pt-3">
               <button
-                onClick={() => setModalOpen(false)}
+                onClick={() => setEditorOpen(false)}
                 className="rounded-sm border border-edge px-4 py-2 text-sm font-semibold uppercase hover:bg-surface-muted"
               >
                 Cancel
@@ -3758,7 +3696,7 @@ function FAQTab({ authFetch }) {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [editFaq, setEditFaq] = useState(null); // When editing/creating
-  const [modalOpen, setModalOpen] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
 
   const loadFaqs = useCallback(() => {
     setLoading(true);
@@ -3775,12 +3713,12 @@ function FAQTab({ authFetch }) {
 
   const handleCreate = () => {
     setEditFaq({ question: '', answer: '', category: 'General', is_active: true, display_order: 0 });
-    setModalOpen(true);
+    setEditorOpen(true);
   };
 
   const handleEdit = (faq) => {
     setEditFaq({ ...faq });
-    setModalOpen(true);
+    setEditorOpen(true);
   };
 
   const handleDelete = (id) => {
@@ -3812,7 +3750,7 @@ function FAQTab({ authFetch }) {
     })
       .then(async (r) => {
         if (r.ok) {
-          setModalOpen(false);
+          setEditorOpen(false);
           setEditFaq(null);
           loadFaqs();
         } else {
@@ -3900,14 +3838,14 @@ function FAQTab({ authFetch }) {
       </div>
 
       {/* ADD/EDIT FAQ MODAL */}
-      {modalOpen && editFaq && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-overlay backdrop-blur-xs p-4">
+      {editorOpen && editFaq && (
+        <div className="admin-action-page flex flex-col items-center">
           <div className="w-full max-w-md bg-white rounded-lg border border-edge p-6 shadow-overlay space-y-4">
             <div className="flex items-center justify-between border-b border-edge-subtle pb-3">
               <h3 className="text-md font-semibold text-ink-primary">
                 {editFaq.id ? 'Edit General FAQ' : 'Add General FAQ'}
               </h3>
-              <button onClick={() => setModalOpen(false)} className="text-brand-muted hover:text-ink-primary">
+              <button onClick={() => setEditorOpen(false)} className="text-brand-muted hover:text-ink-primary">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -3969,7 +3907,7 @@ function FAQTab({ authFetch }) {
 
             <div className="flex gap-2 justify-end border-t border-edge-subtle pt-3">
               <button
-                onClick={() => setModalOpen(false)}
+                onClick={() => setEditorOpen(false)}
                 className="rounded-sm border border-edge px-4 py-2 text-sm font-semibold uppercase hover:bg-surface-muted"
               >
                 Cancel
@@ -4418,6 +4356,10 @@ function GeneralSettingsTab({ authFetch }) {
   });
   const [socialSaving, setSocialSaving] = useState(false);
   const [socialSaved, setSocialSaved] = useState(false);
+  const [instagramReels, setInstagramReels] = useState({ instagram_user_id: '', access_token: '', access_token_configured: false, is_enabled: true });
+  const [instagramReelsSaving, setInstagramReelsSaving] = useState(false);
+  const [instagramReelsSaved, setInstagramReelsSaved] = useState(false);
+  const [instagramReelsError, setInstagramReelsError] = useState('');
 
   const [seoSettings, setSeoSettings] = useState({
     metaTitle: '',
@@ -4476,6 +4418,13 @@ function GeneralSettingsTab({ authFetch }) {
       .then((r) => r.ok ? r.json() : null)
       .then((d) => {
         if (d && d.value) setSeoSettings(prev => ({ ...prev, ...d.value }));
+      })
+      .catch(() => {});
+
+    authFetch('/api/admin/instagram-reels/')
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data) setInstagramReels((current) => ({ ...current, ...data, access_token: '' }));
       })
       .catch(() => {});
   }, [authFetch]);
@@ -4572,6 +4521,31 @@ function GeneralSettingsTab({ authFetch }) {
     setSocialSaving(false);
   };
 
+  const saveInstagramReels = async () => {
+    setInstagramReelsSaving(true);
+    setInstagramReelsSaved(false);
+    setInstagramReelsError('');
+    try {
+      const response = await authFetch('/api/admin/instagram-reels/', {
+        method: 'PUT',
+        body: JSON.stringify({
+          instagram_user_id: instagramReels.instagram_user_id.trim(),
+          access_token: instagramReels.access_token,
+          is_enabled: Boolean(instagramReels.is_enabled),
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.detail || data.instagram_user_id?.[0] || 'Could not save the Instagram connection.');
+      setInstagramReels((current) => ({ ...current, ...data, access_token: '' }));
+      setInstagramReelsSaved(true);
+      setTimeout(() => setInstagramReelsSaved(false), 2500);
+    } catch (error) {
+      setInstagramReelsError(error.message || 'Could not save the Instagram connection.');
+    } finally {
+      setInstagramReelsSaving(false);
+    }
+  };
+
   const saveSeoSettings = async () => {
     setSeoSaving(true);
     setSeoSaved(false);
@@ -4601,6 +4575,34 @@ function GeneralSettingsTab({ authFetch }) {
 
   return (
     <div className="space-y-8 text-sm">
+      {/* Instagram Reels connection — kept first so the storefront feed is easy to configure. */}
+      <div className="bg-white rounded-lg border border-edge p-5 space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-edge-subtle pb-3">
+          <div>
+            <h3 className="text-sm font-semibold text-ink-primary uppercase">Instagram Reels</h3>
+            <p className="mt-0.5 text-brand-muted">Connect the official Instagram Professional account to show its Reels automatically on the homepage.</p>
+          </div>
+          <button onClick={saveInstagramReels} disabled={instagramReelsSaving} className="btn-primary px-4 py-2 uppercase font-semibold">
+            {instagramReelsSaving ? 'Saving' : instagramReelsSaved ? 'Saved ✓' : 'Save connection'}
+          </button>
+        </div>
+        {instagramReelsError && <p className="text-[13px] font-semibold text-brand-danger">{instagramReelsError}</p>}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block font-semibold text-ink-primary">Instagram Professional Account ID</label>
+            <input type="text" inputMode="numeric" value={instagramReels.instagram_user_id || ''} onChange={(e) => setInstagramReels({ ...instagramReels, instagram_user_id: e.target.value })} className="w-full rounded border border-edge bg-surface p-2" placeholder="Numeric account ID" />
+          </div>
+          <div>
+            <label className="mb-1 block font-semibold text-ink-primary">Meta long-lived access token</label>
+            <PasswordInput value={instagramReels.access_token || ''} onChange={(e) => setInstagramReels({ ...instagramReels, access_token: e.target.value })} className="w-full rounded border border-edge bg-surface p-2" placeholder={instagramReels.access_token_configured ? 'Saved securely — enter only to replace' : 'Paste token'} autoComplete="new-password" />
+            <p className="mt-1 text-xs text-brand-muted">{instagramReels.access_token_configured ? 'A token is stored securely. Leave this blank to keep it unchanged.' : 'The token is encrypted and never displayed after saving.'}</p>
+          </div>
+        </div>
+        <button type="button" onClick={() => setInstagramReels({ ...instagramReels, is_enabled: !instagramReels.is_enabled })} className={`flex w-full items-center justify-between rounded-md border p-3 text-left transition ${instagramReels.is_enabled ? 'border-ink-primary bg-surface-muted' : 'border-edge'}`}>
+          <span><span className="font-semibold text-ink-primary">Homepage Reels feed</span><span className="mt-1 block text-[13px] text-brand-muted">{instagramReels.is_enabled ? 'Enabled — the homepage will use the live feed.' : 'Disabled — the homepage will not load Instagram Reels.'}</span></span>
+          {instagramReels.is_enabled ? <ToggleRight className="h-5 w-5 text-ink-accent" /> : <ToggleLeft className="h-5 w-5 text-ink-subtle" />}
+        </button>
+      </div>
       
       {/* Tax & pricing — wired to the live store config */}
       <div className="bg-white rounded-lg border border-edge p-5 space-y-3">
@@ -5769,7 +5771,7 @@ function ScheduledJobsTab({ authFetch }) {
 }
 
 function SettingsTab({ authFetch, regions, initialTab = 'general' }) {
-  const allowedTabs = ['general', 'homepage', 'markets', 'payments', 'shipping', 'discounts', 'emails', 'notifications', 'theme', 'cookie-consent', 'automation'];
+  const allowedTabs = ['general', 'homepage', 'markets', 'payments', 'shipping', 'discounts', 'emails', 'notifications', 'cookie-consent', 'automation'];
   const [subTab, setSubTab] = useState(allowedTabs.includes(initialTab) ? initialTab : 'general');
 
   useEffect(() => {
@@ -5785,7 +5787,6 @@ function SettingsTab({ authFetch, regions, initialTab = 'general' }) {
     { key: 'discounts', label: 'Discounts' },
     { key: 'emails', label: 'Emails' },
     { key: 'notifications', label: 'Push notifications' },
-    { key: 'theme', label: 'Theme' },
     { key: 'cookie-consent', label: 'Cookie Consent' },
     { key: 'automation', label: 'Scheduled Jobs' },
   ];
@@ -5810,7 +5811,6 @@ function SettingsTab({ authFetch, regions, initialTab = 'general' }) {
         {subTab === 'emails' && <EmailsTab authFetch={authFetch} regions={regions} />}
         {subTab === 'notifications' && <PushNotificationsTab authFetch={authFetch} />}
         {subTab === 'shipping' && <ShippingTab authFetch={authFetch} regions={regions} />}
-        {subTab === 'theme' && <ThemeTab authFetch={authFetch} />}
         {subTab === 'cookie-consent' && <CookieConsentTab authFetch={authFetch} />}
         {subTab === 'automation' && <ScheduledJobsTab authFetch={authFetch} />}
       </div>
@@ -5829,7 +5829,7 @@ function ReviewsTab({ authFetch }) {
   
   // State for Admin CRUD operations
   const [editReview, setEditReview] = useState(null);
-  const [crudModalOpen, setCrudModalOpen] = useState(false);
+  const [reviewEditorOpen, setReviewEditorOpen] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -5906,7 +5906,7 @@ function ReviewsTab({ authFetch }) {
     })
       .then(async (r) => {
         if (r.ok) {
-          setCrudModalOpen(false);
+          setReviewEditorOpen(false);
           setEditReview(null);
           load();
         } else {
@@ -5924,7 +5924,7 @@ function ReviewsTab({ authFetch }) {
         <p className="text-sm text-brand-muted">{reviews.length} total customer reviews pending or moderated</p>
         <button onClick={() => {
           setEditReview({ product: '', user_name: '', user_email: '', rating: 5, comment: '', is_verified_purchase: false, is_approved: true, is_featured: false, review_media_urls: [] });
-          setCrudModalOpen(true);
+          setReviewEditorOpen(true);
         }} className="btn-primary py-1.5 px-3 rounded-sm text-sm font-semibold uppercase flex items-center gap-1">
           <Plus className="h-3.5 w-3.5" /> Add Review
         </button>
@@ -5975,7 +5975,7 @@ function ReviewsTab({ authFetch }) {
             )}
 
             <div className="flex gap-2 pt-2 border-t border-edge-subtle justify-end items-center">
-              <button onClick={() => { setEditReview({ ...rev }); setCrudModalOpen(true); }} className="px-2.5 py-1 text-[12px] border border-edge hover:bg-surface-muted text-ink-primary rounded-sm uppercase font-semibold flex items-center gap-0.5"><Pencil className="h-2.5 w-2.5" /> Edit</button>
+              <button onClick={() => { setEditReview({ ...rev }); setReviewEditorOpen(true); }} className="px-2.5 py-1 text-[12px] border border-edge hover:bg-surface-muted text-ink-primary rounded-sm uppercase font-semibold flex items-center gap-0.5"><Pencil className="h-2.5 w-2.5" /> Edit</button>
               <button onClick={() => deleteReview(rev.id)} className="px-2.5 py-1 text-[12px] border border-red-200 hover:bg-red-50 text-red-600 rounded-sm uppercase font-semibold flex items-center gap-0.5"><Trash2 className="h-2.5 w-2.5" /> Delete</button>
               <div className="flex-1" />
               {!rev.is_approved ? (
@@ -6014,14 +6014,14 @@ function ReviewsTab({ authFetch }) {
       )}
 
       {/* ADD/EDIT REVIEW MODAL */}
-      {crudModalOpen && editReview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-overlay backdrop-blur-xs p-4">
+      {reviewEditorOpen && editReview && (
+        <div className="admin-action-page flex flex-col items-center">
           <div className="w-full max-w-md bg-white rounded-lg border border-edge p-6 shadow-overlay space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-edge-subtle pb-3">
               <h3 className="text-md font-semibold text-ink-primary">
                 {editReview.id ? 'Edit Product Review' : 'Add New Review'}
               </h3>
-              <button onClick={() => setCrudModalOpen(false)} className="text-brand-muted hover:text-ink-primary">
+              <button onClick={() => setReviewEditorOpen(false)} className="text-brand-muted hover:text-ink-primary">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -6131,7 +6131,7 @@ function ReviewsTab({ authFetch }) {
 
             <div className="flex gap-2 justify-end border-t border-edge-subtle pt-3">
               <button
-                onClick={() => setCrudModalOpen(false)}
+                onClick={() => setReviewEditorOpen(false)}
                 className="rounded-sm border border-edge px-4 py-2 text-sm font-semibold uppercase hover:bg-surface-muted"
               >
                 Cancel
@@ -6464,7 +6464,7 @@ function CookieConsentTab({ authFetch }) {
             <label className="block font-semibold text-ink-primary mb-1">Layout Style</label>
             <select value={config.layout} onChange={(e) => setConfig({ ...config, layout: e.target.value })} className="w-full rounded-sm border border-edge p-2">
               <option value="Bottom Bar">Bottom Bar (Full-width banner)</option>
-              <option value="Floating Card">Floating Card (Bottom-left/right modal)</option>
+              <option value="Floating Card">Floating Card (Bottom-left/right)</option>
             </select>
           </div>
 
@@ -6747,7 +6747,7 @@ function NavigationTab({ authFetch, regions }) {
       )}
 
       {editingItem && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-surface-overlay p-4 backdrop-blur-sm sm:p-6 lg:p-8">
+        <div className="admin-action-page flex flex-col items-center">
           <div className="my-10 w-full max-w-md bg-white rounded-lg border border-edge p-6 shadow-overlay space-y-4">
             <h3 className="text-lg font-semibold text-ink-primary">{editingItem.index === -1 ? 'Add Link' : 'Edit Link'}</h3>
             <div className="space-y-3 text-sm">
@@ -6819,60 +6819,6 @@ const blankHeroBanner = () => ({
   seo_title: '',
   seo_description: '',
 });
-
-/* Per-slide theme colors. `fallback` mirrors the storefront's brand default so
-   the picker opens on the color the visitor currently sees; an empty stored
-   value means "brand default" and lets the storefront keep its own styling. */
-const HERO_COLOR_FIELDS = [
-  { key: 'overlay_color_start', label: 'Overlay gradient — left', fallback: '#090C3A', group: 'Overlay' },
-  { key: 'overlay_color_mid', label: 'Overlay gradient — middle', fallback: '#101871', group: 'Overlay' },
-  { key: 'overlay_color_end', label: 'Overlay gradient — right', fallback: '#1E083B', group: 'Overlay' },
-  { key: 'eyebrow_color', label: 'Eyebrow text', fallback: '#FFFFFF', group: 'Text' },
-  { key: 'heading_color', label: 'Heading text', fallback: '#FFFFFF', group: 'Text' },
-  { key: 'subheading_color', label: 'Subheading text', fallback: '#FFFFFF', group: 'Text' },
-  { key: 'primary_cta_bg_color', label: 'Primary button background', fallback: '#F5A227', group: 'Buttons' },
-  { key: 'primary_cta_text_color', label: 'Primary button text', fallback: '#171250', group: 'Buttons' },
-  { key: 'secondary_cta_bg_color', label: 'Secondary button background', fallback: '#1A1A2E', group: 'Buttons' },
-  { key: 'secondary_cta_text_color', label: 'Secondary button text', fallback: '#FFFFFF', group: 'Buttons' },
-  { key: 'accent_color', label: 'Carousel indicator accent', fallback: '#F5A227', group: 'Accent' },
-];
-
-// <input type="color"> only accepts 6-digit hex; expand shorthand like #fff.
-const expandHex = (value) => (
-  /^#[0-9a-fA-F]{3}$/.test(value || '')
-    ? `#${value[1]}${value[1]}${value[2]}${value[2]}${value[3]}${value[3]}`
-    : value
-);
-
-function HeroColorField({ label, value, fallback, onChange }) {
-  const isCustom = Boolean(value);
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-lg border border-edge bg-white px-3 py-2">
-      <div className="min-w-0">
-        <p className="text-[13px] font-semibold text-ink-primary">{label}</p>
-        <p className="text-[12px] text-ink-muted">{isCustom ? value.toUpperCase() : 'Brand default'}</p>
-      </div>
-      <div className="flex shrink-0 items-center gap-2">
-        {isCustom && (
-          <button
-            type="button"
-            onClick={() => onChange('')}
-            className="rounded-sm border border-edge px-2 py-1 text-[11px] font-semibold uppercase text-brand-muted hover:bg-surface-muted"
-          >
-            Reset
-          </button>
-        )}
-        <input
-          type="color"
-          value={expandHex(isCustom ? value : fallback)}
-          onChange={(e) => onChange(e.target.value)}
-          className="h-8 w-10 cursor-pointer rounded-sm border border-edge bg-white p-0.5"
-          aria-label={`${label} color`}
-        />
-      </div>
-    </div>
-  );
-}
 
 /* Pages + Banners merged surface per spec 2026-06-24; policy pages added as a
    second sub-tab so every legal/info page is editable from the console. */
@@ -7331,14 +7277,6 @@ function HeroBannersTab({ authFetch }) {
               </div>
               <div className="flex flex-wrap items-center gap-2 text-[13px] text-brand-muted">
                 <span>Text {String(slide.text_position || '').toLowerCase()}</span>
-                {HERO_COLOR_FIELDS.some((f) => slide[f.key]) && (
-                  <span className="inline-flex items-center gap-1.5">
-                    <span>· Custom theme</span>
-                    {HERO_COLOR_FIELDS.filter((f) => slide[f.key]).slice(0, 6).map((f) => (
-                      <span key={f.key} className="h-3 w-3 rounded-full border border-edge" style={{ backgroundColor: slide[f.key] }} title={f.label} />
-                    ))}
-                  </span>
-                )}
               </div>
               <div className="flex justify-end gap-2">
                 <button onClick={() => startEdit(slide)} className="rounded-sm border border-edge p-2 text-ink-accent hover:bg-surface-muted" aria-label={`Edit ${slide.title}`}>
@@ -7361,7 +7299,7 @@ function HeroBannersTab({ authFetch }) {
       )}
 
       {editing && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-surface-overlay p-4 backdrop-blur-sm">
+        <div className="admin-action-page">
           <div className="mx-auto my-6 max-w-5xl overflow-hidden rounded-lg border border-edge bg-white shadow-overlay">
             <div className="flex items-center justify-between border-b border-edge px-5 py-4">
               <div>
@@ -7509,30 +7447,6 @@ function HeroBannersTab({ authFetch }) {
                   <label className="kicker mb-1 block">Alt text</label>
                   <input value={editing.alt_text} onChange={(e) => setField('alt_text', e.target.value)} className="w-full rounded-sm border border-edge p-2.5 text-sm" placeholder="Describe the banner media for accessibility and SEO" />
                 </div>
-              </div>
-
-              <div className="space-y-3">
-                <div>
-                  <label className="kicker mb-1 block">Colors &amp; theme</label>
-                  <p className="text-[12px] text-ink-muted">
-                    Recolor this slide for a campaign or seasonal theme. Every color falls back to the
-                    brand default — use <span className="font-semibold">Reset</span> to undo a change.
-                  </p>
-                </div>
-                {['Overlay', 'Text', 'Buttons', 'Accent'].map((group) => (
-                  <div key={group} className="space-y-2">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">{group}</p>
-                    {HERO_COLOR_FIELDS.filter((f) => f.group === group).map((f) => (
-                      <HeroColorField
-                        key={f.key}
-                        label={f.label}
-                        value={editing[f.key] || ''}
-                        fallback={f.fallback}
-                        onChange={(value) => setField(f.key, value)}
-                      />
-                    ))}
-                  </div>
-                ))}
               </div>
 
               <div className="space-y-4">
@@ -7886,7 +7800,6 @@ const LEGACY_ADMIN_ROUTES = {
   discounts: { section: 'settings', tab: 'discounts' },
   emails: { section: 'settings', tab: 'emails' },
   notifications: { section: 'settings', tab: 'notifications' },
-  theme: { section: 'settings', tab: 'theme' },
   homepage: { section: 'settings', tab: 'homepage' },
   cookie_consent: { section: 'settings', tab: 'cookie-consent' },
 };
@@ -8175,9 +8088,9 @@ function StaffTab({ authFetch, regions }) {
         </table>
       </div>
 
-      {/* Add Staff Modal */}
+      {/* Add staff workspace */}
       {isAddingStaff && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="admin-action-page flex flex-col items-center">
           <div className="bg-white rounded-2xl border border-edge p-6 shadow-2xl w-full max-w-lg space-y-4">
             <div className="flex justify-between items-center pb-3 border-b border-edge">
               <div>
@@ -8308,7 +8221,7 @@ function StaffTab({ authFetch, regions }) {
 
       {/* Edit / Manage Staff Drawer */}
       {editingStaff && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-end">
+        <div className="admin-action-page flex flex-col items-center">
           <div className="bg-white h-full w-full max-w-md border-l border-edge p-6 shadow-2xl overflow-y-auto space-y-5">
             <div className="flex justify-between items-center pb-3 border-b border-edge">
               <div>
@@ -8568,9 +8481,9 @@ function RolesTab({ authFetch }) {
         ))}
       </div>
 
-      {/* Edit / Create Role Modal */}
+      {/* Edit/create role workspace */}
       {editingRole && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="admin-action-page flex flex-col items-center">
           <div className="bg-white rounded-2xl border border-edge p-6 shadow-2xl w-full max-w-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center pb-3 border-b border-edge">
               <h3 className="text-lg font-bold text-ink-primary">{editingRole.id ? `Configure Role: ${editingRole.name}` : 'Create Custom Role'}</h3>

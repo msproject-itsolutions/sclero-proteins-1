@@ -2,7 +2,7 @@ from rest_framework import serializers
 from apps.orders.models import CronJobRun
 from .models import (
     FeatureToggle, SystemSetting, HeroBannerSlide, PaymentGateway, EmailTemplate,
-    MarketingIntegration, ContentPage, BlogPost, ApprovalRequest,
+    MarketingIntegration, ContentPage, BlogPost, ApprovalRequest, InstagramReelsConnection,
 )
 
 
@@ -128,8 +128,10 @@ class PaymentGatewayAdminSerializer(serializers.ModelSerializer):
             'id', 'code', 'display_name', 'region', 'region_code', 'is_enabled',
             'mode', 'publishable_key', 'secret_key', 'extra_config',
             'supports_refunds', 'sort_order', 'is_configured',
-            'credential_status', 'updated_at',
+            'credential_status', 'verification_status', 'verification_message',
+            'last_verified_at', 'updated_at',
         ]
+        read_only_fields = ['verification_status', 'verification_message', 'last_verified_at']
         extra_kwargs = {
             'secret_key': {'write_only': True, 'required': False},
             'extra_config': {'write_only': True, 'required': False},
@@ -191,6 +193,30 @@ class MarketingIntegrationSerializer(serializers.ModelSerializer):
                 instance.credentials,
                 credentials,
             )
+        return super().update(instance, validated_data)
+
+
+class InstagramReelsConnectionSerializer(serializers.ModelSerializer):
+    access_token = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    access_token_configured = serializers.SerializerMethodField()
+
+    class Meta:
+        model = InstagramReelsConnection
+        fields = ['instagram_user_id', 'access_token', 'access_token_configured', 'is_enabled', 'updated_at']
+        read_only_fields = ['updated_at']
+
+    def get_access_token_configured(self, obj):
+        return bool(obj.access_token)
+
+    def validate_instagram_user_id(self, value):
+        value = str(value or '').strip()
+        if value and not value.isdigit():
+            raise serializers.ValidationError('Enter the numeric Instagram Professional Account ID.')
+        return value
+
+    def update(self, instance, validated_data):
+        if validated_data.get('access_token', None) == '':
+            validated_data.pop('access_token')
         return super().update(instance, validated_data)
 
 

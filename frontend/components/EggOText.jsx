@@ -1,37 +1,44 @@
 import React from 'react';
 
-function findEggOIndex(value, preferBrandWord) {
+function findEggOIndexes(value, preferBrandWord) {
   if (preferBrandWord) {
-    const brandMatch = /(?:sclero|ovomatrix)/i.exec(value);
-    if (brandMatch) {
-      const localIndex = brandMatch[0].search(/o/i);
-      if (localIndex >= 0) return brandMatch.index + localIndex;
-    }
+    const brandIndexes = [...value.matchAll(/(?:sclero|ovomatrix)/gi)]
+      .map((match) => match.index + match[0].search(/o/i))
+      .filter((index) => index >= 0);
+    if (brandIndexes.length) return brandIndexes;
   }
-  return value.search(/o/i);
+
+  const fallbackIndex = value.search(/o/i);
+  return fallbackIndex >= 0 ? [fallbackIndex] : [];
 }
 
 export default function EggOText({ text, tone = 'light', preferBrandWord = true }) {
   const value = String(text || '');
-  const eggIndex = findEggOIndex(value, preferBrandWord);
-  if (eggIndex < 0) return value;
+  const eggIndexes = findEggOIndexes(value, preferBrandWord);
+  if (!eggIndexes.length) return value;
 
-  // The egg artwork replaces the letterform, so it must be sized to the case
-  // of the "o" it stands in for (cap height vs x-height).
-  const caseClass = value[eggIndex] === 'O' ? 'egg-o--upper' : 'egg-o--lower';
+  // The egg artwork replaces each branded letterform and is sized to the
+  // original character case (cap height vs x-height).
 
   return (
     <>
       <span className="sr-only">{value}</span>
       <span aria-hidden="true">
-        {value.slice(0, eggIndex)}
-        <span className={`egg-o egg-o--${tone} ${caseClass}`}>
-          <span className="egg-o__fill" />
-          <span className="egg-o__glyph">{value[eggIndex]}</span>
-        </span>
-        {value.slice(eggIndex + 1)}
+        {eggIndexes.map((eggIndex, index) => {
+          const caseClass = value[eggIndex] === 'O' ? 'egg-o--upper' : 'egg-o--lower';
+          const previousIndex = index === 0 ? 0 : eggIndexes[index - 1] + 1;
+          return (
+            <React.Fragment key={eggIndex}>
+              {value.slice(previousIndex, eggIndex)}
+              <span className={`egg-o egg-o--${tone} ${caseClass}`}>
+                <span className="egg-o__fill" />
+                <span className="egg-o__glyph">{value[eggIndex]}</span>
+              </span>
+            </React.Fragment>
+          );
+        })}
+        {value.slice(eggIndexes[eggIndexes.length - 1] + 1)}
       </span>
     </>
   );
 }
-

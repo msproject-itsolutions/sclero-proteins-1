@@ -151,7 +151,10 @@ function GlossaryTrigger({ phrase, term }) {
 
 export default function GlossaryText({ text }) {
   const { getTermByCode } = useGlossary();
-  const source = String(text || '');
+  // Knowledge Hub source content uses Markdown-style bold markers in places,
+  // but the reader presents its own typography. Remove the raw markers so they
+  // never appear as visible characters in article copy or tooltips.
+  const source = String(text || '').replace(/\*\*/g, '');
   const output = [];
   let cursor = 0;
   let match;
