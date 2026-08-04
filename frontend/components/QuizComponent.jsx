@@ -136,7 +136,7 @@ export default function QuizComponent({ onComplete = () => {}, content }) {
         <div className="h-1 overflow-hidden rounded-full bg-edge-subtle">
           <div
             className="h-full bg-ink-primary transition-all duration-300"
-            style={{ width: `${((currentStep + 1) / QUIZ_STEPS.length) * 100}%` }}
+            style={{ width: `${((currentStep + 1) / steps.length) * 100}%` }}
           />
         </div>
       </div>
