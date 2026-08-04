@@ -1061,10 +1061,19 @@
   to { transform: translateY(0); opacity: 1; }
 }
 
+@keyframes sclero-loader-float {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-0.4rem) scale(1.03); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .glossary-tooltip,
   .glossary-sheet-backdrop,
   .glossary-bottom-sheet {
     animation: none;
+  }
+
+  [class*="sclero-loader-float"] {
+    animation: none !important;
   }
 }
