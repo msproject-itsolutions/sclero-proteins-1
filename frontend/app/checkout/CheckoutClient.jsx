@@ -515,16 +515,26 @@ function CheckoutPageInner({ gateways, gatewayError, fetchGateways, stripeReady 
         </header>
 
         <main className="flex-1 max-w-2xl mx-auto px-4 py-12 sm:px-6 lg:px-8 flex flex-col items-center text-center">
-          <div className="h-16 w-16 bg-green-50 border border-green-200 rounded-full flex items-center justify-center mb-6 shadow-sm">
-            <CheckCircle className="h-10 w-10 text-brand-success animate-bounce" />
+          <div className="h-16 w-16 bg-emerald-50 border border-emerald-200 rounded-full flex items-center justify-center mb-5 shadow-sm">
+            <CheckCircle className="h-10 w-10 text-emerald-600 animate-bounce" />
           </div>
 
-          <span className="kicker mb-2">Instant Order Reassurance</span>
-          <h1 className="font-display text-[32px] sm:text-[40px] font-bold text-ink-primary tracking-tight mb-3">
-            Your order has been confirmed!
+          <div className="flex flex-wrap items-center justify-center gap-2 mb-3">
+            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-600"></span>
+              Payment Successful
+            </span>
+            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200">
+              Order Confirmed
+            </span>
+          </div>
+
+          <h1 className="font-display text-[26px] sm:text-[34px] font-extrabold text-ink-primary tracking-tight mb-3 leading-snug">
+            Thank you! We have successfully received your payment, and your order has been confirmed.
           </h1>
-          <p className="text-xs sm:text-sm text-ink-secondary max-w-md leading-[1.6] mb-8">
-            Thank you for your order! We have received your payment and started preparing your items for dispatch. A confirmation email has been dispatched to <span className="font-semibold text-ink-primary">{completedOrder.email || email}</span>.
+
+          <p className="text-xs sm:text-sm text-ink-secondary max-w-lg leading-[1.6] mb-8 bg-surface-muted/60 p-4 rounded-xl border border-edge">
+            Your order is being processed. A confirmation email has been sent to <span className="font-bold text-ink-primary">{completedOrder.email || email}</span> along with your official tax invoice.
           </p>
 
           {/* Visual Order Progress Tracker */}

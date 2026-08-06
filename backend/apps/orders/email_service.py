@@ -297,6 +297,82 @@ def send_branded_email(subject, body, recipient_email):
     msg.send(fail_silently=False)
 
 
+DEFAULT_TEMPLATES = {
+    'order_confirmation': (
+        "Order #{order_number} confirmed — thank you, {customer_name}",
+        "Hi {customer_name},\n\n"
+        "Thank you for your order with Sclero Proteins! We have received order #{order_number} and it is now being processed.\n\n"
+        "Items:\n{items_table}\n\n"
+        "Subtotal: {currency_symbol}{total}\n"
+        "{tax_name}: {currency_symbol}{tax_amount}\n"
+        "Shipping: {currency_symbol}{shipping_cost}\n"
+        "Total: {currency_symbol}{total} {currency}\n\n"
+        "Invoice: {invoice_url}\n\n"
+        "We will send you a tracking link as soon as your parcel ships.\n\n"
+        "— The Sclero Proteins team"
+    ),
+    'order_shipped': (
+        "Order #{order_number} has shipped!",
+        "Hi {customer_name},\n\n"
+        "Great news! Your order #{order_number} has been dispatched and is on its way to you.\n\n"
+        "Carrier: {carrier}\n"
+        "Tracking Number: {tracking_number}\n"
+        "Tracking Link: {tracking_url}\n\n"
+        "Summary of shipped items:\n{items_table}\n\n"
+        "— The Sclero Proteins team"
+    ),
+    'shipment_dispatched': (
+        "Order #{order_number} has shipped!",
+        "Hi {customer_name},\n\n"
+        "Great news! Your order #{order_number} has been dispatched.\n\n"
+        "Tracking Link: {tracking_url}\n\n"
+        "— The Sclero Proteins team"
+    ),
+    'order_delivered': (
+        "Order #{order_number} delivered",
+        "Hi {customer_name},\n\n"
+        "Your order #{order_number} has been delivered. We hope you enjoy your purchase!\n\n"
+        "— The Sclero Proteins team"
+    ),
+    'order_cancelled': (
+        "Order #{order_number} cancelled",
+        "Hi {customer_name},\n\n"
+        "Your order #{order_number} has been cancelled.\n\n"
+        "— The Sclero Proteins team"
+    ),
+    'payment_failed': (
+        "Action required: Payment failed for Order #{order_number}",
+        "Hi {customer_name},\n\n"
+        "We were unable to process the payment for your order #{order_number}.\n\n"
+        "— The Sclero Proteins team"
+    ),
+    'refund_processed': (
+        "Refund processed for Order #{order_number}",
+        "Hi {customer_name},\n\n"
+        "A refund of {currency_symbol}{total} has been issued for order #{order_number}.\n\n"
+        "— The Sclero Proteins team"
+    ),
+    'welcome': (
+        "Welcome to Sclero Proteins",
+        "Hi {customer_name},\n\n"
+        "Welcome to Sclero Proteins! Your account has been created.\n\n"
+        "— The Sclero Proteins team"
+    ),
+    'password_reset': (
+        "Reset your Sclero Proteins password",
+        "Hi,\n\n"
+        "Click the link below to reset your password:\n{reset_url}\n\n"
+        "— The Sclero Proteins team"
+    ),
+    'contact_received': (
+        "We received your message",
+        "Hi {customer_name},\n\n"
+        "Thank you for contacting Sclero Proteins. We have received your enquiry and our support team will respond shortly.\n\n"
+        "— The Sclero Proteins team"
+    )
+}
+
+
 def send_templated_email(event, region, recipient_email, context,
                           audit_target_type='Order', audit_target_id=None,
                           queue_on_failure=True):
@@ -326,6 +402,10 @@ def send_templated_email(event, region, recipient_email, context,
             ).first()
     except Exception:
         template = None
+
+    if not template and event in DEFAULT_TEMPLATES:
+        fallback_subj, fallback_body = DEFAULT_TEMPLATES[event]
+        template = type('FallbackTemplate', (), {'subject': fallback_subj, 'body': fallback_body})()
 
     if not template:
         record_audit(
