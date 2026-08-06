@@ -1157,6 +1157,7 @@ function OrderDetail({ authFetch, order, onClose, onChanged }) {
   const [showFulfillForm, setShowFulfillForm] = useState(false);
   const [carrier, setCarrier] = useState('Delhivery');
   const [trackingNumber, setTrackingNumber] = useState('');
+  const [trackingUrl, setTrackingUrl] = useState('');
 
   const [showRefundForm, setShowRefundForm] = useState(false);
   const [refundAmount, setRefundAmount] = useState(order.total);
@@ -1392,9 +1393,14 @@ function OrderDetail({ authFetch, order, onClose, onChanged }) {
 
   const handleFulfill = () => {
     setSaving(true); setErr('');
-    authFetch(`/api/admin/orders/${order.id}/update_status/`, {
-      method: 'POST',
-      body: JSON.stringify({ status: 'SHIPPED' })
+    authFetch(`/api/admin/orders/${order.id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        status: 'SHIPPED',
+        shipping_carrier: carrier,
+        tracking_number: trackingNumber,
+        tracking_url: trackingUrl || (trackingNumber ? `https://track.scleroproteins.com?num=${trackingNumber}` : ''),
+      })
     })
       .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
       .then(({ ok, d }) => {
@@ -1402,7 +1408,7 @@ function OrderDetail({ authFetch, order, onClose, onChanged }) {
         return authFetch(`/api/admin/orders/${order.id}/add_timeline_event/`, {
           method: 'POST',
           body: JSON.stringify({
-            note: `Items fulfilled via ${carrier}. Tracking #: ${trackingNumber}`,
+            note: `Items fulfilled via ${carrier}. Tracking #: ${trackingNumber}${trackingUrl ? ` (${trackingUrl})` : ''}`,
             kind: 'CUSTOMER_COMMUNICATION'
           })
         });
@@ -1410,6 +1416,7 @@ function OrderDetail({ authFetch, order, onClose, onChanged }) {
       .then(() => {
         setShowFulfillForm(false);
         setTrackingNumber('');
+        setTrackingUrl('');
         return authFetch(`/api/admin/orders/${order.id}/`).then(r => r.json());
       })
       .then((updatedOrder) => {
@@ -1685,7 +1692,11 @@ function OrderDetail({ authFetch, order, onClose, onChanged }) {
                       </div>
                       <div>
                         <label className="text-[12px] text-ink-muted font-bold uppercase tracking-wider mb-1 block">Tracking Reference</label>
-                        <input placeholder="Tracking Number" value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)} className="w-full text-sm rounded border border-edge p-2 bg-white focus:outline-none" />
+                        <input placeholder="Tracking Number (e.g. DEL123456)" value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)} className="w-full text-sm rounded border border-edge p-2 bg-white focus:outline-none" />
+                      </div>
+                      <div>
+                        <label className="text-[12px] text-ink-muted font-bold uppercase tracking-wider mb-1 block">Tracking Direct Link (Optional)</label>
+                        <input placeholder="https://track.carrier.com/123" value={trackingUrl} onChange={(e) => setTrackingUrl(e.target.value)} className="w-full text-sm rounded border border-edge p-2 bg-white focus:outline-none" />
                       </div>
                       <button onClick={handleFulfill} disabled={!trackingNumber || saving} className="w-full bg-ink-primary text-white text-sm uppercase font-bold py-2 rounded disabled:opacity-50 hover:bg-ink-primary/95 transition">
                         Confirm Shipment

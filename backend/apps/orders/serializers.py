@@ -72,7 +72,8 @@ class OrderSerializer(serializers.ModelSerializer):
             'shipping_state', 'shipping_postal_code', 'shipping_country',
             'currency_code', 'subtotal', 'tax_rate', 'tax_amount',
             'shipping_cost', 'shipping_method', 'shipping_rate_name',
-            'shipping_estimated_days', 'total', 'payment_method', 'payment_id',
+            'shipping_estimated_days', 'shipping_carrier', 'tracking_number', 'tracking_url',
+            'total', 'payment_method', 'payment_id',
             'payment_status', 'payment_capture_mode', 'payment_authorized_amount',
             'payment_captured_amount',
             'items', 'invoice', 'refunds', 'created_at'
@@ -100,7 +101,8 @@ class OrderAdminSerializer(serializers.ModelSerializer):
             'shipping_state', 'shipping_postal_code', 'shipping_country',
             'currency_code', 'subtotal', 'tax_rate', 'tax_amount',
             'shipping_cost', 'shipping_method', 'shipping_rate_name',
-            'shipping_estimated_days', 'staff_notes', 'total', 'payment_method', 'payment_id',
+            'shipping_estimated_days', 'shipping_carrier', 'tracking_number', 'tracking_url',
+            'staff_notes', 'total', 'payment_method', 'payment_id',
             'payment_status', 'payment_capture_mode', 'payment_authorized_amount',
             'payment_captured_amount',
             'items', 'invoice', 'refunds', 'payment_logs', 'created_at', 'updated_at'
@@ -130,13 +132,25 @@ class OrderAdminUpdateSerializer(serializers.ModelSerializer):
         fields = [
             'status', 'shipping_name', 'shipping_phone',
             'shipping_address_line1', 'shipping_address_line2', 'shipping_city',
-            'shipping_state', 'shipping_postal_code', 'shipping_country'
+            'shipping_state', 'shipping_postal_code', 'shipping_country',
+            'shipping_carrier', 'tracking_number', 'tracking_url', 'staff_notes'
         ]
 
     def update(self, instance, validated_data):
+        old_status = instance.status
+        old_tracking = instance.tracking_url
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
+
+        # Send shipping notification if order becomes SHIPPED or tracking URL is updated
+        if (instance.status == 'SHIPPED' and old_status != 'SHIPPED') or (instance.tracking_url and instance.tracking_url != old_tracking):
+            try:
+                from .email_service import send_order_email
+                send_order_email('order_shipped', instance)
+            except Exception:
+                pass
+
         return instance
 
 

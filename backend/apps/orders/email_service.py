@@ -115,15 +115,21 @@ def _get_smtp_config():
     if use_tls and use_ssl:
         raise ValueError('EMAIL_USE_TLS and EMAIL_USE_SSL cannot both be enabled.')
 
+    username = _get('EMAIL_HOST_USER', getattr(settings, 'EMAIL_HOST_USER', ''))
+    from_email = _get('DEFAULT_FROM_EMAIL', getattr(settings, 'DEFAULT_FROM_EMAIL', ''))
+    if not from_email or 'localhost' in from_email:
+        if username and '@' in username:
+            from_email = username
+
     return {
         'host': _get('EMAIL_HOST', getattr(settings, 'EMAIL_HOST', 'localhost')),
         'port': int(_get('EMAIL_PORT', getattr(settings, 'EMAIL_PORT', 25))),
-        'username': _get('EMAIL_HOST_USER', getattr(settings, 'EMAIL_HOST_USER', '')),
+        'username': username,
         'password': _get('EMAIL_HOST_PASSWORD', getattr(settings, 'EMAIL_HOST_PASSWORD', '')),
         'use_tls': use_tls,
         'use_ssl': use_ssl,
         'timeout': int(_get('EMAIL_TIMEOUT', getattr(settings, 'EMAIL_TIMEOUT', 15))),
-        'from_email': _get('DEFAULT_FROM_EMAIL', getattr(settings, 'DEFAULT_FROM_EMAIL', '')),
+        'from_email': from_email,
     }
 
 
