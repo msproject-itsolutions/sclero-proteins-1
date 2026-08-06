@@ -202,7 +202,7 @@ def _wrap_branded_html(subject, body, raw_html_inside=False):
     newlines become <br>. Pre-rendered HTML is trusted (template author's
     responsibility) and inlined verbatim.
     """
-    site_url = getattr(settings, 'SITE_URL', '').rstrip('/')
+    site_url = (getattr(settings, 'SITE_URL', '') or 'https://scleroproteins.co.uk').rstrip('/')
     # Email clients cannot load relative paths, so the logo needs an absolute
     # URL. Admin-set branding wins; otherwise fall back to the shipped asset.
     logo_url = ''
@@ -557,19 +557,25 @@ def send_owner_order_notification(order):
         '₹' if order.currency_code == 'INR' else '£' if order.currency_code == 'GBP' else '$'
     )
 
+    order_items = list(order.items.select_related('product').all())
     items_rows = []
-    for item in order.items.all():
-        variant_info = f" ({item.variant_name})" if getattr(item, 'variant_name', '') else ""
-        prod_name = getattr(item.product, 'name', '') if getattr(item, 'product', None) else (getattr(item, 'product_name', '') or 'Item')
-        prod_sku = getattr(item.product, 'sku', '') if getattr(item, 'product', None) else (getattr(item, 'product_sku', '') or '')
+    if order_items:
+        for item in order_items:
+            variant_info = f" ({item.variant_name})" if getattr(item, 'variant_name', '') else ""
+            prod_name = getattr(item.product, 'name', '') if getattr(item, 'product', None) else (getattr(item, 'product_name', '') or 'Item')
+            prod_sku = getattr(item.product, 'sku', '') if getattr(item, 'product', None) else (getattr(item, 'product_sku', '') or '')
+            items_rows.append(
+                f"<tr>"
+                f"<td style='padding:8px;border-bottom:1px solid #E6EAF2;'><b>{_escape(prod_name)}</b>{_escape(variant_info)}<br/>"
+                f"<span style='font-size:11px;color:#6B7280;'>SKU: {_escape(prod_sku)}</span></td>"
+                f"<td style='padding:8px;border-bottom:1px solid #E6EAF2;text-align:center;'>{item.quantity}</td>"
+                f"<td style='padding:8px;border-bottom:1px solid #E6EAF2;text-align:right;'>{symbol}{item.price:.2f}</td>"
+                f"<td style='padding:8px;border-bottom:1px solid #E6EAF2;text-align:right;'><b>{symbol}{(item.quantity * item.price):.2f}</b></td>"
+                f"</tr>"
+            )
+    else:
         items_rows.append(
-            f"<tr>"
-            f"<td style='padding:8px;border-bottom:1px solid #E6EAF2;'><b>{_escape(prod_name)}</b>{_escape(variant_info)}<br/>"
-            f"<span style='font-size:11px;color:#6B7280;'>SKU: {_escape(prod_sku)}</span></td>"
-            f"<td style='padding:8px;border-bottom:1px solid #E6EAF2;text-align:center;'>{item.quantity}</td>"
-            f"<td style='padding:8px;border-bottom:1px solid #E6EAF2;text-align:right;'>{symbol}{item.price:.2f}</td>"
-            f"<td style='padding:8px;border-bottom:1px solid #E6EAF2;text-align:right;'><b>{symbol}{(item.quantity * item.price):.2f}</b></td>"
-            f"</tr>"
+            f"<tr><td colspan='4' style='padding:12px;text-align:center;color:#6B7280;'>Order items recorded under Order #{order.id}</td></tr>"
         )
 
     items_table_html = f"""
