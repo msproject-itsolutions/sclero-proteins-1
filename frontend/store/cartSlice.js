@@ -1,12 +1,13 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { getApiUrl, postJson } from '../lib/api';
+import { authenticatedFetch } from '../lib/authFetch';
 
 export const fetchCart = createAsyncThunk(
   'cart/fetchCart',
   async ({ session_id, region }, { rejectWithValue }) => {
     try {
-      const response = await fetch(
-        getApiUrl(`/api/cart/?session_id=${session_id}&region=${region}`)
+      const response = await authenticatedFetch(
+        `/api/cart/?session_id=${session_id}&region=${region}`
       );
       if (!response.ok) {
         throw new Error('Failed to fetch cart');

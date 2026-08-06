@@ -36,6 +36,8 @@ export function getApiUrl(path = '') {
   return `${base}${suffix}`;
 }
 
+import { authenticatedFetch } from './authFetch';
+
 /**
  * Submit JSON with a bounded wait. Public forms use this so a stalled network
  * request returns a useful retry message instead of leaving the UI spinning.
@@ -44,13 +46,14 @@ export async function postJson(path, payload, { timeoutMs = 15000, credentials }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(getApiUrl(path), {
+    const options = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
-      credentials,
       signal: controller.signal,
-    });
+    };
+    if (credentials) options.credentials = credentials;
+    const response = await authenticatedFetch(path, options);
     const data = await response.json().catch(() => ({}));
     return { response, data };
   } catch (error) {

@@ -274,31 +274,42 @@ class PublicOrderDetailView(views.APIView):
 class CartViewSet(viewsets.ViewSet):
     permission_classes = [AllowAny]
 
-    def get_cart(self, session_id, region_code):
-
+    def get_cart(self, session_id, region_code, user=None):
         region = get_object_or_404(Region, code=region_code, is_active=True)
-        cart, created = Cart.objects.get_or_create(
-            session_id=session_id,
-            defaults={'region': region}
-        )
-        
+        cart = None
+        if user and user.is_authenticated:
+            cart = Cart.objects.filter(user=user, region=region).first()
+            if cart and cart.session_id != session_id:
+                cart.session_id = session_id
+                cart.save(update_fields=['session_id', 'updated_at'])
+
+        if not cart:
+            cart, created = Cart.objects.get_or_create(
+                session_id=session_id,
+                defaults={'region': region, 'user': user if (user and user.is_authenticated) else None}
+            )
+
+        if user and user.is_authenticated and cart.user != user:
+            cart.user = user
+            cart.save(update_fields=['user', 'updated_at'])
+
         # Regional protection: if the region of the active session changes,
         # we automatically clear the cart items and update the region to avoid conflicts.
         if cart.region != region:
             cart.items.all().delete()
             cart.region = region
-            cart.save()
-            
+            cart.save(update_fields=['region', 'updated_at'])
+
         return cart
 
     def retrieve(self, request):
         session_id = request.query_params.get('session_id')
         region_code = request.query_params.get('region', 'UK').upper()
-        
+
         if not session_id:
             return Response({"error": "session_id query param is required"}, status=status.HTTP_400_BAD_REQUEST)
-            
-        cart = self.get_cart(session_id, region_code)
+
+        cart = self.get_cart(session_id, region_code, user=request.user)
         serializer = CartSerializer(cart, context={'region': cart.region})
         return Response(serializer.data)
 
@@ -317,7 +328,7 @@ class CartViewSet(viewsets.ViewSet):
         if not session_id or not product_id:
             return Response({"error": "session_id and product_id are required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        cart = self.get_cart(session_id, region_code)
+        cart = self.get_cart(session_id, region_code, user=request.user)
         cart = Cart.objects.select_for_update().get(pk=cart.pk)
         product = get_object_or_404(Product, id=product_id, is_active=True, is_archived=False)
         variant, requested_sku = _requested_variant(product, request.data)
@@ -376,7 +387,7 @@ class CartViewSet(viewsets.ViewSet):
         if not session_id:
             return Response({"error": "session_id is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        cart = self.get_cart(session_id, region_code)
+        cart = self.get_cart(session_id, region_code, user=request.user)
         cart = Cart.objects.select_for_update().get(pk=cart.pk)
         cart_item, selection_error = _select_cart_item(cart, request.data)
         if selection_error:
@@ -415,7 +426,7 @@ class CartViewSet(viewsets.ViewSet):
         if not session_id:
             return Response({"error": "session_id is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        cart = self.get_cart(session_id, region_code)
+        cart = self.get_cart(session_id, region_code, user=request.user)
         cart = Cart.objects.select_for_update().get(pk=cart.pk)
         cart_item, selection_error = _select_cart_item(cart, request.data)
         if selection_error:
