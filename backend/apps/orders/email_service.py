@@ -275,12 +275,12 @@ def _wrap_branded_html(subject, body, raw_html_inside=False):
 </body></html>'''
 
 
-def send_branded_email(subject, body, recipient_email):
-    """Send a one-off plain-text email wrapped in the branded HTML chrome.
+def send_branded_email(subject, body, recipient_email, is_html=False):
+    """Send a plain-text or HTML email wrapped in the branded HTML chrome.
 
-    For system emails that have no admin-managed template (sign-in codes,
-    magic links) so every message a customer receives carries the same
-    branding. Raises on failure — callers own their retry/fallback policy.
+    For system emails and notifications (sign-in codes, order alerts, magic links)
+    so every message a customer or admin receives carries the same branding.
+    Raises on failure — callers own their retry/fallback policy.
     """
     smtp = _get_smtp_config()
     connection = get_connection(
@@ -289,12 +289,19 @@ def send_branded_email(subject, body, recipient_email):
         use_tls=smtp['use_tls'], use_ssl=smtp['use_ssl'],
         timeout=smtp['timeout'],
     )
+    has_tags = '<' in body and '>' in body
+    raw_html = is_html or has_tags
+    html_body = _wrap_branded_html(subject, body, raw_html_inside=raw_html)
+
+    import re
+    plain_body = re.sub(r'<[^>]+>', '', body) if raw_html else body
+
     msg = EmailMultiAlternatives(
-        subject=subject, body=body,
+        subject=subject, body=plain_body,
         from_email=smtp['from_email'], to=[recipient_email],
         connection=connection,
     )
-    msg.attach_alternative(_wrap_branded_html(subject, body), 'text/html')
+    msg.attach_alternative(html_body, 'text/html')
     msg.send(fail_silently=False)
 
 

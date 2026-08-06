@@ -668,6 +668,31 @@ function CheckoutPageInner({ gateways, gatewayError, fetchGateways, stripeReady 
 
   return (
     <div className="min-h-screen flex flex-col bg-brand-bg text-brand-text">
+      {/* Full-Screen Payment Processing & Verification Overlay */}
+      {loading && (
+        <div className="fixed inset-0 z-50 bg-ink-primary/80 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center animate-fade-in">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl border border-white/20 flex flex-col items-center text-center space-y-5">
+            <div className="relative flex items-center justify-center">
+              <div className="h-20 w-20 rounded-full border-4 border-brand-accent/20 border-t-brand-accent animate-spin" />
+              <ShieldCheck className="h-8 w-8 text-brand-primary absolute" />
+            </div>
+
+            <div>
+              <h3 className="text-xl font-bold font-display text-ink-primary mb-1">
+                Verifying Payment & Finalizing Order
+              </h3>
+              <p className="text-xs text-ink-secondary leading-relaxed">
+                Please wait while we secure your transaction, deduct stock, and generate your order confirmation.
+              </p>
+            </div>
+
+            <div className="w-full bg-surface-muted/60 rounded-xl p-3 border border-edge text-[11px] font-semibold text-ink-secondary flex items-center justify-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping"></span>
+              Do not refresh or close this browser window
+            </div>
+          </div>
+        </div>
+      )}
       {/* Distraction-Free Header */}
       <header className="border-b border-edge bg-white/90 backdrop-blur-md py-4 sticky top-0 z-40 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
