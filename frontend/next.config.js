@@ -77,14 +77,14 @@ const nextConfig = {
               "worker-src 'self'",
               // React's development runtime uses eval to reconstruct debugging
               // call stacks. Keep it development-only; production never allows it.
-              `script-src 'self' 'unsafe-inline'${isDevelopment ? " 'unsafe-eval'" : ''} https://accounts.google.com https://apis.google.com https://www.googletagmanager.com https://connect.facebook.net https://analytics.tiktok.com https://widget.trustpilot.com https://js.stripe.com https://www.instagram.com https://platform.instagram.com https://checkout.razorpay.com`,
+              `script-src 'self' 'unsafe-inline'${isDevelopment ? " 'unsafe-eval'" : ''} https://accounts.google.com https://apis.google.com https://www.googletagmanager.com https://connect.facebook.net https://analytics.tiktok.com https://widget.trustpilot.com https://js.stripe.com https://www.instagram.com https://platform.instagram.com https://checkout.razorpay.com https://static.cloudflareinsights.com`,
               "frame-src 'self' https://accounts.google.com https://www.google.com https://apis.google.com https://js.stripe.com https://hooks.stripe.com https://widget.trustpilot.com https://www.instagram.com https://www.facebook.com https://checkout.razorpay.com https://api.razorpay.com",
               // GA4 no longer talks only to www.google-analytics.com: gtag
               // sends hits to analytics.google.com, regional
               // *.google-analytics.com hosts, www.google.com/g/collect (Google
               // signals), stats.g.doubleclick.net, and — for Merchant Center
               // tags — www.merchant-center-analytics.goog.
-              `connect-src 'self' ${backendOrigins.join(' ')} https://accounts.google.com https://apis.google.com https://*.google-analytics.com https://analytics.google.com https://www.google.com https://stats.g.doubleclick.net https://www.merchant-center-analytics.goog https://www.googletagmanager.com https://graph.facebook.com https://analytics.tiktok.com https://widget.trustpilot.com https://api.stripe.com https://*.instagram.com https://api.razorpay.com https://checkout.razorpay.com https://lumberjack.razorpay.com`,
+              `connect-src 'self' ${backendOrigins.join(' ')} https://accounts.google.com https://apis.google.com https://*.google-analytics.com https://analytics.google.com https://www.google.com https://stats.g.doubleclick.net https://www.merchant-center-analytics.goog https://www.googletagmanager.com https://graph.facebook.com https://analytics.tiktok.com https://widget.trustpilot.com https://api.stripe.com https://*.instagram.com https://api.razorpay.com https://checkout.razorpay.com https://lumberjack.razorpay.com https://static.cloudflareinsights.com https://cloudflareinsights.com`,
               "form-action 'self'",
             ].join('; '),
           },

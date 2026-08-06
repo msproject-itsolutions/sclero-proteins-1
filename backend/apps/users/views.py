@@ -234,6 +234,8 @@ class CookieTokenRefreshView(TokenRefreshView):
         payload = request.data.copy()
         if not payload.get('refresh'):
             payload['refresh'] = request.COOKIES.get(settings.AUTH_COOKIE_REFRESH_NAME, '')
+        if not payload.get('refresh'):
+            return Response({'detail': 'Authentication credentials were not provided.'}, status=status.HTTP_401_UNAUTHORIZED)
         serializer = self.get_serializer(data=payload)
         serializer.is_valid(raise_exception=True)
         return Response(serializer.validated_data, status=status.HTTP_200_OK)
