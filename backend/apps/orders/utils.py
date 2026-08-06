@@ -21,35 +21,54 @@ def _register_fonts():
     if _FONT_REGISTERED:
         return
     import platform
-    candidate_families = []
+
+    assets_fonts = Path(__file__).resolve().parent / 'assets' / 'fonts'
+    win_font_dir = Path('C:/Windows/Fonts')
+
+    candidate_families = [
+        {
+            'regular': assets_fonts / 'arial.ttf',
+            'bold': assets_fonts / 'arialbd.ttf',
+            'italic': assets_fonts / 'ariali.ttf',
+        },
+        {
+            'regular': assets_fonts / 'segoeui.ttf',
+            'bold': assets_fonts / 'segoeuib.ttf',
+            'italic': assets_fonts / 'segoeuii.ttf',
+        },
+        {
+            'regular': assets_fonts / 'NotoSans-Regular.ttf',
+            'bold': assets_fonts / 'NotoSans-Regular.ttf',
+            'italic': assets_fonts / 'NotoSans-Italic.ttf',
+        },
+    ]
 
     if platform.system() == 'Windows':
-        font_dir = Path('C:/Windows/Fonts')
-        candidate_families = [
+        candidate_families.extend([
             {
-                'regular': font_dir / 'segoeui.ttf',
-                'bold': font_dir / 'segoeuib.ttf',
-                'italic': font_dir / 'segoeuii.ttf',
+                'regular': win_font_dir / 'segoeui.ttf',
+                'bold': win_font_dir / 'segoeuib.ttf',
+                'italic': win_font_dir / 'segoeuii.ttf',
             },
             {
-                'regular': font_dir / 'arial.ttf',
-                'bold': font_dir / 'arialbd.ttf',
-                'italic': font_dir / 'ariali.ttf',
+                'regular': win_font_dir / 'arial.ttf',
+                'bold': win_font_dir / 'arialbd.ttf',
+                'italic': win_font_dir / 'ariali.ttf',
             },
-        ]
+        ])
     else:
-        candidate_families = [
-            {
-                'regular': Path('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'),
-                'bold': Path('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'),
-                'italic': Path('/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf'),
-            },
+        candidate_families.extend([
             {
                 'regular': Path('/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf'),
                 'bold': Path('/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf'),
                 'italic': Path('/usr/share/fonts/truetype/noto/NotoSans-Italic.ttf'),
             },
-        ]
+            {
+                'regular': Path('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'),
+                'bold': Path('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'),
+                'italic': Path('/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf'),
+            },
+        ])
 
     for family in candidate_families:
         if not all(path.exists() for path in family.values()):
@@ -209,17 +228,24 @@ def generate_invoice_pdf(order):
     tax_name = escape(str(getattr(order.region, 'tax_name', '') or 'Tax'))
     invoice_title = f"{tax_name.upper()} INVOICE"
     
-    # Find logo path — v2 asset has the complete tagline descenders.
-    logo_path = Path(settings.BASE_DIR) / '..' / 'frontend' / 'public' / 'logo-full-v2.png'
-    logo_path = logo_path.resolve()
+    assets_dir = Path(__file__).resolve().parent / 'assets'
+    candidate_logos = [
+        assets_dir / 'logo-full-v2.png',
+        assets_dir / 'logo-header-tagline-v2.png',
+        assets_dir / 'logo-full.png',
+        Path(settings.BASE_DIR) / '..' / 'frontend' / 'public' / 'logo-full-v2.png',
+        Path(settings.BASE_DIR) / '..' / 'frontend' / 'public' / 'logo-header-tagline-v2.png',
+    ]
 
     logo_img = None
-    if logo_path.exists():
-        try:
-            # Proportions: width = 1.5 inch, height = 1.5 * (1251/1359) = 1.38 inch
-            logo_img = RLImage(str(logo_path), width=1.5*inch, height=1.38*inch)
-        except Exception:
-            logo_img = None
+    for lpath in candidate_logos:
+        if lpath.exists():
+            try:
+                # Proportions: width = 1.6 inch, height = 1.47 inch
+                logo_img = RLImage(str(lpath), width=1.6*inch, height=1.47*inch)
+                break
+            except Exception:
+                continue
  
     if logo_img:
         header_data = [
