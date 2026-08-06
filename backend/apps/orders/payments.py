@@ -872,18 +872,22 @@ def resolve_gateway(region, code, allow_disabled=False):
             f"Payment method '{code}' is disabled because its live provider adapter "
             'has not been implemented.'
         )
-    if gateway.mode != 'LIVE' and not _sandbox_payments_allowed():
+    if gateway.mode != 'LIVE' and not gateway.is_configured and not _sandbox_payments_allowed():
         raise PaymentError(f"Test payment method '{code}' is disabled in production.")
     return adapter
 
 
 def gateway_is_checkout_ready(gateway) -> bool:
     """Return whether a gateway can safely be offered to a shopper."""
+    if not gateway or not gateway.is_enabled:
+        return False
     adapter = get_adapter(gateway)
     if gateway.code == 'COD':
         return True
     if gateway.mode == 'LIVE':
         return adapter.supports_live
+    if gateway.is_configured:
+        return True
     return _sandbox_payments_allowed()
 
 

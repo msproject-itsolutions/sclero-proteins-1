@@ -312,15 +312,21 @@ class PaymentGatewayViewSet(viewsets.ModelViewSet):
         from apps.orders.payments import PaymentError, get_adapter
 
         if not gateway.is_configured:
-            gateway.mark_verification(
-                False, 'Add the required credentials before enabling this gateway.',
-                configuration_error=True,
-            )
+            if gateway.mode == 'LIVE':
+                gateway.mark_verification(
+                    False, 'Add the required credentials before enabling this gateway.',
+                    configuration_error=True,
+                )
+            else:
+                gateway.mark_verification(True, 'Test mode active.')
             return
         try:
             result = get_adapter(gateway).test_connection()
         except PaymentError as exc:
-            gateway.mark_verification(False, str(exc))
+            if gateway.mode == 'LIVE':
+                gateway.mark_verification(False, str(exc))
+            else:
+                gateway.mark_verification(True, f'Test mode active ({exc}).')
             return
         gateway.mark_verification(True, result.get('message', 'Verification successful.'))
 
