@@ -170,6 +170,7 @@ def _build_order_context(order, extra_context=None):
         'customer_name': order.shipping_name or order.email,
         'order_id': order.id,
         'order_number': order.id,
+        'subtotal': order.subtotal,
         'total': order.total,
         'currency': order.currency_code,
         'currency_symbol': currency_symbol,
@@ -303,7 +304,7 @@ DEFAULT_TEMPLATES = {
         "Hi {customer_name},\n\n"
         "Thank you for your order with Sclero Proteins! We have received order #{order_number} and it is now being processed.\n\n"
         "Items:\n{items_table}\n\n"
-        "Subtotal: {currency_symbol}{total}\n"
+        "Subtotal: {currency_symbol}{subtotal}\n"
         "{tax_name}: {currency_symbol}{tax_amount}\n"
         "Shipping: {currency_symbol}{shipping_cost}\n"
         "Total: {currency_symbol}{total} {currency}\n\n"
