@@ -521,6 +521,124 @@ def send_order_email(event, order, extra_context=None):
     )
 
 
+def send_owner_order_notification(order):
+    """Send an immediate, comprehensive new order alert email to the store owner & admins."""
+    if not order:
+        return False
+
+    recipients = set()
+    recipients.add("support@scleroproteins.co.uk")
+
+    if order.region and getattr(order.region, 'company_email', None):
+        email = (order.region.company_email or '').strip()
+        if email:
+            recipients.add(email)
+
+    try:
+        from apps.admin_dashboard.models import SystemSetting
+        setting = SystemSetting.objects.filter(key='COMPANY_INFO').first()
+        if setting and isinstance(setting.value, dict):
+            c_email = (setting.value.get('support') or setting.value.get('email') or '').strip()
+            if c_email:
+                recipients.add(c_email)
+    except Exception:
+        pass
+
+    try:
+        from apps.users.models import User
+        admin_emails = User.objects.filter(is_superuser=True, is_active=True).values_list('email', flat=True)
+        for em in admin_emails:
+            if em and em.strip():
+                recipients.add(em.strip())
+    except Exception:
+        pass
+
+    symbol = order.region.currency_symbol if (order.region and getattr(order.region, 'currency_symbol', None)) else (
+        '₹' if order.currency_code == 'INR' else '£' if order.currency_code == 'GBP' else '$'
+    )
+
+    items_rows = []
+    for item in order.items.all():
+        variant_info = f" ({item.variant_name})" if getattr(item, 'variant_name', '') else ""
+        prod_name = getattr(item.product, 'name', '') if getattr(item, 'product', None) else (getattr(item, 'product_name', '') or 'Item')
+        prod_sku = getattr(item.product, 'sku', '') if getattr(item, 'product', None) else (getattr(item, 'product_sku', '') or '')
+        items_rows.append(
+            f"<tr>"
+            f"<td style='padding:8px;border-bottom:1px solid #E6EAF2;'><b>{_escape(prod_name)}</b>{_escape(variant_info)}<br/>"
+            f"<span style='font-size:11px;color:#6B7280;'>SKU: {_escape(prod_sku)}</span></td>"
+            f"<td style='padding:8px;border-bottom:1px solid #E6EAF2;text-align:center;'>{item.quantity}</td>"
+            f"<td style='padding:8px;border-bottom:1px solid #E6EAF2;text-align:right;'>{symbol}{item.price:.2f}</td>"
+            f"<td style='padding:8px;border-bottom:1px solid #E6EAF2;text-align:right;'><b>{symbol}{(item.quantity * item.price):.2f}</b></td>"
+            f"</tr>"
+        )
+
+    items_table_html = f"""
+    <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px;margin:12px 0;">
+        <thead>
+            <tr style="background:#101871;color:#FFFFFF;font-weight:bold;text-align:left;">
+                <th style="padding:8px;">Product</th>
+                <th style="padding:8px;text-align:center;">Qty</th>
+                <th style="padding:8px;text-align:right;">Price</th>
+                <th style="padding:8px;text-align:right;">Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            {"".join(items_rows)}
+        </tbody>
+    </table>
+    """
+
+    subject = f"[NEW ORDER #{order.id}] {symbol}{order.total:.2f} — {_escape(order.shipping_name or order.email)}"
+    tax_label = order.region.tax_name if (order.region and getattr(order.region, 'tax_name', None)) else 'Tax'
+
+    html_body = f"""
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1F2A44;max-width:600px;">
+        <h2 style="color:#101871;margin-top:0;">🎉 New Order Received! (Order #{order.id})</h2>
+        <p style="font-size:14px;color:#4B5563;">
+            A new order has been placed on Sclero Proteins store and confirmed via <b>{_escape(order.payment_method or 'Online Payment')}</b>.
+        </p>
+
+        <div style="background:#F4F6FB;padding:16px;border-radius:8px;margin-bottom:16px;font-size:13px;">
+            <h3 style="margin-top:0;color:#101871;font-size:14px;">📦 Customer & Delivery Details</h3>
+            <b>Customer Name:</b> {_escape(order.shipping_name or 'N/A')}<br/>
+            <b>Email:</b> <a href="mailto:{_escape(order.email)}">{_escape(order.email)}</a><br/>
+            <b>Phone:</b> {_escape(order.shipping_phone or 'N/A')}<br/>
+            <b>Address:</b> {_escape(order.shipping_address_line1 or '')}{f", {_escape(order.shipping_address_line2)}" if order.shipping_address_line2 else ""}, {_escape(order.shipping_city or '')}, {_escape(order.shipping_state or '')} {_escape(order.shipping_postal_code or '')}, {_escape(order.shipping_country or '')}
+        </div>
+
+        <div style="background:#F4F6FB;padding:16px;border-radius:8px;margin-bottom:16px;font-size:13px;">
+            <h3 style="margin-top:0;color:#101871;font-size:14px;">💳 Payment Summary</h3>
+            <b>Payment Method:</b> {_escape(order.payment_method or 'ONLINE')}<br/>
+            <b>Payment Status:</b> <span style="color:#059669;font-weight:bold;">{_escape(order.payment_status or 'PAID')}</span><br/>
+            <b>Transaction Reference:</b> {_escape(order.payment_id or 'N/A')}<br/>
+            <b>Subtotal:</b> {symbol}{order.subtotal:.2f}<br/>
+            <b>Tax ({_escape(tax_label)}):</b> {symbol}{order.tax_amount:.2f}<br/>
+            <b>Shipping ({_escape(order.shipping_method or 'Standard')}):</b> {symbol}{order.shipping_cost:.2f}<br/>
+            <b style="font-size:15px;color:#101871;">Total Amount Paid: {symbol}{order.total:.2f} {order.currency_code}</b>
+        </div>
+
+        <h3 style="color:#101871;font-size:14px;margin-bottom:4px;">🛍️ Purchased Items</h3>
+        {items_table_html}
+
+        <p style="margin-top:20px;text-align:center;">
+            <a href="https://scleroproteins.co.uk/admin?section=orders" style="background:#101871;color:#FFFFFF;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:13px;display:inline-block;">
+                Manage Order in Admin Dashboard →
+            </a>
+        </p>
+    </div>
+    """
+
+    success = False
+    for recipient in recipients:
+        try:
+            send_branded_email(subject, html_body, recipient)
+            success = True
+        except Exception as exc:
+            logger.exception("Failed to send admin order alert to %s for order %s", recipient, order.id)
+
+    return success
+
+
 def send_account_email(event, user, extra_context=None):
     """Send an account-level email (welcome, password reset, etc.) — no region."""
     ctx = {

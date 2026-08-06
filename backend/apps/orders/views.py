@@ -31,7 +31,7 @@ from .serializers import (
 from .utils import generate_invoice_pdf
 from .payments import resolve_gateway, refund_payment, PaymentError
 from .pricing import quote_cart, PricingError
-from .email_service import send_order_email
+from .email_service import send_order_email, send_owner_order_notification
 from apps.admin_dashboard.models import PaymentGateway, SystemSetting
 from apps.audit.recorder import record_audit
 from .payments import get_adapter
@@ -191,6 +191,11 @@ def _run_checkout_followups(order_id):
             logger.warning('Order confirmation for order %s was queued for retry.', order_id)
     except Exception:
         logger.exception('Order confirmation scheduling failed for order %s.', order_id)
+
+    try:
+        send_owner_order_notification(order)
+    except Exception:
+        logger.exception('Owner notification failed for order %s.', order_id)
 
     try:
         from .fraud import assess_order
