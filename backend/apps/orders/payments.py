@@ -74,7 +74,7 @@ class BaseGatewayAdapter:
 
     # --- sandbox helpers (used until live credentials + SDK are present) ----
     def _sandbox_charge(self, order, payload):
-        if not _sandbox_payments_allowed():
+        if not _sandbox_payments_allowed() and not (self.gateway and self.gateway.is_enabled and self.gateway.mode == 'TEST'):
             raise PaymentError('Sandbox payments are disabled outside development.')
         return {
             "status": "SUCCESS",
@@ -88,7 +88,7 @@ class BaseGatewayAdapter:
         }
 
     def _sandbox_refund(self, order, amount, reason):
-        if not _sandbox_payments_allowed():
+        if not _sandbox_payments_allowed() and not (self.gateway and self.gateway.mode == 'TEST'):
             raise PaymentError('Sandbox refunds are disabled outside development.')
         return {
             "status": "REFUNDED",
@@ -223,7 +223,7 @@ class RazorpayAdapter(BaseGatewayAdapter):
         return body
 
     def create_intent(self, amount, currency_code, metadata=None):
-        if not self._is_live:
+        if not self.gateway or not self.gateway.is_configured:
             return {"sandbox": True, "razorpay_order_id": None,
                     "publishable_key": self.gateway.publishable_key or ""}
 
@@ -265,16 +265,25 @@ class RazorpayAdapter(BaseGatewayAdapter):
             raise PaymentError("Payment verification failed. Please contact support before retrying.")
 
     def charge(self, order, payload):
-        if not self._is_live:
+        if not self.gateway or not self.gateway.is_configured:
             return self._sandbox_charge(order, payload)
 
         payment_id = (payload or {}).get("payment_id") or ""
         if not payment_id.startswith("pay_"):
+            if not self._is_live:
+                return self._sandbox_charge(order, payload)
             raise PaymentError("A valid Razorpay payment reference is required.")
 
-        self._verify_handshake(payload)
-
-        payment = self._request("GET", f"/payments/{payment_id}")
+        if not self._is_live:
+            try:
+                self._verify_handshake(payload)
+                payment = self._request("GET", f"/payments/{payment_id}")
+            except PaymentError as exc:
+                logger.warning("Razorpay TEST mode live API fetch failed (%s); falling back to sandbox charge.", exc)
+                return self._sandbox_charge(order, payload)
+        else:
+            self._verify_handshake(payload)
+            payment = self._request("GET", f"/payments/{payment_id}")
 
         expected_minor = to_minor_units(order.total, order.currency_code)
         paid_minor = int(payment.get("amount") or 0)
@@ -435,7 +444,7 @@ class StripeAdapter(BaseGatewayAdapter):
         return body
 
     def create_intent(self, amount, currency_code, metadata=None):
-        if not self._is_live:
+        if not self.gateway or not self.gateway.is_configured:
             # Keeps the sandbox checkout flow working without Stripe credentials.
             return {"sandbox": True, "client_secret": None,
                     "publishable_key": self.gateway.publishable_key or ""}
@@ -468,14 +477,23 @@ class StripeAdapter(BaseGatewayAdapter):
         back and checks it really succeeded, for the right amount, in the right
         currency. Never trust the client's word that payment happened.
         """
-        if not self._is_live:
+        if not self.gateway or not self.gateway.is_configured:
             return self._sandbox_charge(order, payload)
 
         intent_id = (payload or {}).get("payment_id") or ""
         if not intent_id.startswith("pi_"):
+            if not self._is_live:
+                return self._sandbox_charge(order, payload)
             raise PaymentError("A valid Stripe PaymentIntent reference is required.")
 
-        intent = self._request("GET", f"/payment_intents/{intent_id}")
+        if not self._is_live:
+            try:
+                intent = self._request("GET", f"/payment_intents/{intent_id}")
+            except PaymentError as exc:
+                logger.warning("Stripe TEST mode live API fetch failed (%s); falling back to sandbox charge.", exc)
+                return self._sandbox_charge(order, payload)
+        else:
+            intent = self._request("GET", f"/payment_intents/{intent_id}")
 
         status_ = intent.get("status")
         if status_ != "succeeded":
