@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useSelector, useDispatch } from 'react-redux';
 import { setRegion } from '../store/regionSlice';
 import { fetchCart, clearCartLocal } from '../store/cartSlice';
@@ -103,6 +103,7 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
   const authUser = useSelector((state) => state.auth?.user);
 
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const firstMobileLinkRef = useRef(null);
 
   const [showDropdown, setShowDropdown] = useState(false);
@@ -128,7 +129,8 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
 
   useEffect(() => {
     setMobileOpen(false);
-  }, [pathname]);
+    setShowShopMenu(false);
+  }, [pathname, searchParams]);
 
   useEffect(() => {
     if (typeof document === 'undefined') return undefined;
@@ -289,7 +291,11 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
                     onMouseEnter={() => setShowShopMenu(true)}
                     onMouseLeave={() => setShowShopMenu(false)}
                   >
-                    <Link href={link.url} className={`${navLinkClass} ${activeClass}`}>
+                    <Link
+                      href={link.url}
+                      className={`${navLinkClass} ${activeClass}`}
+                      onClick={() => setShowShopMenu((prev) => !prev)}
+                    >
                       <span className="inline-flex items-center gap-1.5">
                         {link.label}
                         {categories.length > 0 && <ChevronDown className="h-3.5 w-3.5" />}
@@ -299,7 +305,11 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
                     {showShopMenu && categories.length > 0 && (
                       <div className="animate-fade-in absolute left-0 top-full origin-top-left pt-4">
                         <div className="w-72 rounded-[24px] border border-edge bg-white p-3 shadow-elevated">
-                          <Link href="/products" className="block rounded-2xl px-4 py-3 text-sm font-semibold text-ink-primary transition-colors hover:bg-surface-muted">
+                          <Link
+                            href="/products"
+                            onClick={() => setShowShopMenu(false)}
+                            className="block rounded-2xl px-4 py-3 text-sm font-semibold text-ink-primary transition-colors hover:bg-surface-muted"
+                          >
                             Shop all products
                           </Link>
                           <div className="my-2 border-t border-edge-subtle" />
@@ -307,6 +317,7 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
                             <Link
                               key={category.slug}
                               href={`/products?category=${category.slug}`}
+                              onClick={() => setShowShopMenu(false)}
                               className="flex items-center justify-between rounded-2xl px-4 py-3 text-sm text-ink-primary transition-colors hover:bg-surface-muted"
                             >
                               <span>{category.name}</span>

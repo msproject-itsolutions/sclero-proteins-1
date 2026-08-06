@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useDispatch, useSelector } from 'react-redux';
 import { Search, X, ChevronDown, SlidersHorizontal, ShieldCheck, Sparkles } from 'lucide-react';
 import { addToCart } from '../store/cartSlice';
@@ -98,21 +98,27 @@ export default function ProductCatalog({
   // FAQ Accordion state
   const [openFaq, setOpenFaq] = useState(null);
 
-  // Pagination
+  const searchParams = useSearchParams();
   const [page, setPage] = useState(1);
   const gridRef = useRef(null);
 
-  // Pre-select category/search query on load
+  // Pre-select category/search query on load & when URL query params change
   useEffect(() => {
-    if (!filterable || typeof window === 'undefined') return;
-    const params = new URLSearchParams(window.location.search);
-    const slug = params.get('category');
-    if (slug) setActiveCategory(slug);
-    const q = params.get('q');
-    if (q) { setSearchInput(q); setSearch(q); }
-    const pageParam = parseInt(params.get('page') || '1', 10);
-    if (!Number.isNaN(pageParam) && pageParam > 0) setPage(pageParam);
-  }, [filterable]);
+    if (!filterable) return;
+    const slug = searchParams.get('category');
+    setActiveCategory(slug || null);
+    const q = searchParams.get('q');
+    if (q !== null) {
+      setSearchInput(q);
+      setSearch(q);
+    }
+    const pageParam = parseInt(searchParams.get('page') || '1', 10);
+    if (!Number.isNaN(pageParam) && pageParam > 0) {
+      setPage(pageParam);
+    } else {
+      setPage(1);
+    }
+  }, [filterable, searchParams]);
 
   // Reset page to 1 when any filter/search/sort changes
   useEffect(() => {
