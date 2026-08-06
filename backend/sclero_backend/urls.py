@@ -32,7 +32,7 @@ from apps.users.totp import (
 )
 from apps.orders.views import (
     CartViewSet, CheckoutView, ApplyCouponView, CreatePaymentIntentView, RefundView, MyOrdersView,
-    OrderAdminViewSet, RefundAdminViewSet, InvoiceAdminViewSet, AbandonedCheckoutsView,
+    PublicOrderDetailView, OrderAdminViewSet, RefundAdminViewSet, InvoiceAdminViewSet, AbandonedCheckoutsView,
     StripeWebhookView, RazorpayWebhookView, PaypalWebhookView,
     UnifiedPaymentWebhookView, CouponAdminViewSet,
 )
@@ -168,6 +168,7 @@ urlpatterns = [
     path('api/webhooks/paypal/', PaypalWebhookView.as_view(), name='webhook_paypal'),
     path('api/webhooks/payment/<str:gateway_code>/', UnifiedPaymentWebhookView.as_view(), name='webhook_payment_unified'),
     path('api/orders/mine/', MyOrdersView.as_view(), name='my_orders'),
+    path('api/orders/lookup/', PublicOrderDetailView.as_view(), name='public_order_detail'),
     path('api/admin/abandoned-checkouts/', AbandonedCheckoutsView.as_view(), name='abandoned_checkouts'),
     path('api/orders/<int:order_id>/refund/', RefundView.as_view(), name='order_refund'),
 

@@ -237,6 +237,35 @@ class MyOrdersView(generics.ListAPIView):
         )
 
 
+class PublicOrderDetailView(views.APIView):
+    """Public lookup endpoint for order confirmation screen.
+
+    Allows fetching order details by ID and matching email for guest or registered shoppers.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        order_id = request.query_params.get('id')
+        email = (request.query_params.get('email') or '').strip()
+
+        if not order_id:
+            return Response({'error': 'Order ID is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        qs = Order.objects.filter(pk=order_id).prefetch_related(
+            Prefetch('items', queryset=OrderItem.objects.select_related('product')),
+            'refunds'
+        ).select_related('invoice', 'region')
+
+        if email:
+            qs = qs.filter(email__iexact=email)
+
+        order = qs.first()
+        if not order:
+            return Response({'error': 'Order not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        return Response(OrderSerializer(order).data, status=status.HTTP_200_OK)
+
+
 class CartViewSet(viewsets.ViewSet):
     permission_classes = [AllowAny]
 

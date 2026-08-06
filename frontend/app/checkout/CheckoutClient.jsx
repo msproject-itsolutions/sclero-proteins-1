@@ -398,6 +398,7 @@ function CheckoutPageInner({ gateways, gatewayError, fetchGateways, stripeReady 
         currency: data.order.currency_code,
       });
       dispatch(clearCartLocal());
+      router.push(`/checkout/success?order_id=${data.order.id}&email=${encodeURIComponent(data.order.email || email)}`);
     } catch (err) {
       setErrorMsg(err.message);
       throw err;
@@ -473,6 +474,7 @@ function CheckoutPageInner({ gateways, gatewayError, fetchGateways, stripeReady 
       });
 
       dispatch(clearCartLocal());
+      router.push(`/checkout/success?order_id=${data.order.id}&email=${encodeURIComponent(data.order.email || cleaned.email)}`);
     } catch (err) {
       setErrorMsg(err.message);
     } finally {
