@@ -31,7 +31,7 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument(
             '--base-url',
-            default=os.getenv('MEDIA_PUBLIC_BASE', 'http://localhost:8000'),
+            default=os.getenv('MEDIA_PUBLIC_BASE', ''),
             help='Public base URL prefixed onto the rewritten file_url (no trailing slash).',
         )
         parser.add_argument('--dry-run', action='store_true', help='Report only; write nothing.')

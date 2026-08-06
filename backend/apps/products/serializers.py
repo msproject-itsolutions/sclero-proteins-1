@@ -9,12 +9,28 @@ from .models import (
 )
 
 
+def normalize_media_url(url: str) -> str:
+    if not url:
+        return ""
+    url = str(url).strip()
+    for prefix in ['http://localhost:8000', 'http://127.0.0.1:8000', 'http://localhost:8001', 'http://localhost:3000']:
+        if url.startswith(prefix):
+            url = url[len(prefix):]
+    return url
+
+
 class CategorySerializer(serializers.ModelSerializer):
     product_count = serializers.IntegerField(read_only=True, required=False)
 
     class Meta:
         model = Category
         fields = ['id', 'name', 'slug', 'description', 'display_order', 'product_count', 'image_url']
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if data.get('image_url'):
+            data['image_url'] = normalize_media_url(data['image_url'])
+        return data
 
 
 class ProductVariantSerializer(serializers.ModelSerializer):
@@ -33,9 +49,14 @@ class ProductVariantSerializer(serializers.ModelSerializer):
 
 
 class ProductMediaSerializer(serializers.ModelSerializer):
+    file_url = serializers.SerializerMethodField()
+
     class Meta:
         model = ProductMedia
         fields = ['id', 'file_url', 'media_type', 'display_order']
+
+    def get_file_url(self, obj):
+        return normalize_media_url(obj.file_url)
 
 class ProductReviewSerializer(serializers.ModelSerializer):
     class Meta:
@@ -118,7 +139,7 @@ class ProductListSerializer(serializers.ModelSerializer):
     def get_thumbnail(self, obj):
         prefetched = getattr(obj, '_public_images', None)
         media = prefetched[0] if prefetched else obj.media.filter(media_type='IMAGE').first()
-        return media.file_url if media else None
+        return normalize_media_url(media.file_url) if media else None
 
     def get_variants(self, obj):
         variants = getattr(obj, '_public_variants', None)
@@ -435,7 +456,7 @@ class BundleItemSerializer(serializers.ModelSerializer):
             'id': obj.product.id,
             'sku': obj.product.sku,
             'name': obj.product.name,
-            'thumbnail': media.file_url if media else None,
+            'thumbnail': normalize_media_url(media.file_url) if media else None,
         }
 
 
