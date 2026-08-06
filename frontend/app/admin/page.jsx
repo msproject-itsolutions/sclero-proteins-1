@@ -4835,6 +4835,7 @@ function HomepageSettingsTab({ authFetch }) {
     { key: 'conversionSection', label: 'Conversion Block' },
     { key: 'faqSection', label: 'FAQs' },
     { key: 'educationSection', label: 'Education' },
+    { key: 'instagramReels', label: 'Instagram Feed' },
     { key: 'inquirySection', label: 'Inquiry CTA' },
   ];
 
@@ -5402,6 +5403,23 @@ function HomepageSettingsTab({ authFetch }) {
                 ))}
               </div>
             </ArrayCard>
+          </div>
+        );
+      case 'instagramReels':
+        return (
+          <div className="space-y-4">
+            <ToggleField
+              checked={settings.instagramReels?.enabled !== false}
+              onChange={(value) => updateSectionField('instagramReels', 'enabled', value)}
+              label="Show Instagram Feed on Homepage"
+              description="Display or hide the Instagram section on the homepage."
+            />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <InputField label="Kicker" value={settings.instagramReels?.kicker || ''} onChange={(value) => updateSectionField('instagramReels', 'kicker', value)} />
+              <InputField label="Headline" value={settings.instagramReels?.title || ''} onChange={(value) => updateSectionField('instagramReels', 'title', value)} />
+            </div>
+            <TextAreaField label="Description" value={settings.instagramReels?.description || ''} onChange={(value) => updateSectionField('instagramReels', 'description', value)} rows={2} />
+            <InputField label="Instagram Profile URL" value={settings.instagramReels?.profileUrl || ''} onChange={(value) => updateSectionField('instagramReels', 'profileUrl', value)} placeholder="https://www.instagram.com/scleroproteins/" />
           </div>
         );
       case 'inquirySection':

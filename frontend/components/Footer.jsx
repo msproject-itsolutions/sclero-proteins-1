@@ -14,7 +14,6 @@ import {
   Youtube,
 } from 'lucide-react';
 import { getApiUrl, postJson } from '../lib/api';
-import PushNotificationControl from './PushNotificationControl';
 import { setRegion } from '../store/regionSlice';
 import { fetchCart } from '../store/cartSlice';
 import { isProdHost, crossDomainUrl } from '../lib/region';
@@ -202,8 +201,6 @@ export default function Footer() {
                 {contactEmail}
               </a>
             )}
-
-            <PushNotificationControl />
 
             <div className="flex flex-wrap gap-2">
               {socials.map((social) => {

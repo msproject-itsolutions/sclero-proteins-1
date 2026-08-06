@@ -16,7 +16,7 @@ const dmSans = DM_Sans({
 async function fetchSiteSetting(key) {
   try {
     const res = await fetch(getApiUrl(`/api/site-settings/${key}/`), {
-      next: { revalidate: 3600 },
+      next: { revalidate: 60 },
     });
     if (!res.ok) return {};
     const data = await res.json();
@@ -30,7 +30,7 @@ const fetchSeoSettings = () => fetchSiteSetting('SEO_SETTINGS');
 
 async function fetchRegions() {
   try {
-    const response = await fetch(getApiUrl('/api/regions/'), { next: { revalidate: 3600 } });
+    const response = await fetch(getApiUrl('/api/regions/'), { next: { revalidate: 60 } });
     if (!response.ok) return [];
     const data = await response.json();
     return Array.isArray(data) ? data : data.results || [];

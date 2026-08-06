@@ -6,7 +6,7 @@ import { normalizeHomepageSettings } from '../lib/homepageContent';
 async function fetchHomepageSettings() {
   try {
     const res = await fetch(getApiUrl('/api/site-settings/HOMEPAGE_SETTINGS/'), {
-      next: { revalidate: 3600 },
+      next: { revalidate: 60 },
     });
     if (!res.ok) return normalizeHomepageSettings();
     const data = await res.json();
@@ -42,7 +42,7 @@ export async function generateMetadata() {
 async function fetchBlogs() {
   try {
     const res = await fetch(getApiUrl('/api/blog-posts/'), {
-      next: { revalidate: 3600 } // cache for 1 hour
+      next: { revalidate: 60 } // cache for 60 seconds
     });
     if (!res.ok) return [];
     const data = await res.json();
@@ -52,6 +52,8 @@ async function fetchBlogs() {
     return [];
   }
 }
+
+export const revalidate = 60;
 
 export default async function HomePage() {
   const [blogs, homepageSettings] = await Promise.all([

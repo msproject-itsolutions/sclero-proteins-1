@@ -700,30 +700,73 @@ export default function ShippingZonePanel({
   };
 
   return (
-    <div className="space-y-4">
-      {/* Toolbar */}
-      <div className="flex items-center justify-between">
+    <div className="space-y-5">
+      {/* Step-by-Step Visual Guide for Admin */}
+      <div className="bg-white rounded-lg border border-edge p-5 shadow-card space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-edge-subtle pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-ink-primary text-white">
+              <Truck className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-ink-primary">How to Add Shipping Zone Details</h3>
+              <p className="text-xs text-ink-muted">Follow these 3 easy steps to set up shipping locations and rates.</p>
+            </div>
+          </div>
+          <button
+            onClick={onAddZone}
+            className="inline-flex items-center gap-2 rounded-md bg-ink-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-ink-primary/90 transition shadow-card"
+          >
+            <Plus className="h-4 w-4" /> Add Shipping Zone
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="flex items-start gap-3 p-3 rounded-md bg-surface-muted border border-edge-subtle">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ink-primary text-xs font-bold text-white">1</span>
+            <div>
+              <p className="text-sm font-semibold text-ink-primary">1. Click &quot;Add Shipping Zone&quot;</p>
+              <p className="text-xs text-ink-muted mt-0.5">Click the black button above and give your zone a name (e.g. <i>UK Mainland</i> or <i>India Domestic</i>).</p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3 p-3 rounded-md bg-surface-muted border border-edge-subtle">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ink-primary text-xs font-bold text-white">2</span>
+            <div>
+              <p className="text-sm font-semibold text-ink-primary">2. Add Locations</p>
+              <p className="text-xs text-ink-muted mt-0.5">Type or pick target <b>Countries</b>, <b>States</b>, or <b>PIN codes</b> covered by this zone and click Save.</p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3 p-3 rounded-md bg-surface-muted border border-edge-subtle">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ink-primary text-xs font-bold text-white">3</span>
+            <div>
+              <p className="text-sm font-semibold text-ink-primary">3. Click &quot;+ Add Rate&quot;</p>
+              <p className="text-xs text-ink-muted mt-0.5">Click <b>&quot;+ Add Rate&quot;</b> inside your zone card to set shipping price (Flat fee, Free shipping, or Weight rate).</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Toolbar summary */}
+      <div className="flex items-center justify-between px-1">
         <div>
           <p className="text-sm font-semibold text-ink-primary">
-            {zones.length} shipping zone{zones.length !== 1 ? 's' : ''} configured
+            {zones.length} active shipping zone{zones.length !== 1 ? 's' : ''} configured
           </p>
-          <p className="text-sm text-ink-muted">Zones are evaluated top-to-bottom. First matching zone applies.</p>
+          <p className="text-xs text-ink-muted">When a customer enters their delivery address at checkout, the store automatically applies their matching zone rate.</p>
         </div>
-        <button onClick={onAddZone}
-          className="inline-flex items-center gap-2 rounded-md bg-ink-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-ink-primary/90 transition shadow-card">
-          <Plus className="h-4 w-4" /> Add Zone
-        </button>
       </div>
 
       {/* Empty state */}
       {zones.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 rounded-lg border-2 border-dashed border-edge py-16">
+        <div className="flex flex-col items-center gap-3 rounded-lg border-2 border-dashed border-edge py-14 bg-white text-center px-4">
           <Globe className="h-10 w-10 text-ink-subtle" />
-          <p className="text-sm font-semibold text-ink-muted">No shipping zones yet</p>
-          <p className="text-sm text-ink-subtle">Create a zone to define where and how you ship.</p>
+          <p className="text-base font-semibold text-ink-primary">No shipping zones configured yet</p>
+          <p className="text-sm text-ink-subtle max-w-md">Click the button below to create your first delivery zone and start setting up shipping charges.</p>
           <button onClick={onAddZone}
-            className="mt-1 inline-flex items-center gap-2 rounded-md bg-ink-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-ink-primary/90 transition">
-            <Plus className="h-4 w-4" /> Create First Zone
+            className="mt-2 inline-flex items-center gap-2 rounded-md bg-ink-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-ink-primary/90 transition shadow-card">
+            <Plus className="h-4 w-4" /> Create First Shipping Zone
           </button>
         </div>
       ) : (

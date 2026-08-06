@@ -565,42 +565,116 @@ function OrdersTab({ authFetch }) {
   if (orders.length === 0) return <p className="text-sm text-ink-secondary">You have no orders yet.</p>;
 
   const statusColor = {
-    PENDING: 'bg-amber-100 text-amber-700',
-    PROCESSING: 'bg-blue-100 text-blue-700',
-    SHIPPED: 'bg-indigo-100 text-indigo-700',
-    DELIVERED: 'bg-green-100 text-green-700',
-    REFUNDED: 'bg-red-100 text-red-700',
-    CANCELLED: 'bg-surface-muted text-ink-secondary',
+    PENDING: 'bg-amber-100 text-amber-800 border border-amber-200',
+    CONFIRMED: 'bg-emerald-100 text-emerald-800 border border-emerald-200',
+    PROCESSING: 'bg-blue-100 text-blue-800 border border-blue-200',
+    SHIPPED: 'bg-indigo-100 text-indigo-800 border border-indigo-200',
+    DELIVERED: 'bg-green-100 text-green-800 border border-green-200',
+    COMPLETED: 'bg-green-100 text-green-800 border border-green-200',
+    REFUNDED: 'bg-red-100 text-red-800 border border-red-200',
+    CANCELLED: 'bg-surface-muted text-ink-secondary border border-edge',
   };
 
+  const orderStages = [
+    { key: 'confirmed', label: 'Order Confirmed' },
+    { key: 'processing', label: 'Processing' },
+    { key: 'shipped', label: 'Shipped' },
+    { key: 'out_for_delivery', label: 'Out for Delivery' },
+    { key: 'delivered', label: 'Delivered' },
+  ];
+
   return (
-    <div className="space-y-4">
-      {orders.map((o) => (
-        <div key={o.id} className="rounded-md border border-edge bg-surface p-4 shadow-card">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm font-bold text-ink-primary">Order #{o.id}</span>
-            <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${statusColor[o.status] || 'bg-surface-muted text-ink-secondary'}`}>
-              {o.status}
-            </span>
+    <div className="space-y-6">
+      {orders.map((o) => {
+        const currentStatus = String(o.status || 'CONFIRMED').toUpperCase();
+        const activeStageIndex = ['DELIVERED', 'COMPLETED'].includes(currentStatus)
+          ? 4
+          : ['OUT_FOR_DELIVERY', 'OUT FOR DELIVERY'].includes(currentStatus)
+          ? 3
+          : currentStatus === 'SHIPPED'
+          ? 2
+          : currentStatus === 'PROCESSING'
+          ? 1
+          : 0;
+
+        return (
+          <div key={o.id} className="rounded-xl border border-edge bg-surface p-5 shadow-card space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-edge-subtle pb-3">
+              <div>
+                <span className="text-base font-bold text-ink-primary">Order #{o.id}</span>
+                <p className="text-xs text-ink-secondary mt-0.5">
+                  Placed on {o.created_at ? new Date(o.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}
+                </p>
+              </div>
+              <span className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wider ${statusColor[currentStatus] || 'bg-surface-muted text-ink-secondary'}`}>
+                {o.status === 'COMPLETED' ? 'Order Confirmed & Fulfilled' : o.status}
+              </span>
+            </div>
+
+            {/* Visual Stage Progress Tracker */}
+            <div className="py-2">
+              <div className="relative flex items-center justify-between">
+                <div className="absolute top-1/2 left-0 right-0 h-1 bg-edge -translate-y-1/2 z-0" />
+                <div
+                  className="absolute top-1/2 left-0 h-1 bg-brand-accent -translate-y-1/2 z-0 transition-all duration-500"
+                  style={{ width: `${(activeStageIndex / (orderStages.length - 1)) * 100}%` }}
+                />
+                {orderStages.map((stage, idx) => {
+                  const isPassed = idx <= activeStageIndex;
+                  const isCurrent = idx === activeStageIndex;
+                  return (
+                    <div key={stage.key} className="relative z-10 flex flex-col items-center">
+                      <div
+                        className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all duration-300 ${
+                          isPassed
+                            ? 'bg-ink-primary text-white ring-4 ring-ink-primary/10'
+                            : 'bg-white border-2 border-edge text-ink-muted'
+                        }`}
+                      >
+                        {isPassed ? '✓' : idx + 1}
+                      </div>
+                      <span
+                        className={`mt-1.5 text-[9px] font-semibold text-center hidden sm:block max-w-[65px] ${
+                          isCurrent ? 'text-ink-primary font-bold' : isPassed ? 'text-ink-secondary' : 'text-ink-muted'
+                        }`}
+                      >
+                        {stage.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Order Items */}
+            <div className="space-y-1.5 border-t border-edge-subtle pt-3">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-ink-muted mb-1">Items Included</p>
+              <ul className="space-y-1 text-xs text-ink-primary">
+                {(o.items || []).map((it) => (
+                  <li key={it.id} className="flex justify-between items-center py-0.5">
+                    <span><span className="font-semibold">{it.quantity}×</span> {it.product_name}</span>
+                    {it.price && <span className="text-ink-secondary">{o.currency_code} {it.price}</span>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between border-t border-edge-subtle pt-3 text-xs">
+              <span className="font-bold text-sm text-ink-primary">{o.currency_code} {o.total}</span>
+              {o.invoice?.pdf_url && (
+                <a
+                  href={getApiUrl(o.invoice.pdf_url)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn-primary py-1.5 px-3 text-xs font-semibold"
+                >
+                  Download Invoice PDF
+                </a>
+              )}
+            </div>
           </div>
-          <p className="mb-2 text-xs text-ink-secondary">
-            {o.created_at ? new Date(o.created_at).toLocaleDateString() : ''} · {o.items?.length || 0} item(s)
-          </p>
-          <ul className="mb-2 space-y-1 text-xs text-ink-secondary">
-            {(o.items || []).map((it) => (
-              <li key={it.id}>{it.quantity}× {it.product_name}</li>
-            ))}
-          </ul>
-          <div className="flex items-center justify-between border-t border-edge-subtle pt-2">
-            <span className="text-sm font-semibold text-ink-primary">{o.currency_code} {o.total}</span>
-            {o.invoice?.pdf_url && (
-              <a href={getApiUrl(o.invoice.pdf_url)} target="_blank" rel="noreferrer" className="text-xs font-semibold text-ink-accent hover:underline">
-                Download invoice
-              </a>
-            )}
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

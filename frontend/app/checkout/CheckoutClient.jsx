@@ -484,6 +484,25 @@ function CheckoutPageInner({ gateways, gatewayError, fetchGateways, stripeReady 
     const invoice = completedOrder.invoice;
     const pdfUrl = invoice && invoice.pdf_url ? getApiUrl(invoice.pdf_url) : '#';
     const invoiceNum = invoice ? invoice.invoice_number : `Order #${completedOrder.id}`;
+    const orderItems = Array.isArray(completedOrder.items) ? completedOrder.items : [];
+
+    const orderStages = [
+      { key: 'confirmed', label: 'Order Confirmed' },
+      { key: 'processing', label: 'Processing' },
+      { key: 'shipped', label: 'Shipped' },
+      { key: 'out_for_delivery', label: 'Out for Delivery' },
+      { key: 'delivered', label: 'Delivered' },
+    ];
+    const currentStatus = String(completedOrder.status || 'CONFIRMED').toUpperCase();
+    const activeStageIndex = ['DELIVERED', 'COMPLETED'].includes(currentStatus)
+      ? 4
+      : ['OUT_FOR_DELIVERY', 'OUT FOR DELIVERY'].includes(currentStatus)
+      ? 3
+      : currentStatus === 'SHIPPED'
+      ? 2
+      : currentStatus === 'PROCESSING'
+      ? 1
+      : 0;
 
     return (
       <div className="min-h-screen flex flex-col bg-brand-bg text-brand-text">
@@ -495,18 +514,60 @@ function CheckoutPageInner({ gateways, gatewayError, fetchGateways, stripeReady 
           </div>
         </header>
 
-        <main className="flex-1 max-w-2xl mx-auto px-4 py-16 sm:px-6 lg:px-8 flex flex-col items-center text-center">
+        <main className="flex-1 max-w-2xl mx-auto px-4 py-12 sm:px-6 lg:px-8 flex flex-col items-center text-center">
           <div className="h-16 w-16 bg-green-50 border border-green-200 rounded-full flex items-center justify-center mb-6 shadow-sm">
             <CheckCircle className="h-10 w-10 text-brand-success animate-bounce" />
           </div>
 
-          <p className="kicker mb-2">Order Confirmed</p>
+          <span className="kicker mb-2">Instant Order Reassurance</span>
           <h1 className="font-display text-[32px] sm:text-[40px] font-bold text-ink-primary tracking-tight mb-3">
-            Thank you for your order!
+            Your order has been confirmed!
           </h1>
           <p className="text-xs sm:text-sm text-ink-secondary max-w-md leading-[1.6] mb-8">
-            Your order has been placed successfully. A confirmation email will be sent to <span className="font-semibold text-ink-primary">{completedOrder.email || email}</span> shortly.
+            Thank you for your order! We have received your payment and started preparing your items for dispatch. A confirmation email has been dispatched to <span className="font-semibold text-ink-primary">{completedOrder.email || email}</span>.
           </p>
+
+          {/* Visual Order Progress Tracker */}
+          <div className="w-full bg-white border border-edge rounded-2xl p-6 shadow-card mb-8 text-left">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-ink-muted mb-4">Order Progress Status</h3>
+            <div className="relative flex items-center justify-between">
+              <div className="absolute top-1/2 left-0 right-0 h-1 bg-edge -translate-y-1/2 z-0" />
+              <div
+                className="absolute top-1/2 left-0 h-1 bg-brand-accent -translate-y-1/2 z-0 transition-all duration-500"
+                style={{ width: `${(activeStageIndex / (orderStages.length - 1)) * 100}%` }}
+              />
+              {orderStages.map((stage, idx) => {
+                const isPassed = idx <= activeStageIndex;
+                const isCurrent = idx === activeStageIndex;
+                return (
+                  <div key={stage.key} className="relative z-10 flex flex-col items-center">
+                    <div
+                      className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 ${
+                        isPassed
+                          ? 'bg-ink-primary text-white ring-4 ring-ink-primary/10'
+                          : 'bg-white border-2 border-edge text-ink-muted'
+                      }`}
+                    >
+                      {isPassed ? '✓' : idx + 1}
+                    </div>
+                    <span
+                      className={`mt-2 text-[10px] font-semibold text-center hidden sm:block max-w-[70px] ${
+                        isCurrent ? 'text-ink-primary font-bold' : isPassed ? 'text-ink-secondary' : 'text-ink-muted'
+                      }`}
+                    >
+                      {stage.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="mt-4 flex items-center justify-between border-t border-edge-subtle pt-3 text-xs">
+              <span className="text-ink-secondary font-medium">Current Status: <span className="font-bold text-ink-accent uppercase">{completedOrder.status || 'CONFIRMED'}</span></span>
+              {completedOrder.shipping_estimated_days && (
+                <span className="text-ink-muted">Estimated Delivery: <span className="font-semibold text-ink-primary">{completedOrder.shipping_estimated_days}</span></span>
+              )}
+            </div>
+          </div>
 
           <div className="w-full bg-white border border-edge rounded-2xl p-6 sm:p-8 text-left space-y-4 shadow-card mb-8">
             <h3 className="font-display text-[18px] font-bold text-ink-primary border-b border-edge pb-2">Order Information</h3>
@@ -528,6 +589,22 @@ function CheckoutPageInner({ gateways, gatewayError, fetchGateways, stripeReady 
                 <span className="font-semibold text-ink-primary text-sm uppercase">{currentRegion} ({currencySymbol})</span>
               </div>
             </div>
+
+            {/* Items Summary if available */}
+            {orderItems.length > 0 && (
+              <div className="border-t border-edge pt-4 space-y-2">
+                <span className="text-ink-muted block uppercase tracking-wider text-[10px] font-bold">Ordered Items</span>
+                <ul className="divide-y divide-edge-subtle text-xs">
+                  {orderItems.map((it, idx) => (
+                    <li key={it.id || idx} className="py-1.5 flex justify-between items-center text-ink-primary">
+                      <span><span className="font-bold">{it.quantity}×</span> {it.product_name || it.name}</span>
+                      {it.price && <span className="font-semibold">{currencySymbol}{parseFloat(it.price).toFixed(2)}</span>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {completedOrder.shipping_address_line1 && (
               <div className="border-t border-edge pt-4 space-y-1.5 text-xs">
                 <span className="text-ink-muted block uppercase tracking-wider text-[10px] font-bold">Shipping Address</span>
