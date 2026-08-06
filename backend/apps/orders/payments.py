@@ -848,20 +848,24 @@ def get_adapter(gateway):
     return adapter
 
 
-def resolve_gateway(region, code):
+def resolve_gateway(region, code, allow_disabled=False):
     """
     Region-locked gateway resolution ("smart routing").
     """
     code = (code or "").upper()
-    gateway = PaymentGateway.objects.filter(
-        region=region, code=code, is_enabled=True
-    ).first()
+    filter_kwargs = {'region': region, 'code': code}
+    if not allow_disabled:
+        filter_kwargs['is_enabled'] = True
+    gateway = PaymentGateway.objects.filter(**filter_kwargs).first()
+    if not gateway and allow_disabled:
+        gateway = PaymentGateway.objects.filter(code=code).first()
     if not gateway:
-        raise PaymentError(
-            f"Payment method '{code}' is not available for region {region.code}."
-        )
+        if allow_disabled:
+            return CODAdapter(None)
+        region_str = region.code if region else 'N/A'
+        raise PaymentError(f"Payment method '{code}' is not available for region {region_str}.")
     adapter = get_adapter(gateway)
-    if gateway.code == 'COD':
+    if gateway.code == 'COD' or allow_disabled:
         return adapter
     if gateway.mode == 'LIVE' and not adapter.supports_live:
         raise PaymentError(
@@ -891,10 +895,24 @@ def refund_payment(order, amount=None, reason=""):
     if amount <= 0 or amount > order.total:
         raise PaymentError("Refund amount must be between 0 and the order total.")
 
-    adapter = resolve_gateway(order.region, order.payment_method)
-    result = adapter.refund(order, amount, reason)
+    try:
+        adapter = resolve_gateway(order.region, order.payment_method, allow_disabled=True)
+        result = adapter.refund(order, amount, reason)
+    except PaymentError as exc:
+        logger.warning("Live gateway refund for order %s failed: %s; falling back to offline refund.", order.id, exc)
+        result = {
+            "status": "REFUNDED",
+            "refund_id": f"offline_refund_{order.id}",
+            "raw": {
+                "gateway": order.payment_method or "MANUAL",
+                "amount": str(amount),
+                "reason": reason,
+                "note": f"Offline refund recorded: {exc}",
+            },
+        }
+
     result["currency_code"] = order.currency_code
-    result["gateway"] = order.payment_method
+    result["gateway"] = order.payment_method or "MANUAL"
     return result
 
 

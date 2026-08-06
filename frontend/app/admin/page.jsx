@@ -2591,7 +2591,7 @@ function SmtpSettingsCard({ authFetch }) {
   if (loading) return null;
 
   return (
-    <div className="mb-6 rounded-md border border-edge bg-white p-5 shadow-card">
+    <form onSubmit={(e) => { e.preventDefault(); save(); }} className="mb-6 rounded-md border border-edge bg-white p-5 shadow-card">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h3 className="text-base font-semibold text-ink-primary">Email delivery (SMTP)</h3>
@@ -2645,10 +2645,10 @@ function SmtpSettingsCard({ authFetch }) {
       {error && <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-ink-danger">{error}</p>}
 
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-edge-subtle pt-4">
-        <button onClick={save} disabled={saving} className="btn-primary px-5 py-2.5 text-sm uppercase">{saving ? 'Saving…' : 'Save email settings'}</button>
+        <button type="submit" disabled={saving} className="btn-primary px-5 py-2.5 text-sm uppercase">{saving ? 'Saving…' : 'Save email settings'}</button>
         <div className="ml-auto flex items-center gap-2">
           <input value={testEmail} onChange={(e) => setTestEmail(e.target.value)} placeholder="Send test to…" className="w-56 rounded-sm border border-edge p-2 text-sm" />
-          <button onClick={sendTest} disabled={testing || !testEmail.trim()} className="rounded-lg border border-edge px-4 py-2 text-sm font-semibold text-ink-primary hover:border-ink-primary disabled:opacity-40">
+          <button type="button" onClick={sendTest} disabled={testing || !testEmail.trim()} className="rounded-lg border border-edge px-4 py-2 text-sm font-semibold text-ink-primary hover:border-ink-primary disabled:opacity-40">
             {testing ? 'Sending…' : 'Send test email'}
           </button>
         </div>
@@ -2657,7 +2657,7 @@ function SmtpSettingsCard({ authFetch }) {
         Microsoft 365 note: if the test fails with an authentication error, enable
         &quot;Authenticated SMTP&quot; for the mailbox in the Microsoft 365 admin center, then retry.
       </p>
-    </div>
+    </form>
   );
 }
 

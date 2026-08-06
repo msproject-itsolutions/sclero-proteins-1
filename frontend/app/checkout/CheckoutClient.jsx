@@ -1208,8 +1208,9 @@ export default function CheckoutClient() {
 
   const fetchGateways = useCallback(() => {
     if (!currentRegion) return;
+    const regionCode = typeof currentRegion === 'object' ? (currentRegion.code || 'UK') : (currentRegion || 'UK');
     setGatewayError(false);
-    fetch(getApiUrl(`/api/admin/payment-gateways/available/?region=${currentRegion}`))
+    fetch(getApiUrl(`/api/admin/payment-gateways/available/?region=${encodeURIComponent(regionCode)}`))
       .then((r) => {
         if (!r.ok) throw new Error();
         return r.json();

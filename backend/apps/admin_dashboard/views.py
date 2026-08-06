@@ -359,8 +359,10 @@ class PaymentGatewayViewSet(viewsets.ModelViewSet):
         checkout to render payment options. Never returns secret keys.
         e.g. /api/admin/payment-gateways/available/?region=IN
         """
-        region_code = request.query_params.get('region', '').upper()
+        region_code = str(request.query_params.get('region', '')).strip().upper()
         region = Region.objects.filter(code=region_code, is_active=True).first()
+        if not region:
+            region = Region.objects.filter(is_active=True).first()
         if not region:
             return Response([], status=status.HTTP_200_OK)
 
