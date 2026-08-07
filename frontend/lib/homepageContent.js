@@ -321,7 +321,7 @@ export const DEFAULT_HOMEPAGE_SETTINGS = {
     ],
   },
   instagramReels: {
-    enabled: true,
+    enabled: false,
     kicker: 'Follow our journey',
     title: 'Sclero Proteins on Instagram',
     description: 'Product stories, science-led wellness notes, and everyday routines from @scleroproteins.',

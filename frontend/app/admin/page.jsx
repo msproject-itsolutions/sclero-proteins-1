@@ -4367,10 +4367,6 @@ function GeneralSettingsTab({ authFetch }) {
   });
   const [socialSaving, setSocialSaving] = useState(false);
   const [socialSaved, setSocialSaved] = useState(false);
-  const [instagramReels, setInstagramReels] = useState({ instagram_user_id: '', access_token: '', access_token_configured: false, is_enabled: true });
-  const [instagramReelsSaving, setInstagramReelsSaving] = useState(false);
-  const [instagramReelsSaved, setInstagramReelsSaved] = useState(false);
-  const [instagramReelsError, setInstagramReelsError] = useState('');
 
   const [seoSettings, setSeoSettings] = useState({
     metaTitle: '',
@@ -4429,13 +4425,6 @@ function GeneralSettingsTab({ authFetch }) {
       .then((r) => r.ok ? r.json() : null)
       .then((d) => {
         if (d && d.value) setSeoSettings(prev => ({ ...prev, ...d.value }));
-      })
-      .catch(() => {});
-
-    authFetch('/api/admin/instagram-reels/')
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => {
-        if (data) setInstagramReels((current) => ({ ...current, ...data, access_token: '' }));
       })
       .catch(() => {});
   }, [authFetch]);
@@ -4532,31 +4521,6 @@ function GeneralSettingsTab({ authFetch }) {
     setSocialSaving(false);
   };
 
-  const saveInstagramReels = async () => {
-    setInstagramReelsSaving(true);
-    setInstagramReelsSaved(false);
-    setInstagramReelsError('');
-    try {
-      const response = await authFetch('/api/admin/instagram-reels/', {
-        method: 'PUT',
-        body: JSON.stringify({
-          instagram_user_id: instagramReels.instagram_user_id.trim(),
-          access_token: instagramReels.access_token,
-          is_enabled: Boolean(instagramReels.is_enabled),
-        }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.detail || data.instagram_user_id?.[0] || 'Could not save the Instagram connection.');
-      setInstagramReels((current) => ({ ...current, ...data, access_token: '' }));
-      setInstagramReelsSaved(true);
-      setTimeout(() => setInstagramReelsSaved(false), 2500);
-    } catch (error) {
-      setInstagramReelsError(error.message || 'Could not save the Instagram connection.');
-    } finally {
-      setInstagramReelsSaving(false);
-    }
-  };
-
   const saveSeoSettings = async () => {
     setSeoSaving(true);
     setSeoSaved(false);
@@ -4586,35 +4550,6 @@ function GeneralSettingsTab({ authFetch }) {
 
   return (
     <div className="space-y-8 text-sm">
-      {/* Instagram Reels connection — kept first so the storefront feed is easy to configure. */}
-      <div className="bg-white rounded-lg border border-edge p-5 space-y-4">
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-edge-subtle pb-3">
-          <div>
-            <h3 className="text-sm font-semibold text-ink-primary uppercase">Instagram Reels</h3>
-            <p className="mt-0.5 text-brand-muted">Connect the official Instagram Professional account to show its Reels automatically on the homepage.</p>
-          </div>
-          <button onClick={saveInstagramReels} disabled={instagramReelsSaving} className="btn-primary px-4 py-2 uppercase font-semibold">
-            {instagramReelsSaving ? 'Saving' : instagramReelsSaved ? 'Saved ✓' : 'Save connection'}
-          </button>
-        </div>
-        {instagramReelsError && <p className="text-[13px] font-semibold text-brand-danger">{instagramReelsError}</p>}
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label className="mb-1 block font-semibold text-ink-primary">Instagram Professional Account ID</label>
-            <input type="text" inputMode="numeric" value={instagramReels.instagram_user_id || ''} onChange={(e) => setInstagramReels({ ...instagramReels, instagram_user_id: e.target.value })} className="w-full rounded border border-edge bg-surface p-2" placeholder="Numeric account ID" />
-          </div>
-          <div>
-            <label className="mb-1 block font-semibold text-ink-primary">Meta long-lived access token</label>
-            <PasswordInput value={instagramReels.access_token || ''} onChange={(e) => setInstagramReels({ ...instagramReels, access_token: e.target.value })} className="w-full rounded border border-edge bg-surface p-2" placeholder={instagramReels.access_token_configured ? 'Saved securely — enter only to replace' : 'Paste token'} autoComplete="new-password" />
-            <p className="mt-1 text-xs text-brand-muted">{instagramReels.access_token_configured ? 'A token is stored securely. Leave this blank to keep it unchanged.' : 'The token is encrypted and never displayed after saving.'}</p>
-          </div>
-        </div>
-        <button type="button" onClick={() => setInstagramReels({ ...instagramReels, is_enabled: !instagramReels.is_enabled })} className={`flex w-full items-center justify-between rounded-md border p-3 text-left transition ${instagramReels.is_enabled ? 'border-ink-primary bg-surface-muted' : 'border-edge'}`}>
-          <span><span className="font-semibold text-ink-primary">Homepage Reels feed</span><span className="mt-1 block text-[13px] text-brand-muted">{instagramReels.is_enabled ? 'Enabled — the homepage will use the live feed.' : 'Disabled — the homepage will not load Instagram Reels.'}</span></span>
-          {instagramReels.is_enabled ? <ToggleRight className="h-5 w-5 text-ink-accent" /> : <ToggleLeft className="h-5 w-5 text-ink-subtle" />}
-        </button>
-      </div>
-      
       {/* Tax & pricing — wired to the live store config */}
       <div className="bg-white rounded-lg border border-edge p-5 space-y-3">
         <div className="flex items-center justify-between">
@@ -4846,7 +4781,6 @@ function HomepageSettingsTab({ authFetch }) {
     { key: 'conversionSection', label: 'Conversion Block' },
     { key: 'faqSection', label: 'FAQs' },
     { key: 'educationSection', label: 'Education' },
-    { key: 'instagramReels', label: 'Instagram Feed' },
     { key: 'inquirySection', label: 'Inquiry CTA' },
   ];
 
@@ -5414,23 +5348,6 @@ function HomepageSettingsTab({ authFetch }) {
                 ))}
               </div>
             </ArrayCard>
-          </div>
-        );
-      case 'instagramReels':
-        return (
-          <div className="space-y-4">
-            <ToggleField
-              checked={settings.instagramReels?.enabled !== false}
-              onChange={(value) => updateSectionField('instagramReels', 'enabled', value)}
-              label="Show Instagram Feed on Homepage"
-              description="Display or hide the Instagram section on the homepage."
-            />
-            <div className="grid gap-4 sm:grid-cols-2">
-              <InputField label="Kicker" value={settings.instagramReels?.kicker || ''} onChange={(value) => updateSectionField('instagramReels', 'kicker', value)} />
-              <InputField label="Headline" value={settings.instagramReels?.title || ''} onChange={(value) => updateSectionField('instagramReels', 'title', value)} />
-            </div>
-            <TextAreaField label="Description" value={settings.instagramReels?.description || ''} onChange={(value) => updateSectionField('instagramReels', 'description', value)} rows={2} />
-            <InputField label="Instagram Profile URL" value={settings.instagramReels?.profileUrl || ''} onChange={(value) => updateSectionField('instagramReels', 'profileUrl', value)} placeholder="https://www.instagram.com/scleroproteins/" />
           </div>
         );
       case 'inquirySection':

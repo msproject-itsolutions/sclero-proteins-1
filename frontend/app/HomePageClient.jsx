@@ -23,7 +23,6 @@ import StoreShell from '../components/StoreShell';
 import HeroSection from '../components/HeroSection';
 import ProductCatalog from '../components/ProductCatalog';
 import QuizComponent from '../components/QuizComponent';
-import InstagramReelsSection from '../components/InstagramReelsSection';
 import { postJson } from '../lib/api';
 import { normalizeHomepageSettings } from '../lib/homepageContent';
 import { safePublicHref } from '../lib/safeUrl';
@@ -491,10 +490,6 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
           </div>
         </div>
       </section>
-      )}
-
-      {homepageSettings.instagramReels?.enabled !== false && (
-        <InstagramReelsSection settings={homepageSettings.instagramReels} />
       )}
 
       {homepageSettings.inquirySection.enabled !== false && (

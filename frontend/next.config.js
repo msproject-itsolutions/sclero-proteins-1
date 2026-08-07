@@ -99,6 +99,17 @@ const nextConfig = {
     ];
   },
 
+  // Rewrite /media/ requests to Django backend during development
+  async rewrites() {
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+    return [
+      {
+        source: '/media/:path*',
+        destination: `${backendUrl.replace(/\/$/, '')}/media/:path*`,
+      },
+    ];
+  },
+
   // Production-only output bundle insight. Run `ANALYZE=true npm run build`
   // to see the bundle treemap — install @next/bundle-analyzer first.
   // (Left as a comment; opt-in to avoid forcing the dependency.)
