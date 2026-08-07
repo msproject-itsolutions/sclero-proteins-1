@@ -281,9 +281,8 @@ frontend/
   components/              shared storefront and admin UI
   hooks/, lib/, store/     bootstrap, API, utilities and Redux state
   public/                  maintained static assets, including current product imagery
-deploy/                    install, update, backup, preflight and nginx templates
+deploy/                    install,update, backup, preflight and nginx templates
 nginx/                     Compose edge nginx configuration
-docs/                      maintained engineering documentation
 docker-compose.yml         production service topology
 ```
 
@@ -306,7 +305,7 @@ docker-compose.yml         production service topology
 3. Add or update automated tests.
 4. Run backend checks, dependency audits, and the frontend production build.
 5. Request review for authorization, financial, personal-data, webhook, deployment or schema changes.
-6. Update this README and `docs/HARDCODED_VALUES.md` when configuration boundaries change.
+6. Update this README when configuration boundaries change.
 
 ## Maintenance and scaling
 
@@ -340,5 +339,3 @@ Code-level checks passing is necessary but not sufficient. Release only after al
 - Browser acceptance tests cover every public form’s success, server-failure, invalid-email, invalid-phone and whitespace-only paths, plus password visibility and checkout shipping selection.
 - Development runs with `unsafe-eval` only for React debugging; the built production CSP is verified not to contain `unsafe-eval`.
 - Production configuration rejects insecure CORS/CSRF origins, local SMTP hosts, conflicting SMTP TLS/SSL settings, wildcard hosts, missing legal identifiers, non-delivery email backends, and SQLite fallback.
-
-Known remaining configurable/static items and recommended migrations are tracked in `docs/HARDCODED_VALUES.md`.
