@@ -545,33 +545,35 @@ export default function ProductDetailClient({ sku }) {
                     </span>
                   </div>
 
-                  <div className="flex flex-col sm:flex-row gap-2.5">
+                  <div className="space-y-2.5">
                     <button
                       type="button"
                       onClick={() => handleAddToCart(false)}
                       disabled={stock === 0 || unavailable}
-                      className="flex-1 btn-primary py-3.5 text-sm flex items-center justify-center gap-1.5 disabled:opacity-50"
+                      className="w-full btn-primary py-3.5 text-sm flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
                     >
                       <ShoppingCart className="h-4.5 w-4.5" />
                       {unavailable ? 'Not available in your region' : 'Add to Cart'}
                     </button>
-                    <button
-                      type="button"
-                      onClick={handleBuyNow}
-                      disabled={stock === 0 || unavailable}
-                      className="flex-1 btn-ghost py-3.5 text-sm disabled:opacity-50"
-                    >
-                      Buy It Now
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleWishlistToggle}
-                      disabled={wishlistLoading}
-                      aria-label={isWishlisted ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`}
-                      className="rounded-full border border-edge bg-surface p-3.5 hover:border-ink-primary transition-colors text-ink-muted hover:text-ink-accent shrink-0"
-                    >
-                      <Heart className={`h-5 w-5 ${isWishlisted ? 'fill-brand-accent text-brand-accent' : ''}`} />
-                    </button>
+                    <div className="flex items-center gap-2.5">
+                      <button
+                        type="button"
+                        onClick={handleBuyNow}
+                        disabled={stock === 0 || unavailable}
+                        className="flex-1 btn-ghost py-3.5 text-sm disabled:opacity-50 cursor-pointer"
+                      >
+                        Buy It Now
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleWishlistToggle}
+                        disabled={wishlistLoading}
+                        aria-label={isWishlisted ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`}
+                        className="flex h-12 w-12 items-center justify-center rounded-full border border-edge bg-surface text-ink-muted transition-colors hover:border-ink-primary hover:text-ink-accent shrink-0 cursor-pointer"
+                      >
+                        <Heart className={`h-5 w-5 ${isWishlisted ? 'fill-brand-accent text-brand-accent' : ''}`} />
+                      </button>
+                    </div>
                   </div>
                 </div>
 

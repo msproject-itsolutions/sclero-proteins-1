@@ -120,7 +120,7 @@ class StaffUserSerializer(serializers.ModelSerializer):
 
 
 class RegisterSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True)
+    password = serializers.CharField(write_only=True, min_length=8)
     first_name = serializers.CharField(min_length=2, max_length=150, trim_whitespace=True)
     last_name = serializers.CharField(min_length=2, max_length=150, trim_whitespace=True)
 
@@ -129,6 +129,8 @@ class RegisterSerializer(serializers.ModelSerializer):
         fields = ['email', 'password', 'first_name', 'last_name', 'phone_number']
 
     def validate_password(self, value):
+        if len(value) < 8:
+            raise serializers.ValidationError('Password must be at least 8 characters long.')
         validate_password(value)
         return value
 

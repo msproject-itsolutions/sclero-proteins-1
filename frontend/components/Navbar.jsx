@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useSelector, useDispatch } from 'react-redux';
 import { setRegion } from '../store/regionSlice';
-import { fetchCart, clearCartLocal } from '../store/cartSlice';
+import { fetchCart, clearCartLocal, clearCart } from '../store/cartSlice';
 import { getApiUrl, postJson } from '../lib/api';
 import { isProdHost, crossDomainUrl } from '../lib/region';
 import { safePublicHref } from '../lib/safeUrl';
@@ -138,10 +139,6 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
 
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    setTimeout(() => {
-      if (firstMobileLinkRef.current) firstMobileLinkRef.current.focus();
-    }, 50);
-
     return () => {
       document.body.style.overflow = previousOverflow;
     };
@@ -164,28 +161,27 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
       .catch(() => {});
   }, []);
 
-  const submitSearch = (e) => {
-    e.preventDefault();
-    const q = searchTerm.trim();
-    if (q) window.location.href = `/products?q=${encodeURIComponent(q)}`;
+  const submitSearch = (event) => {
+    event.preventDefault();
+    if (!searchTerm.trim()) return;
+    window.location.href = `/products?search=${encodeURIComponent(searchTerm.trim())}`;
   };
 
   const submitLaunchNotification = async () => {
-    const email = emailInput.trim().toLowerCase();
-    setOptInError('');
-    if (!isValidEmail(email)) {
+    if (!isValidEmail(emailInput)) {
       setOptInError('Please enter a valid email address.');
       return;
     }
     setOptInLoading(true);
+    setOptInError('');
     try {
-      const { response, data } = await postJson('/api/newsletter/subscribe/', {
-        email,
-        region: currentRegion,
-        source: 'header-region-launch',
+      const { response, data } = await postJson('/api/notifications/launch-opt-in/', {
+        email: emailInput,
+        region: futureRegionName,
       });
-      if (!response.ok) throw new Error(firstApiError(data, 'Could not subscribe. Please try again.'));
-      setEmailInput(email);
+      if (!response.ok) {
+        throw new Error(data.error || 'Could not subscribe.');
+      }
       setOptInSuccess(true);
     } catch (error) {
       setOptInError(error.message || 'Could not subscribe. Please try again.');
@@ -211,6 +207,7 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
 
   const handleCountrySwitch = (country) => {
     setShowDropdown(false);
+    setMobileOpen(false);
 
     if (!country.active) {
       setFutureRegionName(country.name);
@@ -594,21 +591,27 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
         </div>
       )}
 
-      {showClearCartModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-overlay p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-[30px] border border-edge bg-white p-7 text-center shadow-overlay animate-slide-up">
-            <h3 className="mb-2 text-heading-3">Change shopping region?</h3>
+      {mounted && typeof document !== 'undefined' && showClearCartModal && createPortal(
+        <div
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, width: '100vw', height: '100vh', zIndex: 999999 }}
+          className="flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto animate-fade-in"
+        >
+          <div className="relative my-auto w-full max-w-md rounded-3xl border border-edge bg-white p-6 sm:p-8 text-center shadow-2xl animate-slide-up">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-accent/10 text-brand-accent">
+              <Globe className="h-7 w-7 text-brand-accent" />
+            </div>
+            <h3 className="mb-2 text-xl font-bold text-ink-primary">Change shopping region?</h3>
             <p className="mb-6 text-sm leading-relaxed text-ink-secondary">
               Changing your shopping region will clear your cart because pricing, inventory, taxes, and shipping rules differ between regions.
             </p>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={() => {
                   setShowClearCartModal(false);
                   setPendingRegion(null);
                 }}
-                className="btn-ghost flex-1 py-3 text-xs"
+                className="w-1/2 rounded-full border border-edge bg-white py-3 px-4 text-xs font-semibold text-ink-primary transition hover:bg-surface-muted"
               >
                 Cancel
               </button>
@@ -616,24 +619,32 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
                 type="button"
                 onClick={() => {
                   if (pendingRegion) {
-                    dispatch(clearCartLocal());
+                    if (session_id) {
+                      dispatch(clearCart({ session_id, region: pendingRegion.code }));
+                    } else {
+                      dispatch(clearCartLocal());
+                    }
                     applyRegion(pendingRegion);
                   }
                   setShowClearCartModal(false);
                   setPendingRegion(null);
                 }}
-                className="btn-primary flex-1 py-3 text-xs"
+                className="w-1/2 rounded-full bg-brand-gradient py-3 px-4 text-xs font-bold text-white shadow-md transition hover:opacity-90"
               >
                 Confirm &amp; clear
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {showFutureRegionModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-overlay p-4 backdrop-blur-sm">
-          <div className="relative w-full max-w-sm rounded-[30px] border border-edge bg-white p-7 text-center shadow-overlay animate-slide-up">
+      {mounted && typeof document !== 'undefined' && showFutureRegionModal && createPortal(
+        <div
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, width: '100vw', height: '100vh', zIndex: 999999 }}
+          className="flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto animate-fade-in"
+        >
+          <div className="relative my-auto w-full max-w-md rounded-3xl border border-edge bg-white p-6 sm:p-8 text-center shadow-2xl animate-slide-up">
             <button
               type="button"
               onClick={() => {
@@ -642,22 +653,24 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
                 setOptInError('');
                 setEmailInput('');
               }}
-              className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full border border-edge bg-surface-muted text-ink-muted hover:text-ink-primary"
+              className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full border border-edge bg-surface-muted text-ink-muted transition-colors hover:text-ink-primary"
             >
-              <X className="h-3 w-3" />
+              <X className="h-4 w-4" />
             </button>
-            <Sparkles className="mx-auto mb-3 h-10 w-10 text-brand-accent" />
-            <h3 className="mb-1.5 text-heading-3">{futureRegionName} store coming soon</h3>
+            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-brand-accent/10">
+              <Sparkles className="h-7 w-7 text-brand-accent" />
+            </div>
+            <h3 className="mb-2 text-xl font-bold text-ink-primary">{futureRegionName} store coming soon</h3>
             <p className="mb-5 text-sm leading-relaxed text-ink-secondary">
               We are setting up regional warehouses and local operations in {futureRegionName} to support domestic shipping and local compliance.
             </p>
 
             {optInSuccess ? (
-              <div className="rounded-2xl border border-brand-success/20 bg-brand-success/10 p-3 text-sm font-semibold text-ink-success">
+              <div className="rounded-2xl border border-brand-success/20 bg-brand-success/10 p-3.5 text-sm font-semibold text-ink-success">
                 You&apos;ve been added to the notification list.
               </div>
             ) : (
-              <form className="space-y-2" onSubmit={(event) => { event.preventDefault(); submitLaunchNotification(); }}>
+              <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); submitLaunchNotification(); }}>
                 <input
                   type="email"
                   value={emailInput}
@@ -679,7 +692,8 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
               </form>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </nav>
   );

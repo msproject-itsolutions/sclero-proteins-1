@@ -8091,7 +8091,7 @@ function StaffTab({ authFetch, regions }) {
                   onChange={(e) => setNewStaff({ ...newStaff, password: e.target.value })}
                   className="w-full rounded-lg border border-edge p-2.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ink-primary"
                 />
-                <p className="text-[11px] text-brand-muted mt-1">Required. Use at least 12 characters; the server also checks common-password rules.</p>
+                <p className="text-[11px] text-brand-muted mt-1">Required. Use at least 8 characters; the server also checks common-password rules.</p>
               </div>
 
               <div>

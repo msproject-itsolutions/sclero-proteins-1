@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { clearCartLocal } from '../../store/cartSlice';
-import { X, CheckCircle, Download, CreditCard, Banknote, Wallet, ShieldCheck, ChevronDown, ChevronUp, ShoppingCart, ArrowLeft, HelpCircle } from 'lucide-react';
+import { clearCartLocal, removeFromCart } from '../../store/cartSlice';
+import { Trash2, X, CheckCircle, Download, CreditCard, Banknote, Wallet, ShieldCheck, ChevronDown, ChevronUp, ShoppingCart, ArrowLeft, HelpCircle } from 'lucide-react';
 import { trackEvent } from '../../utils/analytics';
 import { getApiUrl } from '../../lib/api';
 import { validateCheckout } from '../../lib/formValidation';
@@ -134,6 +134,19 @@ function CheckoutPageInner({ gateways, gatewayError, fetchGateways, stripeReady 
       setName(authUser.name);
     }
   }, [authUser]);
+
+  const handleRemoveItem = (item) => {
+    if (!session_id) return;
+    dispatch(
+      removeFromCart({
+        session_id,
+        region: currentRegion,
+        cart_item_id: item.id,
+        product_id: item.product?.id || item.product,
+        variant_sku: item.variant_sku,
+      })
+    );
+  };
 
   // Google Customer Reviews Opt-In Integration
   useEffect(() => {
@@ -751,7 +764,18 @@ function CheckoutPageInner({ gateways, gatewayError, fetchGateways, stripeReady 
                         <span className="text-[10px] text-ink-muted">Qty: {item.quantity}</span>
                       </div>
                     </div>
-                    <span className="font-display font-semibold text-ink-primary">{currencySymbol}{(price * item.quantity).toFixed(2)}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-display font-semibold text-ink-primary">{currencySymbol}{(price * item.quantity).toFixed(2)}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveItem(item)}
+                        className="flex h-7 w-7 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-brand-danger/10 hover:text-ink-danger"
+                        title={`Remove ${p.name}`}
+                        aria-label={`Remove ${p.name} from cart`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -1152,7 +1176,18 @@ function CheckoutPageInner({ gateways, gatewayError, fetchGateways, stripeReady 
                         <span className="text-[10px] text-ink-muted">Qty: {item.quantity}</span>
                       </div>
                     </div>
-                    <span className="font-display font-semibold text-ink-primary">{currencySymbol}{(price * item.quantity).toFixed(2)}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-display font-semibold text-ink-primary">{currencySymbol}{(price * item.quantity).toFixed(2)}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveItem(item)}
+                        className="flex h-7 w-7 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-brand-danger/10 hover:text-ink-danger"
+                        title={`Remove ${p.name}`}
+                        aria-label={`Remove ${p.name} from cart`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
                 );
               })}

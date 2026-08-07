@@ -195,6 +195,10 @@ function AuthForms() {
       setFormError('Please enter your password.');
       return;
     }
+    if (mode === 'register' && cleaned.password.length < 8) {
+      setFormError('Password must be at least 8 characters long.');
+      return;
+    }
     if (mode === 'register' && (!cleaned.first_name || !cleaned.last_name)) {
       setFormError('Please enter your first and last name.');
       return;

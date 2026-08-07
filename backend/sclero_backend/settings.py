@@ -240,7 +240,7 @@ AUTH_PASSWORD_VALIDATORS = [
     },
     {
         'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-        'OPTIONS': {'min_length': 12},
+        'OPTIONS': {'min_length': 8},
     },
     {
         'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
@@ -314,9 +314,13 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # CORS Settings
 CORS_ALLOWED_ORIGINS = [
     o.strip() for o in os.getenv(
-        'CORS_ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:3100'
+        'CORS_ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:3001,http://localhost:3100,http://127.0.0.1:3000,http://127.0.0.1:3001'
     ).split(',') if o.strip()
 ]
+if DEBUG:
+    CORS_ALLOWED_ORIGIN_REGEXES = [
+        r"^http://(localhost|127\.0\.0\.1)(:[0-9]+)?$",
+    ]
 CORS_ALLOW_CREDENTIALS = env_bool('CORS_ALLOW_CREDENTIALS', True)
 CORS_ALLOW_HEADERS = (*default_headers, 'x-sclero-client')
 

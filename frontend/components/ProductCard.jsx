@@ -97,14 +97,14 @@ function getBenefitList(product) {
 function RatingRow({ rating }) {
   const safeRating = Number.isFinite(rating) ? rating : 5;
   return (
-    <div className="flex items-center gap-2">
-      <div className="flex items-center gap-1 text-amber-500">
+    <div className="flex items-center gap-1.5 min-w-0">
+      <div className="flex items-center gap-0.5 text-amber-500 shrink-0">
         {[0, 1, 2, 3, 4].map((index) => (
           <Star key={index} className={`h-3.5 w-3.5 ${safeRating >= index + 1 ? 'fill-current' : 'text-amber-200'}`} />
         ))}
       </div>
-      <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted">
-        {safeRating.toFixed(1)} rating
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-muted truncate">
+        {safeRating.toFixed(1)}
       </span>
     </div>
   );
@@ -317,14 +317,14 @@ export default function ProductCard({
       </div>
 
       <div className="flex flex-1 flex-col p-6">
-        <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="mb-3 flex items-center justify-between gap-2 min-w-0">
           {showRating ? <RatingRow rating={rating} /> : <div />}
           <button
             type="button"
             onClick={handleWishlistToggle}
             disabled={wishlistLoading}
             aria-label={isWishlisted ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`}
-            className="rounded-full border border-edge p-2 transition-colors hover:border-edge-focus hover:bg-surface-muted disabled:opacity-60 cursor-pointer"
+            className="shrink-0 rounded-full border border-edge p-2 transition-colors hover:border-edge-focus hover:bg-surface-muted disabled:opacity-60 cursor-pointer"
           >
             <Heart className={`h-4 w-4 ${isWishlisted ? 'fill-brand-accent text-brand-accent' : 'text-ink-muted'}`} />
           </button>

@@ -278,16 +278,32 @@ class CartViewSet(viewsets.ViewSet):
         region = get_object_or_404(Region, code=region_code, is_active=True)
         cart = None
         if user and user.is_authenticated:
-            cart = Cart.objects.filter(user=user, region=region).first()
-            if cart and cart.session_id != session_id:
-                cart.session_id = session_id
-                cart.save(update_fields=['session_id', 'updated_at'])
+            user_carts = list(Cart.objects.filter(user=user, region=region).order_by('-updated_at'))
+            if user_carts:
+                cart = user_carts[0]
+                if len(user_carts) > 1:
+                    for dup in user_carts[1:]:
+                        dup.items.all().delete()
+                        dup.delete()
+                if cart.session_id != session_id:
+                    Cart.objects.filter(session_id=session_id).exclude(pk=cart.pk).delete()
+                    cart.session_id = session_id
+                    cart.save(update_fields=['session_id', 'updated_at'])
 
         if not cart:
-            cart, created = Cart.objects.get_or_create(
-                session_id=session_id,
-                defaults={'region': region, 'user': user if (user and user.is_authenticated) else None}
-            )
+            session_carts = list(Cart.objects.filter(session_id=session_id).order_by('-updated_at'))
+            if session_carts:
+                cart = session_carts[0]
+                if len(session_carts) > 1:
+                    for dup in session_carts[1:]:
+                        dup.items.all().delete()
+                        dup.delete()
+            else:
+                cart = Cart.objects.create(
+                    session_id=session_id,
+                    region=region,
+                    user=user if (user and user.is_authenticated) else None
+                )
 
         if user and user.is_authenticated and cart.user != user:
             cart.user = user
@@ -354,22 +370,31 @@ class CartViewSet(viewsets.ViewSet):
         # A variant is part of a cart line's identity. Two sizes of the same
         # product must never collapse into one line and silently change price.
         variant_sku = variant.sku if variant else ''
-        cart_item, created = CartItem.objects.get_or_create(
-            cart=cart,
-            product=product,
-            variant_sku=variant_sku,
-            defaults={'variant_name': variant.name if variant else ''},
-        )
+        cart_items = list(cart.items.filter(product=product, variant_sku=variant_sku))
+        if cart_items:
+            cart_item = cart_items[0]
+            if len(cart_items) > 1:
+                for duplicate in cart_items[1:]:
+                    duplicate.delete()
+            created = False
+        else:
+            cart_item = CartItem.objects.create(
+                cart=cart,
+                product=product,
+                variant_sku=variant_sku,
+                variant_name=variant.name if variant else '',
+                quantity=0,
+            )
+            created = True
+
         requested_quantity = quantity if created else cart_item.quantity + quantity
         if total_available < requested_quantity:
             return Response(
                 {"error": f"Only {total_available} units are available in your region's stock."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if not created:
-            cart_item.quantity += quantity
-        else:
-            cart_item.quantity = quantity
+
+        cart_item.quantity = requested_quantity
         cart_item.variant_name = variant.name if variant else ''
         cart_item.save(update_fields=['quantity', 'variant_name', 'updated_at'])
 
@@ -434,6 +459,24 @@ class CartViewSet(viewsets.ViewSet):
         if cart_item:
             cart_item.delete()
 
+        return Response(CartSerializer(cart, context={'region': cart.region}).data)
+
+    @transaction.atomic
+    def clear_cart(self, request):
+        session_id = _clean_text(request.data.get('session_id'))
+        region_code = _clean_text(request.data.get('region', 'UK')).upper()
+
+        if not session_id:
+            return Response({"error": "session_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        carts = Cart.objects.filter(session_id=session_id)
+        if request.user and request.user.is_authenticated:
+            carts = carts | Cart.objects.filter(user=request.user)
+
+        for cart in carts.distinct():
+            cart.items.all().delete()
+
+        cart = self.get_cart(session_id, region_code, user=request.user)
         return Response(CartSerializer(cart, context={'region': cart.region}).data)
 
 

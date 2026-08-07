@@ -160,6 +160,7 @@ urlpatterns = [
     path('api/cart/add/', CartViewSet.as_view({'post': 'add_item'}), name='cart_add'),
     path('api/cart/update/', CartViewSet.as_view({'post': 'update_item'}), name='cart_update'),
     path('api/cart/remove/', CartViewSet.as_view({'post': 'remove_item'}), name='cart_remove'),
+    path('api/cart/clear/', CartViewSet.as_view({'post': 'clear_cart'}), name='cart_clear'),
     path('api/checkout/', CheckoutView.as_view(), name='checkout'),
     path('api/checkout/apply-coupon/', ApplyCouponView.as_view(), name='checkout_apply_coupon'),
     path('api/checkout/payment-intent/', CreatePaymentIntentView.as_view(), name='checkout_payment_intent'),
