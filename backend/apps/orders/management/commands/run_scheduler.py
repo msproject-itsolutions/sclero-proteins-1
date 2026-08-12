@@ -3,6 +3,7 @@
 import logging
 import os
 import signal
+import tempfile
 import threading
 import time
 import uuid
@@ -28,7 +29,8 @@ class Command(BaseCommand):
         owner = uuid.uuid4().hex
         lease_seconds = max(int(os.getenv('SCHEDULER_LEASE_SECONDS', '300')), 60)
         wait_seconds = max(int(os.getenv('SCHEDULER_LEASE_WAIT_SECONDS', '10')), 1)
-        heartbeat_path = os.getenv('SCHEDULER_HEARTBEAT_FILE', '/tmp/scheduler-heartbeat')
+        default_heartbeat = os.path.join(tempfile.gettempdir(), 'scheduler-heartbeat') if os.name == 'nt' else '/tmp/scheduler-heartbeat'
+        heartbeat_path = os.getenv('SCHEDULER_HEARTBEAT_FILE', default_heartbeat)
         stop = threading.Event()
 
         def request_stop(*_args):
@@ -98,10 +100,17 @@ class Command(BaseCommand):
         """Stamp a liveness file each loop so a container healthcheck can
         detect a hung (alive but stuck) scheduler, not just a crashed one."""
         try:
+            os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
             with open(path, 'w', encoding='utf-8') as handle:
                 handle.write(str(int(time.time())))
         except OSError:
-            logger.warning('Could not write scheduler heartbeat file %s', path)
+            # Fallback to temp dir if custom path fails
+            try:
+                fallback_path = os.path.join(tempfile.gettempdir(), 'scheduler-heartbeat')
+                with open(fallback_path, 'w', encoding='utf-8') as handle:
+                    handle.write(str(int(time.time())))
+            except OSError:
+                logger.warning('Could not write scheduler heartbeat file %s', path)
 
     @staticmethod
     def _renew_lease(owner, lease_seconds):
