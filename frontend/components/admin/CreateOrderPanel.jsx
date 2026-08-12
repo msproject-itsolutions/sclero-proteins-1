@@ -269,11 +269,15 @@ export default function CreateOrderPanel({ authFetch, onClose, onCreated }) {
             <h2 className="text-base font-semibold text-ink-primary">Create Order</h2>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <label className="flex items-center gap-2 text-sm text-ink-secondary cursor-pointer select-none">
             <input type="checkbox" checked={isDraft} onChange={(e) => setIsDraft(e.target.checked)} className="accent-ink-primary" />
             Save as Draft
           </label>
+          <button onClick={onClose} type="button"
+            className="inline-flex items-center gap-1.5 rounded-md border border-edge bg-white px-3.5 py-1.5 text-xs font-semibold text-ink-secondary hover:bg-surface-muted transition">
+            Cancel
+          </button>
         </div>
       </div>
 

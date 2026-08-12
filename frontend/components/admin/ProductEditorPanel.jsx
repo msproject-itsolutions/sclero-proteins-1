@@ -766,6 +766,10 @@ export default function ProductEditorPanel({ editing, onChange, onClose, onSave,
             ${editing.is_active ? 'bg-brand-success/10 text-ink-success' : 'bg-surface-muted text-ink-muted'}`}>
             {editing.is_active ? 'Active' : 'Draft'}
           </span>
+          <button onClick={onClose} type="button"
+            className="inline-flex items-center gap-1.5 rounded-md border border-edge bg-white px-4 py-2.5 text-sm font-semibold text-ink-secondary hover:bg-surface-muted transition">
+            Cancel
+          </button>
           <button onClick={onSave} disabled={saving} type="button"
             className="inline-flex items-center gap-2 rounded-md bg-ink-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-ink-primary/90 disabled:opacity-60 transition shadow-card">
             <Save className="h-4 w-4" />

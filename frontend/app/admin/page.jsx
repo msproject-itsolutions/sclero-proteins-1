@@ -508,9 +508,9 @@ function HomeTab({ authFetch, go }) {
         <StatCard icon={ShoppingCart} label="Total orders" value={stats?.total_orders ?? '—'}
           sub={`${stats?.processing_orders ?? 0} processing · ${pending} pending`} onClick={() => go('orders')} />
         <StatCard icon={TrendingUp} label="Revenue" value={revenueChips[0] || '—'}
-          sub={revenueChips.slice(1).join(' · ') || 'across all orders'} accent="bg-brand-success/10 text-ink-success" />
+          sub={revenueChips.slice(1).join(' · ') || 'across all orders'} accent="bg-brand-success/10 text-ink-success" onClick={() => go('orders')} />
         <StatCard icon={UsersIcon} label="Customers" value={customers}
-          sub="unique buyers" accent="bg-surface-muted text-ink-accent" />
+          sub="unique buyers" accent="bg-surface-muted text-ink-accent" onClick={() => go('customers')} />
         <StatCard icon={Package} label="Low stock" value={lowStock.length}
           sub={`≤ ${LOW} units in a region`} accent={lowStock.length ? 'bg-amber-50 text-ink-accent' : 'bg-surface-muted text-ink-muted'}
           onClick={() => go('products')} />
@@ -9002,8 +9002,18 @@ export default function AdminPage() {
 
           <div className="mb-6 hidden md:flex items-start justify-between gap-3">
             <div>
-              <p className="kicker">Admin Console</p>
-              <h1 className="mt-1 font-display font-medium text-[26px] text-ink-primary">{active?.label}</h1>
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-ink-subtle mb-1">
+                <button onClick={() => navigateAdmin('home')} className="hover:text-ink-primary transition cursor-pointer">Admin</button>
+                <ChevronRight className="h-3 w-3" />
+                <button onClick={() => navigateAdmin(section)} className="capitalize hover:text-ink-primary transition cursor-pointer">{active?.label || section}</button>
+                {sectionTab && (
+                  <>
+                    <ChevronRight className="h-3 w-3" />
+                    <span className="text-ink-primary font-bold capitalize">{sectionTab.replace(/_/g, ' ')}</span>
+                  </>
+                )}
+              </div>
+              <h1 className="mt-1 font-display font-medium text-[26px] text-ink-primary">{active?.label || section}</h1>
             </div>
           </div>
 
