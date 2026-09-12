@@ -18,10 +18,31 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: sclero_ci
+          POSTGRES_USER: sclero
+          POSTGRES_PASSWORD: ci-only-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sclero -d sclero_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
       DEBUG: "True"
       SECRET_KEY: ci-only-secret-key-not-for-production
-      ALLOW_SQLITE_FALLBACK: "True"
+      # Tests run on PostgreSQL, the production database. SQLite does not
+      # enforce row locks or column lengths, so it must never be used here.
+      ALLOW_SQLITE_FALLBACK: "False"
+      DB_NAME: sclero_ci
+      DB_USER: sclero
+      DB_PASSWORD: ci-only-password
+      DB_HOST: localhost
+      DB_PORT: "5432"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
