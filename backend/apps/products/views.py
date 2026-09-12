@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser
+from django.conf import settings
 from django.core.files.storage import default_storage
 from django.db.models import Q, Count, Sum, Prefetch, OuterRef, Subquery, IntegerField, Value
 from django.db.models.functions import Coalesce
@@ -554,10 +555,8 @@ class MediaUploadView(APIView):
         # cannot influence storage paths or response URLs.
         name = default_storage.save(f'uploads/{uuid4().hex}{ext}', uploaded_file)
         file_url = default_storage.url(name)
-
-        # Prefix with request host if not absolute
-        if not file_url.startswith('http'):
-            request_host = request.build_absolute_uri('/')[:-1]
-            file_url = f"{request_host}{file_url}"
-
+        # Absolute URLs come from configuration, never from request headers.
+        site_url = (getattr(settings, 'SITE_URL', '') or '').rstrip('/')
+        if site_url and not file_url.startswith('http'):
+            file_url = f"{site_url}{file_url}"
         return Response({"file_url": file_url}, status=status.HTTP_201_CREATED)

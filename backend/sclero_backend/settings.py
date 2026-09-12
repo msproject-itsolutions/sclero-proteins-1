@@ -352,7 +352,9 @@ if not DEBUG and not _BUILDING_STATIC:
 # Running behind nginx, which terminates TLS and forwards the original scheme in
 # X-Forwarded-Proto. This lets Django know the request was secure.
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-USE_X_FORWARDED_HOST = True
+# Neither nginx layer sets X-Forwarded-Host, so trusting it would let a client
+# choose the host Django uses for absolute URLs.
+USE_X_FORWARDED_HOST = False
 TRUST_PROXY_HEADERS = env_bool('TRUST_PROXY_HEADERS', not DEBUG)
 
 # Production hardening — only when DEBUG is off so local dev over http still works.
