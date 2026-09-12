@@ -14,7 +14,7 @@ from sclero_backend.config_checks import require_integration_key
 
 def raw_column(table, column, pk):
     with connection.cursor() as cursor:
-        cursor.execute(f'SELECT {column} FROM {table} WHERE id = %s', [pk])
+        cursor.execute(f'SELECT {column} FROM {table} WHERE id = %s', [pk])  # nosec B608 - table/column are test constants, never user input
         value = cursor.fetchone()[0]
     return value if isinstance(value, str) else json.dumps(value)
 

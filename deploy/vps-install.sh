@@ -256,8 +256,10 @@ integration_key="$(env_value INTEGRATION_ENCRYPTION_KEY)"
 if [[ -z "$integration_key" ]]; then
   # Pin the key the running application uses today. Its SECRET_KEY can differ
   # from the literal .env text because Compose interpolates env_file values.
-  if docker compose ps --status running --services 2>/dev/null | grep -qx backend; then
-    integration_key="$(docker compose exec -T backend python -c 'import base64, hashlib, os; print(base64.urlsafe_b64encode(hashlib.sha256(os.environ["SECRET_KEY"].encode()).digest()).decode())')"
+  running_services="$(docker compose ps --status running --services 2>/dev/null || true)"
+  if grep -qx backend <<<"$running_services"; then
+    integration_key="$(docker compose exec -T backend python -c 'import base64, hashlib, os; print(base64.urlsafe_b64encode(hashlib.sha256(os.environ["SECRET_KEY"].encode()).digest()).decode())')" ||
+      die "Could not read SECRET_KEY from the running backend to pin INTEGRATION_ENCRYPTION_KEY"
   else
     current_secret_key="$(env_value SECRET_KEY)"
     [[ -n "$current_secret_key" ]] || die "SECRET_KEY is missing from .env"
