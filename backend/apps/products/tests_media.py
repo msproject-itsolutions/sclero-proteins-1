@@ -1,11 +1,17 @@
+import base64
+import os
 import shutil
 import tempfile
+from io import StringIO
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import override_settings
+from django.core.management import call_command
+from django.test import SimpleTestCase, override_settings
 from rest_framework.test import APITestCase
 
+from apps.products.media_validation import MediaUrlError, validate_media_url
+from apps.products.models import Product, ProductMedia
 from apps.users.models import Role
 
 User = get_user_model()
@@ -40,3 +46,94 @@ class MediaUploadUrlTests(APITestCase):
             response = self._upload()
         self.assertEqual(response.status_code, 201, response.content)
         self.assertTrue(response.data['file_url'].startswith('/media/uploads/'))
+
+
+class MediaUrlValidationTests(SimpleTestCase):
+    def test_accepts_https_cdn_urls_without_extension(self):
+        url = 'https://images.unsplash.com/photo-1607619056574-7b8d3ee536b2?w=600'
+        self.assertEqual(validate_media_url(url), url)
+
+    def test_accepts_site_relative_paths(self):
+        self.assertEqual(validate_media_url('/media/uploads/abc.webp'), '/media/uploads/abc.webp')
+
+    def test_rejects_script_capable_types_and_schemes(self):
+        for bad in (
+            'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=',
+            'javascript:alert(1)',
+            ' JavaScript:alert(1)',
+            '/media/products/logo.svg',
+            'https://cdn.example.com/x.SVG?v=1',
+            '/media/uploads/page.html',
+            '//evil.example/x.png',
+            'http://cdn.example.com/x.png',
+            'ftp://files.example.com/x.png',
+            '',
+        ):
+            with self.subTest(bad=bad), self.assertRaises(MediaUrlError):
+                validate_media_url(bad)
+
+
+class ProductMediaApiValidationTests(APITestCase):
+    def setUp(self):
+        role = Role.objects.create(name='Catalogue', permissions=['products.manage'])
+        self.user = User.objects.create_user(email='editor@example.com', password='x', is_staff=True)
+        self.user.roles.add(role)
+        self.client.force_authenticate(self.user)
+        self.product = Product.objects.create(sku='SKU-MEDIA', name='Media product')
+
+    def test_product_media_endpoint_rejects_svg_data_uri(self):
+        response = self.client.post('/api/admin/product-media/', {
+            'product': self.product.pk,
+            'file_url': 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=',
+            'media_type': 'IMAGE',
+        }, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('file_url', response.data)
+
+    def test_nested_media_files_are_validated(self):
+        response = self.client.patch(f'/api/admin/products/{self.product.sku}/', {
+            'media_files': [{'file_url': 'javascript:alert(1)', 'media_type': 'IMAGE'}],
+        }, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(ProductMedia.objects.filter(product=self.product).exists())
+
+
+class DataUriMigrationTests(APITestCase):
+    def setUp(self):
+        self.media_root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.media_root, True)
+        self.product = Product.objects.create(sku='SKU-DATA', name='Data product')
+
+    def test_svg_data_uris_are_not_written_to_disk(self):
+        svg = 'data:image/svg+xml;base64,' + base64.b64encode(b'<svg><script>alert(1)</script></svg>').decode()
+        png = 'data:image/png;base64,' + base64.b64encode(PNG_BYTES).decode()
+        svg_media = ProductMedia.objects.create(product=self.product, file_url=svg)
+        png_media = ProductMedia.objects.create(product=self.product, file_url=png)
+        with override_settings(MEDIA_ROOT=self.media_root):
+            call_command('migrate_datauri_media', base_url='', stdout=StringIO(), stderr=StringIO())
+        svg_media.refresh_from_db()
+        png_media.refresh_from_db()
+        self.assertTrue(svg_media.file_url.startswith('data:image/svg+xml'))
+        self.assertTrue(png_media.file_url.startswith('/media/products/'))
+        written = os.listdir(os.path.join(self.media_root, 'products'))
+        self.assertFalse(any(name.endswith('.svg') for name in written))
+
+
+class ScanMediaCommandTests(APITestCase):
+    def test_reports_script_capable_files_and_rows(self):
+        media_root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, media_root, True)
+        os.makedirs(os.path.join(media_root, 'products'))
+        with open(os.path.join(media_root, 'products', 'evil.svg'), 'w') as handle:
+            handle.write('<svg/>')
+        with open(os.path.join(media_root, 'products', 'ok.png'), 'wb') as handle:
+            handle.write(PNG_BYTES)
+        product = Product.objects.create(sku='SKU-SCAN', name='Scan product')
+        row = ProductMedia.objects.create(product=product, file_url='/media/products/evil.svg')
+        out = StringIO()
+        with override_settings(MEDIA_ROOT=media_root):
+            call_command('scan_media_svg', stdout=out)
+        text = out.getvalue()
+        self.assertIn(os.path.join('products', 'evil.svg'), text)
+        self.assertNotIn('ok.png', text)
+        self.assertIn(f'media#{row.pk}', text)

@@ -7,6 +7,7 @@ from .models import (
     Product, ProductVariant, ProductRegionConfig, ProductMedia, ProductReview, Category, ProductLandingPage,
     Bundle, BundleItem, BundleRegionConfig,
 )
+from .media_validation import MediaUrlError, validate_media_url
 
 
 def normalize_media_url(url: str) -> str:
@@ -241,6 +242,12 @@ class ProductMediaAdminSerializer(serializers.ModelSerializer):
         model = ProductMedia
         fields = ['id', 'file_url', 'media_type', 'display_order']
 
+    def validate_file_url(self, value):
+        try:
+            return validate_media_url(value)
+        except MediaUrlError as exc:
+            raise serializers.ValidationError(str(exc))
+
 
 class ProductAdminSerializer(serializers.ModelSerializer):
     regional_configs = ProductRegionConfigSerializer(many=True, read_only=True)
@@ -320,6 +327,16 @@ class ProductAdminCreateUpdateSerializer(serializers.ModelSerializer):
             'ingredients', 'nutrition_facts', 'faq', 'dietary_tags', 'short_benefit', 'is_active', 'is_archived',
             'regional_configs', 'media_files', 'category_ids', 'regional_stock', 'variants'
         ]
+
+    def validate_media_files(self, value):
+        cleaned = []
+        for index, item in enumerate(value):
+            try:
+                url = validate_media_url(item.get('file_url'))
+            except MediaUrlError as exc:
+                raise serializers.ValidationError(f'Media item {index + 1}: {exc}')
+            cleaned.append({**item, 'file_url': url})
+        return cleaned
 
     def _apply_regional_stock(self, product, regional_stock_data):
         from apps.regions.models import Warehouse

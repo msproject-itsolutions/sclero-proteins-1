@@ -19,9 +19,11 @@ from django.core.management.base import BaseCommand
 
 from apps.products.models import ProductMedia
 
+# Raster formats only. SVG can carry script and would run when the converted
+# file is opened directly from this site's /media/ path.
 _EXT = {
     'image/png': 'png', 'image/jpeg': 'jpg', 'image/jpg': 'jpg',
-    'image/webp': 'webp', 'image/gif': 'gif', 'image/svg+xml': 'svg',
+    'image/webp': 'webp', 'image/gif': 'gif',
 }
 
 
@@ -58,7 +60,10 @@ class Command(BaseCommand):
                 self.stderr.write(f'  media#{m.id}: skip (parse error: {e})')
                 continue
 
-            ext = _EXT.get(mime, 'bin')
+            ext = _EXT.get(mime)
+            if ext is None:
+                self.stderr.write(f'  media#{m.id}: skip (unsupported type {mime})')
+                continue
             sku = getattr(m.product, 'sku', 'product')
             digest = hashlib.sha256(raw).hexdigest()[:12]
             fname = f'{sku}-{m.id}-{digest}.{ext}'
