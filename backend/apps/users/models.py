@@ -1,5 +1,8 @@
-from django.db import models
+import uuid
+
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+from django.db import models
+from django.utils import timezone
 
 
 class Role(models.Model):
@@ -72,6 +75,11 @@ class User(AbstractBaseUser, PermissionsMixin):
     roles = models.ManyToManyField(Role, blank=True, related_name="users")
     assigned_regions = models.ManyToManyField('regions.Region', blank=True, related_name="restricted_users")
     two_factor_enabled = models.BooleanField(default=False)
+    # Bumped to end every session at once; JWTs carry it as the `av` claim.
+    auth_version = models.PositiveIntegerField(default=0)
+    email_verified = models.BooleanField(default=False)
+    # Staff sign-in codes go here instead of `email`. Only administrators set it.
+    verification_email = models.EmailField(blank=True, default='')
     # TOTP (RFC 6238) — staff-grade authenticator-app 2FA. Separate from
     # `two_factor_enabled` (legacy email-OTP gate).
     totp_secret = models.CharField(max_length=64, blank=True, default='')
@@ -92,6 +100,43 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return self.email
+
+
+class LoginChallenge(models.Model):
+    """A single-use emailed code or link that completes a sign-in.
+
+    Only a keyed hash of the secret is stored. `attempts` bounds guessing per
+    challenge on top of per-IP throttling.
+    """
+
+    class Purpose(models.TextChoices):
+        EMAIL_LOGIN = 'EMAIL_LOGIN', 'Email code sign-in'
+        MAGIC_LINK = 'MAGIC_LINK', 'Magic link sign-in'
+        STAFF_2FA = 'STAFF_2FA', 'Staff sign-in code'
+        CUSTOMER_2FA = 'CUSTOMER_2FA', 'Two-step sign-in code'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, null=True, blank=True, related_name='login_challenges',
+    )
+    email = models.EmailField(db_index=True)
+    purpose = models.CharField(max_length=20, choices=Purpose.choices)
+    code_hash = models.CharField(max_length=128)
+    sent_to = models.EmailField()
+    attempts = models.PositiveSmallIntegerField(default=0)
+    send_count = models.PositiveSmallIntegerField(default=1)
+    last_sent_at = models.DateTimeField(default=timezone.now)
+    expires_at = models.DateTimeField(db_index=True)
+    consumed_at = models.DateTimeField(null=True, blank=True)
+    created_ip = models.GenericIPAddressField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [models.Index(fields=['email', 'purpose', 'created_at'])]
+
+    def __str__(self):
+        return f'{self.purpose} for {self.email}'
 
 
 class UserAddress(models.Model):
