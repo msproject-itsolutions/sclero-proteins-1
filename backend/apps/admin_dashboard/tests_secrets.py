@@ -63,6 +63,22 @@ class SettingSecretEncryptionTests(TestCase):
         setting.refresh_from_db()
         self.assertEqual(setting.value['IMAP_PASSWORD'], 'legacy-plain')
 
+    def test_existing_plaintext_marketing_credentials_are_encrypted_by_the_migration(self):
+        integration = MarketingIntegration.objects.create(
+            name='Legacy Ads', channel='FACEBOOK_ADS', credentials={'client_id': 'legacy-id'},
+        )
+        with connection.cursor() as cursor:
+            cursor.execute(
+                'UPDATE admin_dashboard_marketingintegration SET credentials = %s WHERE id = %s',
+                [json.dumps({'client_id': 'legacy-id', 'client_secret': 'legacy-marketing-plain'}), integration.pk],
+            )
+        migration = importlib.import_module('apps.admin_dashboard.migrations.0017_encrypt_setting_secrets')
+        migration.encrypt_existing(django_apps, None)
+        raw = raw_column('admin_dashboard_marketingintegration', 'credentials', integration.pk)
+        self.assertNotIn('legacy-marketing-plain', raw)
+        integration.refresh_from_db()
+        self.assertEqual(integration.credentials['client_secret'], 'legacy-marketing-plain')
+
 
 class WebhookSecretEncryptionTests(TestCase):
     def test_subscription_secret_is_encrypted_and_still_signs(self):
@@ -76,6 +92,22 @@ class WebhookSecretEncryptionTests(TestCase):
             calculate_signature('{"a":1}', subscription.secret),
             calculate_signature('{"a":1}', 'sign-me-please'),
         )
+
+    def test_existing_plaintext_subscription_secret_is_encrypted_by_the_migration(self):
+        subscription = WebhookSubscription.objects.create(
+            name='Legacy', url='https://legacy.example.com/hook', events=['order.paid'], secret='sign-me-please',
+        )
+        with connection.cursor() as cursor:
+            cursor.execute(
+                'UPDATE webhooks_webhooksubscription SET secret = %s WHERE id = %s',
+                ['legacy-webhook-plain', subscription.pk],
+            )
+        migration = importlib.import_module('apps.webhooks.migrations.0002_encrypt_subscription_secret')
+        migration.encrypt_existing(django_apps, None)
+        raw = raw_column('webhooks_webhooksubscription', 'secret', subscription.pk)
+        self.assertNotIn('legacy-webhook-plain', raw)
+        subscription.refresh_from_db()
+        self.assertEqual(subscription.secret, 'legacy-webhook-plain')
 
 
 class IntegrationKeyGuardTests(SimpleTestCase):

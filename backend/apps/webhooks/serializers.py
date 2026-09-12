@@ -42,7 +42,7 @@ class WebhookSubscriptionSerializer(serializers.ModelSerializer):
             'is_active', 'created_at', 'updated_at',
         ]
         extra_kwargs = {
-            'secret': {'write_only': True, 'required': False},
+            'secret': {'write_only': True, 'required': False, 'max_length': 100},
         }
 
 

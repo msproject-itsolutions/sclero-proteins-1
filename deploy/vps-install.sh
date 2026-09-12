@@ -249,21 +249,20 @@ if grep -Eq '(^|=)CHANGE_ME' .env; then
   die ".env still contains CHANGE_ME placeholders"
 fi
 
-env_value() {
-  local raw
-  raw="$(grep -E "^$1=" .env | tail -n 1 | cut -d= -f2-)"
-  raw="${raw%\"}"; raw="${raw#\"}"; raw="${raw%\'}"; raw="${raw#\'}"
-  printf '%s' "$raw"
-}
-
 # Credentials are encrypted with INTEGRATION_ENCRYPTION_KEY. Deployments that
 # never set it used a key derived from SECRET_KEY; pinning that exact key keeps
 # every stored credential readable and survives a future SECRET_KEY rotation.
 integration_key="$(env_value INTEGRATION_ENCRYPTION_KEY)"
 if [[ -z "$integration_key" ]]; then
-  current_secret_key="$(env_value SECRET_KEY)"
-  [[ -n "$current_secret_key" ]] || die "SECRET_KEY is missing from .env"
-  integration_key="$(printf '%s' "$current_secret_key" | openssl dgst -sha256 -binary | openssl base64 -A | tr '+/' '-_')"
+  # Pin the key the running application uses today. Its SECRET_KEY can differ
+  # from the literal .env text because Compose interpolates env_file values.
+  if docker compose ps --status running --services 2>/dev/null | grep -qx backend; then
+    integration_key="$(docker compose exec -T backend python -c 'import base64, hashlib, os; print(base64.urlsafe_b64encode(hashlib.sha256(os.environ["SECRET_KEY"].encode()).digest()).decode())')"
+  else
+    current_secret_key="$(env_value SECRET_KEY)"
+    [[ -n "$current_secret_key" ]] || die "SECRET_KEY is missing from .env"
+    integration_key="$(printf '%s' "$current_secret_key" | openssl dgst -sha256 -binary | openssl base64 -A | tr '+/' '-_')"
+  fi
   if grep -q '^INTEGRATION_ENCRYPTION_KEY=' .env; then
     sed -i "s|^INTEGRATION_ENCRYPTION_KEY=.*|INTEGRATION_ENCRYPTION_KEY=${integration_key}|" .env
   else
@@ -271,7 +270,7 @@ if [[ -z "$integration_key" ]]; then
   fi
   log "Pinned INTEGRATION_ENCRYPTION_KEY to the key derived from SECRET_KEY"
 fi
-[[ "$integration_key" =~ ^[A-Za-z0-9_-]{43}=$ ]] ||
+[[ "$integration_key" =~ ^[A-Za-z0-9_+/-]{43}=$ ]] ||
   die "INTEGRATION_ENCRYPTION_KEY must be a 44-character url-safe base64 Fernet key"
 
 for command in docker curl git nginx openssl sed ss; do
