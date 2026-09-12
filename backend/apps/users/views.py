@@ -10,7 +10,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import AuthenticationFailed, ValidationError
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
@@ -29,6 +29,8 @@ from .serializers import (
 from .permissions import (
     require_permission, ENFORCED_PERMISSION_GROUPS, client_ip_is_allowed,
 )
+from .middleware import clear_auth_cookies
+from .sessions import SESSION_ENDED_MESSAGE, VersionedTokenRefreshSerializer, issue_tokens
 from apps.audit.context import client_ip_from_request
 from apps.orders.models import Order
 
@@ -66,11 +68,7 @@ def _send_email_otp(email, code, subject='Your Sclero Proteins sign-in code'):
     )
 
 def get_tokens_for_user(user):
-    refresh = RefreshToken.for_user(user)
-    return {
-        'refresh': str(refresh),
-        'access': str(refresh.access_token),
-    }
+    return issue_tokens(user)
 
 class AuditedLoginView(TokenObtainPairView):
     """Password login with audit trail, IP restrictions, and 2FA gating.
@@ -227,17 +225,27 @@ class CookieTokenRefreshView(TokenRefreshView):
 
     permission_classes = [AllowAny]
     throttle_scope = 'auth'
+    serializer_class = VersionedTokenRefreshSerializer
 
     def post(self, request, *args, **kwargs):
         if request.headers.get('X-Sclero-Client') != 'storefront' and not request.data.get('refresh'):
             return Response({'detail': 'Invalid browser request.'}, status=status.HTTP_400_BAD_REQUEST)
         payload = request.data.copy()
-        if not payload.get('refresh'):
+        from_cookie = not payload.get('refresh')
+        if from_cookie:
             payload['refresh'] = request.COOKIES.get(settings.AUTH_COOKIE_REFRESH_NAME, '')
         if not payload.get('refresh'):
             return Response({'detail': 'Authentication credentials were not provided.'}, status=status.HTTP_401_UNAUTHORIZED)
         serializer = self.get_serializer(data=payload)
-        serializer.is_valid(raise_exception=True)
+        try:
+            serializer.is_valid(raise_exception=True)
+        except (TokenError, AuthenticationFailed) as exc:
+            detail = exc.detail if isinstance(exc, AuthenticationFailed) else SESSION_ENDED_MESSAGE
+            response = Response({'detail': detail}, status=status.HTTP_401_UNAUTHORIZED)
+            if from_cookie:
+                # A dead refresh cookie would otherwise be retried on every page.
+                clear_auth_cookies(response)
+            return response
         return Response(serializer.validated_data, status=status.HTTP_200_OK)
 
 

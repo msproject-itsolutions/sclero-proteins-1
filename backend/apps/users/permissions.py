@@ -187,6 +187,16 @@ def client_ip_is_allowed(client_ip, allowed_rules):
             return True
     return False
 
+
+def allowed_ip_rules(user):
+    return [rule.strip() for rule in (getattr(user, 'allowed_ip_range', '') or '').split(',') if rule.strip()]
+
+
+def ip_allowed(user, request):
+    """True unless the account has an IP allow-list and the request comes from outside it."""
+    rules = allowed_ip_rules(user)
+    return not rules or client_ip_is_allowed(client_ip_from_request(request), rules)
+
 # --- DRF permission classes -------------------------------------------------- #
 class HasPermission(BasePermission):
     """
@@ -203,12 +213,9 @@ class HasPermission(BasePermission):
         if not (user and user.is_authenticated):
             return False
 
-        if user.allowed_ip_range:
-            client_ip = client_ip_from_request(request)
-            allowed_ips = [ip.strip() for ip in user.allowed_ip_range.split(',') if ip.strip()]
-            if allowed_ips and not client_ip_is_allowed(client_ip, allowed_ips):
-                self.message = f"IP address {client_ip} is not allowed to access this profile."
-                return False
+        if not ip_allowed(user, request):
+            self.message = f"IP address {client_ip_from_request(request)} is not allowed to access this profile."
+            return False
 
         if not getattr(settings, 'RBAC_ENFORCED', True):
             return is_staff_account(user)

@@ -1,6 +1,11 @@
 from django.conf import settings
 
 
+def clear_auth_cookies(response):
+    response.delete_cookie(settings.AUTH_COOKIE_ACCESS_NAME, path='/', samesite='Lax')
+    response.delete_cookie(settings.AUTH_COOKIE_REFRESH_NAME, path='/', samesite='Lax')
+
+
 class AuthCookieMiddleware:
     """Move issued JWTs into Secure HttpOnly cookies and redact JSON tokens."""
 
@@ -58,5 +63,4 @@ class AuthCookieMiddleware:
 
     @staticmethod
     def _clear(response):
-        response.delete_cookie(settings.AUTH_COOKIE_ACCESS_NAME, path='/', samesite='Lax')
-        response.delete_cookie(settings.AUTH_COOKIE_REFRESH_NAME, path='/', samesite='Lax')
+        clear_auth_cookies(response)
