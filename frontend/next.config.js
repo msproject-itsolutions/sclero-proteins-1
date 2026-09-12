@@ -23,6 +23,9 @@ const backendOrigins = [
 const nextConfig = {
   reactStrictMode: true,
 
+  // Stop `next dev` from writing AGENTS.md / CLAUDE.md into the project.
+  agentRules: false,
+
   // Emit a self-contained server bundle (.next/standalone) so the production
   // Docker image can run `node server.js` without the full node_modules tree.
   output: 'standalone',
