@@ -10,6 +10,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from apps.users.permissions import require_permission
 from .models import BulkEnquiry, NewsletterSubscriber
 from .serializers import BulkEnquirySerializer, BulkEnquiryAdminSerializer
+from .tokens import email_from_unsubscribe_token
 
 
 logger = logging.getLogger(__name__)
@@ -127,11 +128,12 @@ class NewsletterSubscribeView(views.APIView):
                         status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
     def delete(self, request):
-        email = (request.data.get('email') or request.query_params.get('email') or '').strip().lower()
-        sub = NewsletterSubscriber.objects.filter(email=email).first()
-        if not sub:
-            return Response({'message': 'Not subscribed.'}, status=status.HTTP_404_NOT_FOUND)
-        sub.is_active = False
-        sub.unsubscribed_at = timezone.now()
-        sub.save(update_fields=['is_active', 'unsubscribed_at'])
+        token = request.data.get('token') or request.query_params.get('token') or ''
+        email = email_from_unsubscribe_token(token)
+        if not email:
+            return Response({'error': 'This unsubscribe link is invalid.'}, status=status.HTTP_400_BAD_REQUEST)
+        NewsletterSubscriber.objects.filter(email=email, is_active=True).update(
+            is_active=False, unsubscribed_at=timezone.now(),
+        )
+        # Same answer whether or not the address was subscribed.
         return Response({'message': 'You have been unsubscribed.'})
