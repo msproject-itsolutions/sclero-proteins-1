@@ -29,7 +29,7 @@ class Command(BaseCommand):
         owner = uuid.uuid4().hex
         lease_seconds = max(int(os.getenv('SCHEDULER_LEASE_SECONDS', '300')), 60)
         wait_seconds = max(int(os.getenv('SCHEDULER_LEASE_WAIT_SECONDS', '10')), 1)
-        default_heartbeat = os.path.join(tempfile.gettempdir(), 'scheduler-heartbeat') if os.name == 'nt' else '/tmp/scheduler-heartbeat'
+        default_heartbeat = os.path.join(tempfile.gettempdir(), 'scheduler-heartbeat')
         heartbeat_path = os.getenv('SCHEDULER_HEARTBEAT_FILE', default_heartbeat)
         stop = threading.Event()
 
