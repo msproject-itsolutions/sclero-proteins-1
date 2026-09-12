@@ -47,7 +47,8 @@ class Command(BaseCommand):
                 # send the same email twice.
                 with transaction.atomic():
                     delivery = (
-                        EmailDelivery.objects.select_for_update()
+                        # Lock only the delivery row: region is a nullable join, and PostgreSQL refuses FOR UPDATE on the nullable side of an outer join.
+                        EmailDelivery.objects.select_for_update(of=('self',))
                         .select_related('region')
                         .filter(pk=delivery_pk, status__in=['PENDING', 'FAILED'])
                         .first()
