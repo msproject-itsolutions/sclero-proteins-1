@@ -647,7 +647,7 @@ def send_owner_order_notification(order):
         try:
             send_branded_email(subject, html_body, recipient)
             success = True
-        except Exception as exc:
+        except Exception:
             logger.exception("Failed to send admin order alert to %s for order %s", recipient, order.id)
 
     return success
