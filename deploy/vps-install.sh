@@ -204,10 +204,12 @@ if [[ ! -f .env ]]; then
   cp .env.production.example .env
   secret_key="$(openssl rand -hex 64)"
   database_password="$(openssl rand -hex 32)"
+  integration_key="$(openssl rand -base64 32 | tr '+/' '-_')"
   sed -i \
     -e "s/^SECRET_KEY=.*/SECRET_KEY=${secret_key}/" \
     -e "s/^DB_PASSWORD=.*/DB_PASSWORD=${database_password}/" \
     -e "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=${database_password}/" \
+    -e "s|^INTEGRATION_ENCRYPTION_KEY=.*|INTEGRATION_ENCRYPTION_KEY=${integration_key}|" \
     .env
   chmod 600 .env
   echo "Created .env with random application and database secrets."
@@ -246,6 +248,31 @@ fi
 if grep -Eq '(^|=)CHANGE_ME' .env; then
   die ".env still contains CHANGE_ME placeholders"
 fi
+
+env_value() {
+  local raw
+  raw="$(grep -E "^$1=" .env | tail -n 1 | cut -d= -f2-)"
+  raw="${raw%\"}"; raw="${raw#\"}"; raw="${raw%\'}"; raw="${raw#\'}"
+  printf '%s' "$raw"
+}
+
+# Credentials are encrypted with INTEGRATION_ENCRYPTION_KEY. Deployments that
+# never set it used a key derived from SECRET_KEY; pinning that exact key keeps
+# every stored credential readable and survives a future SECRET_KEY rotation.
+integration_key="$(env_value INTEGRATION_ENCRYPTION_KEY)"
+if [[ -z "$integration_key" ]]; then
+  current_secret_key="$(env_value SECRET_KEY)"
+  [[ -n "$current_secret_key" ]] || die "SECRET_KEY is missing from .env"
+  integration_key="$(printf '%s' "$current_secret_key" | openssl dgst -sha256 -binary | openssl base64 -A | tr '+/' '-_')"
+  if grep -q '^INTEGRATION_ENCRYPTION_KEY=' .env; then
+    sed -i "s|^INTEGRATION_ENCRYPTION_KEY=.*|INTEGRATION_ENCRYPTION_KEY=${integration_key}|" .env
+  else
+    printf '\nINTEGRATION_ENCRYPTION_KEY=%s\n' "$integration_key" >> .env
+  fi
+  log "Pinned INTEGRATION_ENCRYPTION_KEY to the key derived from SECRET_KEY"
+fi
+[[ "$integration_key" =~ ^[A-Za-z0-9_-]{43}=$ ]] ||
+  die "INTEGRATION_ENCRYPTION_KEY must be a 44-character url-safe base64 Fernet key"
 
 for command in docker curl git nginx openssl sed ss; do
   command -v "$command" >/dev/null || die "Required command not found: $command"

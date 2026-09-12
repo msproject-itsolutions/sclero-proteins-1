@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 from dotenv import load_dotenv
 from django.core.exceptions import ImproperlyConfigured
 from corsheaders.defaults import default_headers
-from sclero_backend.config_checks import require_rbac_enforced
+from sclero_backend.config_checks import require_integration_key, require_rbac_enforced
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -38,6 +38,7 @@ if not DEBUG and SECRET_KEY.startswith(('django-insecure-', 'CHANGE_ME')):
 # stable across deployments; rotating it requires a controlled secret migration.
 # When omitted, a deterministic key is derived from SECRET_KEY.
 INTEGRATION_ENCRYPTION_KEY = os.getenv('INTEGRATION_ENCRYPTION_KEY', '')
+require_integration_key(debug=DEBUG, building_static=_BUILDING_STATIC, key=INTEGRATION_ENCRYPTION_KEY)
 
 ALLOWED_HOSTS = [
     host.strip()

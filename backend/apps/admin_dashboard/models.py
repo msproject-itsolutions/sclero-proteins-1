@@ -3,7 +3,7 @@ from django.db import models
 from django.conf import settings
 from django.utils import timezone
 from apps.regions.models import Region
-from apps.common.fields import EncryptedJSONField, EncryptedTextField
+from apps.common.fields import EncryptedJSONField, EncryptedTextField, SensitiveKeysJSONField
 
 # Colors are rendered as inline styles on the storefront, so only strict hex
 # values may be stored — never arbitrary CSS.
@@ -40,7 +40,7 @@ class FeatureToggle(models.Model):
 
 class SystemSetting(models.Model):
     key = models.CharField(max_length=100, unique=True, db_index=True, help_text="e.g. SMTP_SETTINGS, GOOGLE_AUTH_CREDENTIALS, WHATSAPP_API")
-    value = models.JSONField(default=dict, help_text="Configuration values stored as JSON")
+    value = SensitiveKeysJSONField(default=dict, help_text="Configuration values stored as JSON; secret values are encrypted at rest")
     description = models.TextField(blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -280,7 +280,7 @@ class MarketingIntegration(models.Model):
     name = models.CharField(max_length=100)
     channel = models.CharField(max_length=40, choices=INTEGRATION_CHANNELS, unique=True, db_index=True)
     is_connected = models.BooleanField(default=False, db_index=True)
-    credentials = models.JSONField(default=dict, blank=True, help_text="Store client_id, secret, tokens, pixel_id, etc.")
+    credentials = SensitiveKeysJSONField(default=dict, blank=True, help_text="Store client_id, secret, tokens, pixel_id, etc.; secret values are encrypted at rest")
     sync_status = models.CharField(max_length=20, default='DISCONNECTED', help_text="CONNECTED, FAILED, SYNCING, DISCONNECTED")
     last_sync = models.DateTimeField(null=True, blank=True)
     metrics = models.JSONField(default=dict, blank=True, help_text="Campaign metrics: spend, impressions, clicks, conversions")

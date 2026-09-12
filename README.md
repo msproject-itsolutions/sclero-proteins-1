@@ -83,7 +83,7 @@ The storefront is available at `http://localhost:3000`; the API defaults to `htt
 - Local frontend template: `frontend/.env.example`
 - Production Compose template: `.env.production.example`
 
-Never commit an active `.env`, private key, database dump, mailbox password, gateway secret, or webhook signing secret. Generate `SECRET_KEY` with a cryptographically secure generator. All `CHANGE_ME` values in the production template are release blockers; the VPS installer replaces the specifically marked generated VAPID value itself.
+Never commit an active `.env`, private key, database dump, mailbox password, gateway secret, or webhook signing secret. Generate `SECRET_KEY` with a cryptographically secure generator. All `CHANGE_ME` values in the production template are release blockers; the VPS installer replaces the specifically marked generated VAPID value itself. `INTEGRATION_ENCRYPTION_KEY` encrypts stored gateway, SMTP, IMAP, marketing and webhook credentials; the installer generates or pins it, and production refuses to start without a valid key.
 
 Important groups:
 

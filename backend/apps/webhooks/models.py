@@ -1,12 +1,12 @@
 import uuid
 import secrets
 from django.db import models
+from apps.common.fields import EncryptedTextField
 
 class WebhookSubscription(models.Model):
     name = models.CharField(max_length=100)
     url = models.URLField(max_length=500, help_text="Destination URL for webhook events.")
-    secret = models.CharField(
-        max_length=100,
+    secret = EncryptedTextField(
         blank=True,
         help_text="Signing secret used to generate X-Sclero-Signature. Auto-generated if left blank."
     )

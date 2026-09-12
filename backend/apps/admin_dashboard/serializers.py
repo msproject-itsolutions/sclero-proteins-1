@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from apps.common.fields import is_sensitive_key as _is_sensitive_setting_key
 from apps.orders.models import CronJobRun
 from .models import (
     FeatureToggle, SystemSetting, HeroBannerSlide, PaymentGateway, EmailTemplate,
@@ -22,16 +23,6 @@ class FeatureToggleSerializer(serializers.ModelSerializer):
     class Meta:
         model = FeatureToggle
         fields = ['id', 'module_name', 'is_enabled', 'region', 'region_code', 'updated_at']
-
-
-SENSITIVE_SETTING_PARTS = (
-    'password', 'secret', 'token', 'api_key', 'private_key', 'webhook',
-)
-
-
-def _is_sensitive_setting_key(key):
-    normalized = str(key or '').lower()
-    return any(part in normalized for part in SENSITIVE_SETTING_PARTS)
 
 
 def _redact_sensitive_values(value):

@@ -96,3 +96,42 @@ class EncryptedJSONField(EncryptedTextField):
             value = json.dumps(value, separators=(",", ":"), sort_keys=True)
         return encrypt_value(value)
 
+
+SENSITIVE_KEY_PARTS = ('password', 'secret', 'token', 'api_key', 'private_key', 'webhook')
+
+
+def is_sensitive_key(key):
+    normalized = str(key or '').lower()
+    return any(part in normalized for part in SENSITIVE_KEY_PARTS)
+
+
+def transform_sensitive_values(value, transform, inside_sensitive=False):
+    """Apply `transform` to every non-empty string stored under a sensitive key."""
+    if isinstance(value, dict):
+        return {
+            key: transform_sensitive_values(item, transform, inside_sensitive or is_sensitive_key(key))
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [transform_sensitive_values(item, transform, inside_sensitive) for item in value]
+    if inside_sensitive and isinstance(value, str) and value:
+        return transform(value)
+    return value
+
+
+class SensitiveKeysJSONField(models.JSONField):
+    """JSON whose values under secret-looking keys are encrypted at rest.
+
+    Ordinary configuration stays readable JSON; strings under keys such as
+    `password`, `api_key` or `webhook_secret` are stored as Fernet tokens and
+    decrypted transparently on load.
+    """
+    description = "JSON with encrypted secret values"
+
+    def from_db_value(self, value, expression, connection):
+        value = super().from_db_value(value, expression, connection)
+        return transform_sensitive_values(value, decrypt_value)
+
+    def get_prep_value(self, value):
+        return super().get_prep_value(transform_sensitive_values(value, encrypt_value))
+
