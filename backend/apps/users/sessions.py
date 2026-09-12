@@ -9,6 +9,7 @@ import uuid
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import update_last_login
+from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
 from rest_framework.exceptions import AuthenticationFailed
@@ -74,19 +75,20 @@ def start_session(request, user, *, method):
 
 def revoke_sessions(user, *, reason, actor=None):
     """End every session of `user`: bump auth_version and blacklist refresh tokens."""
-    get_user_model().objects.filter(pk=user.pk).update(auth_version=F('auth_version') + 1)
-    user.refresh_from_db(fields=['auth_version'])
-    outstanding = OutstandingToken.objects.filter(
-        user_id=user.pk, expires_at__gt=timezone.now(), blacklistedtoken__isnull=True,
-    )
-    BlacklistedToken.objects.bulk_create(
-        [BlacklistedToken(token=token) for token in outstanding], ignore_conflicts=True,
-    )
-    record_audit(
-        'auth.sessions_revoked', actor=actor or user, target_type='User', target_id=user.pk,
-        summary=f'Ended every session of {user.email}',
-        changes={'reason': reason, 'auth_version': user.auth_version},
-    )
+    with transaction.atomic():
+        get_user_model().objects.filter(pk=user.pk).update(auth_version=F('auth_version') + 1)
+        user.refresh_from_db(fields=['auth_version'])
+        outstanding = OutstandingToken.objects.filter(
+            user_id=user.pk, expires_at__gt=timezone.now(), blacklistedtoken__isnull=True,
+        )
+        BlacklistedToken.objects.bulk_create(
+            [BlacklistedToken(token=token) for token in outstanding], ignore_conflicts=True,
+        )
+        record_audit(
+            'auth.sessions_revoked', actor=actor or user, target_type='User', target_id=user.pk,
+            summary=f'Ended every session of {user.email}',
+            changes={'reason': reason, 'auth_version': user.auth_version},
+        )
     return user.auth_version
 
 

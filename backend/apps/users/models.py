@@ -98,6 +98,16 @@ class User(AbstractBaseUser, PermissionsMixin):
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = []
 
+    def save(self, *args, **kwargs):
+        # auth_version changes only through revoke_sessions' atomic F() update;
+        # a full save of a stale instance must never write an old version back.
+        if not self._state.adding and kwargs.get('update_fields') is None:
+            kwargs['update_fields'] = [
+                field.name for field in self._meta.concrete_fields
+                if not field.primary_key and field.name != 'auth_version'
+            ]
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return self.email
 

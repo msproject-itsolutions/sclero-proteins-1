@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from rest_framework.test import APIRequestFactory, APITestCase
@@ -91,6 +92,31 @@ class RevocationTests(SessionTestCase):
         self.assertEqual(self.client.get('/api/regions/').status_code, 200)
         self.cookie_login()
 
+    def test_cookie_for_an_inactive_user_counts_as_signed_out(self):
+        # SimpleJWT's own AuthenticationFailed carries a dict `detail`
+        # ({'detail': ..., 'code': 'user_inactive'}); the signed-out check
+        # must tolerate that shape instead of crashing with a 500.
+        self.cookie_login()
+        self.user.is_active = False
+        self.user.save(update_fields=['is_active'])
+        self.assertEqual(self.client.get('/api/regions/').status_code, 200)
+        self.assertEqual(self.client.get('/api/auth/profile/').status_code, 401)
+
+    def test_cookie_for_a_deleted_user_counts_as_signed_out(self):
+        self.cookie_login()
+        self.user.delete()
+        self.assertEqual(self.client.get('/api/regions/').status_code, 200)
+        self.assertEqual(self.client.get('/api/auth/profile/').status_code, 401)
+
+    def test_stale_full_save_does_not_roll_back_auth_version(self):
+        tokens = issue_tokens(self.user)
+        stale = User.objects.get(pk=self.user.pk)
+        revoke_sessions(self.user, reason='test')
+        stale.save()
+        self.assertEqual(User.objects.get(pk=self.user.pk).auth_version, 1)
+        self.use_bearer(tokens['access'])
+        self.assertEqual(self.client.get('/api/auth/profile/').status_code, 401)
+
 
 class NetworkRestrictionTests(SessionTestCase):
     def test_ip_allow_list_is_enforced_on_every_bearer_request(self):
@@ -113,3 +139,18 @@ class NetworkRestrictionTests(SessionTestCase):
             '/api/auth/token/refresh/', {'refresh': tokens['refresh']}, format='json', REMOTE_ADDR='203.0.113.9',
         )
         self.assertEqual(response.status_code, 401)
+
+
+class LegacyTokenRefreshTests(SessionTestCase):
+    """Refresh tokens issued before the `av` claim existed must still work."""
+
+    def test_legacy_refresh_token_still_refreshes_via_body(self):
+        legacy = RefreshToken.for_user(self.user)
+        response = self.client.post('/api/auth/token/refresh/', {'refresh': str(legacy)}, format='json')
+        self.assertEqual(response.status_code, 200)
+
+    def test_legacy_refresh_token_still_refreshes_via_cookie(self):
+        legacy = RefreshToken.for_user(self.user)
+        self.client.cookies[settings.AUTH_COOKIE_REFRESH_NAME] = str(legacy)
+        response = self.client.post('/api/auth/token/refresh/', {}, format='json', **BROWSER)
+        self.assertEqual(response.status_code, 200)

@@ -52,7 +52,16 @@ class CookieOrHeaderJWTAuthentication(JWTAuthentication):
             # included. A revoked session counts as signed out instead of
             # failing the request; protected endpoints still answer 401 and
             # the refresh call then clears the cookies.
-            if exc.get_codes() in SIGNED_OUT_CODES:
+            #
+            # SimpleJWT's own AuthenticationFailed (e.g. "user_inactive",
+            # "user_not_found") carries a dict `detail` — {'detail': ...,
+            # 'code': ...} — so `exc.get_codes()` returns a dict there, which
+            # is unhashable and cannot be tested for set membership directly.
+            # Ours (raised locally with a plain string + `code=`) carries an
+            # ErrorDetail with a `.code` attribute instead.
+            detail = exc.detail
+            code = str(detail.get('code', '')) if isinstance(detail, dict) else getattr(detail, 'code', None)
+            if code in SIGNED_OUT_CODES:
                 return None
             raise
         return user, validated_token
