@@ -29,6 +29,20 @@ class UnsubscribeTokenTests(APITestCase):
         self.assertFalse(self.subscriber.is_active)
         self.assertIsNotNone(self.subscriber.unsubscribed_at)
 
+    def test_non_string_token_is_rejected_without_a_server_error(self):
+        self.assertIsNone(email_from_unsubscribe_token(123))
+        response = self.client.delete(URL, {'token': 123}, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.subscriber.refresh_from_db()
+        self.assertTrue(self.subscriber.is_active)
+
+    def test_empty_token_is_rejected(self):
+        self.assertIsNone(email_from_unsubscribe_token(''))
+        response = self.client.delete(URL, {'token': ''}, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.subscriber.refresh_from_db()
+        self.assertTrue(self.subscriber.is_active)
+
     def test_unknown_address_gets_the_same_answer(self):
         token = make_unsubscribe_token('nobody@example.com')
         response = self.client.delete(URL, {'token': token}, format='json')

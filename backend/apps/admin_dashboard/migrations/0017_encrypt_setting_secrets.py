@@ -4,14 +4,9 @@ import apps.common.fields
 from django.db import migrations
 
 
-def encrypt_existing(apps, schema_editor):
-    # Re-saving through SensitiveKeysJSONField encrypts plaintext secret values.
-    for model_name, field_name in (('SystemSetting', 'value'), ('MarketingIntegration', 'credentials')):
-        model = apps.get_model('admin_dashboard', model_name)
-        for obj in model.objects.all().iterator():
-            model.objects.filter(pk=obj.pk).update(**{field_name: getattr(obj, field_name)})
-
-
+# Existing plaintext values are encrypted by `manage.py encrypt_stored_secrets`,
+# which deploy/vps-install.sh runs only after the release passes every check,
+# so an automatic rollback to the previous images never meets ciphertext.
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -29,6 +24,4 @@ class Migration(migrations.Migration):
             name='value',
             field=apps.common.fields.SensitiveKeysJSONField(default=dict, help_text='Configuration values stored as JSON; secret values are encrypted at rest'),
         ),
-        # Forward-only: restoring the pre-release backup is the rollback path.
-        migrations.RunPython(encrypt_existing, migrations.RunPython.noop),
     ]

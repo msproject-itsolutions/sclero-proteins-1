@@ -1,12 +1,15 @@
-import importlib
 import json
+from io import StringIO
 
-from django.apps import apps as django_apps
+from cryptography.fernet import Fernet
 from django.core.exceptions import ImproperlyConfigured
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.db import connection
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 
 from apps.admin_dashboard.models import MarketingIntegration, SystemSetting
+from apps.common.fields import is_sensitive_key
 from apps.webhooks.dispatcher import calculate_signature
 from apps.webhooks.models import WebhookSubscription
 from sclero_backend.config_checks import require_integration_key
@@ -49,21 +52,20 @@ class SettingSecretEncryptionTests(TestCase):
         integration.refresh_from_db()
         self.assertEqual(integration.credentials['client_secret'], 'private-secret')
 
-    def test_existing_plaintext_rows_are_encrypted_by_the_migration(self):
+    def test_existing_plaintext_rows_are_encrypted_by_the_command(self):
         setting = SystemSetting.objects.create(key='IMAP_SETTINGS', value={'IMAP_HOST': 'imap.example.com'})
         with connection.cursor() as cursor:
             cursor.execute(
                 'UPDATE admin_dashboard_systemsetting SET value = %s WHERE id = %s',
                 [json.dumps({'IMAP_HOST': 'imap.example.com', 'IMAP_PASSWORD': 'legacy-plain'}), setting.pk],
             )
-        migration = importlib.import_module('apps.admin_dashboard.migrations.0017_encrypt_setting_secrets')
-        migration.encrypt_existing(django_apps, None)
+        call_command('encrypt_stored_secrets', stdout=StringIO())
         raw = raw_column('admin_dashboard_systemsetting', 'value', setting.pk)
         self.assertNotIn('legacy-plain', raw)
         setting.refresh_from_db()
         self.assertEqual(setting.value['IMAP_PASSWORD'], 'legacy-plain')
 
-    def test_existing_plaintext_marketing_credentials_are_encrypted_by_the_migration(self):
+    def test_existing_plaintext_marketing_credentials_are_encrypted_by_the_command(self):
         integration = MarketingIntegration.objects.create(
             name='Legacy Ads', channel='FACEBOOK_ADS', credentials={'client_id': 'legacy-id'},
         )
@@ -72,8 +74,7 @@ class SettingSecretEncryptionTests(TestCase):
                 'UPDATE admin_dashboard_marketingintegration SET credentials = %s WHERE id = %s',
                 [json.dumps({'client_id': 'legacy-id', 'client_secret': 'legacy-marketing-plain'}), integration.pk],
             )
-        migration = importlib.import_module('apps.admin_dashboard.migrations.0017_encrypt_setting_secrets')
-        migration.encrypt_existing(django_apps, None)
+        call_command('encrypt_stored_secrets', stdout=StringIO())
         raw = raw_column('admin_dashboard_marketingintegration', 'credentials', integration.pk)
         self.assertNotIn('legacy-marketing-plain', raw)
         integration.refresh_from_db()
@@ -93,7 +94,7 @@ class WebhookSecretEncryptionTests(TestCase):
             calculate_signature('{"a":1}', 'sign-me-please'),
         )
 
-    def test_existing_plaintext_subscription_secret_is_encrypted_by_the_migration(self):
+    def test_existing_plaintext_subscription_secret_is_encrypted_by_the_command(self):
         subscription = WebhookSubscription.objects.create(
             name='Legacy', url='https://legacy.example.com/hook', events=['order.paid'], secret='sign-me-please',
         )
@@ -102,12 +103,84 @@ class WebhookSecretEncryptionTests(TestCase):
                 'UPDATE webhooks_webhooksubscription SET secret = %s WHERE id = %s',
                 ['legacy-webhook-plain', subscription.pk],
             )
-        migration = importlib.import_module('apps.webhooks.migrations.0002_encrypt_subscription_secret')
-        migration.encrypt_existing(django_apps, None)
+        call_command('encrypt_stored_secrets', stdout=StringIO())
         raw = raw_column('webhooks_webhooksubscription', 'secret', subscription.pk)
         self.assertNotIn('legacy-webhook-plain', raw)
         subscription.refresh_from_db()
         self.assertEqual(subscription.secret, 'legacy-webhook-plain')
+
+
+class EncryptStoredSecretsCommandTests(TestCase):
+    def _plant_plaintext(self):
+        setting = SystemSetting.objects.create(key='SMTP_SETTINGS', value={})
+        integration = MarketingIntegration.objects.create(name='Ads', channel='GOOGLE_ADS', credentials={})
+        subscription = WebhookSubscription.objects.create(
+            name='ERP', url='https://erp.example.com/hook', events=['order.paid'],
+        )
+        with connection.cursor() as cursor:
+            cursor.execute(
+                'UPDATE admin_dashboard_systemsetting SET value = %s WHERE id = %s',
+                [json.dumps({'EMAIL_HOST': 'smtp.example.com', 'EMAIL_HOST_PASSWORD': 'twice-smtp'}), setting.pk],
+            )
+            cursor.execute(
+                'UPDATE admin_dashboard_marketingintegration SET credentials = %s WHERE id = %s',
+                [json.dumps({'client_id': 'public-id', 'client_secret': 'twice-marketing'}), integration.pk],
+            )
+            cursor.execute(
+                'UPDATE webhooks_webhooksubscription SET secret = %s WHERE id = %s',
+                ['twice-webhook', subscription.pk],
+            )
+        return setting, integration, subscription
+
+    def test_running_twice_leaves_values_decryptable_and_unchanged(self):
+        setting, integration, subscription = self._plant_plaintext()
+        first, second = StringIO(), StringIO()
+        call_command('encrypt_stored_secrets', stdout=first)
+        call_command('encrypt_stored_secrets', stdout=second)
+
+        expected_line = 'Encrypted stored secrets: {} setting(s), {} integration(s), {} webhook subscription(s).'.format(
+            SystemSetting.objects.count(), MarketingIntegration.objects.count(), WebhookSubscription.objects.count(),
+        )
+        self.assertEqual(first.getvalue().strip(), expected_line)
+        self.assertEqual(second.getvalue().strip(), expected_line)
+        for table, column, pk, plaintext in (
+            ('admin_dashboard_systemsetting', 'value', setting.pk, 'twice-smtp'),
+            ('admin_dashboard_marketingintegration', 'credentials', integration.pk, 'twice-marketing'),
+            ('webhooks_webhooksubscription', 'secret', subscription.pk, 'twice-webhook'),
+        ):
+            raw = raw_column(table, column, pk)
+            self.assertNotIn(plaintext, raw)
+            self.assertIn('enc:v1:', raw)
+
+        setting.refresh_from_db()
+        integration.refresh_from_db()
+        subscription.refresh_from_db()
+        self.assertEqual(setting.value, {'EMAIL_HOST': 'smtp.example.com', 'EMAIL_HOST_PASSWORD': 'twice-smtp'})
+        self.assertEqual(integration.credentials, {'client_id': 'public-id', 'client_secret': 'twice-marketing'})
+        self.assertEqual(subscription.secret, 'twice-webhook')
+
+    def test_refuses_to_rewrite_values_the_current_key_cannot_read(self):
+        other_key = Fernet.generate_key().decode()
+        with override_settings(INTEGRATION_ENCRYPTION_KEY=other_key):
+            subscription = WebhookSubscription.objects.create(
+                name='Other key', url='https://other.example.com/hook', events=['order.paid'], secret='other-key-secret',
+            )
+        before = raw_column('webhooks_webhooksubscription', 'secret', subscription.pk)
+        with self.assertRaisesMessage(CommandError, 'cannot be decrypted with INTEGRATION_ENCRYPTION_KEY'):
+            call_command('encrypt_stored_secrets', stdout=StringIO(), stderr=StringIO())
+        self.assertEqual(raw_column('webhooks_webhooksubscription', 'secret', subscription.pk), before)
+
+
+class SensitiveKeyTests(SimpleTestCase):
+    def test_spelling_variants_of_secret_keys_are_sensitive(self):
+        for key in ('apiKey', 'privateKey', 'access-key', 'smtp_pwd'):
+            with self.subTest(key=key):
+                self.assertTrue(is_sensitive_key(key))
+
+    def test_ordinary_configuration_keys_are_not_sensitive(self):
+        for key in ('pixel_id', 'EMAIL_HOST'):
+            with self.subTest(key=key):
+                self.assertFalse(is_sensitive_key(key))
 
 
 class IntegrationKeyGuardTests(SimpleTestCase):

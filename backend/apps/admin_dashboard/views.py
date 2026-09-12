@@ -166,7 +166,8 @@ class EmailTemplateViewSet(viewsets.ModelViewSet):
 class FeatureToggleViewSet(viewsets.ModelViewSet):
     queryset = FeatureToggle.objects.all()
     serializer_class = FeatureToggleSerializer
-    # No-op until RBAC_ENFORCED=True, then requires the 'settings.manage' permission.
+    # Requires the 'settings.manage' permission; RBAC is always enforced in
+    # production. Only active_toggles below is public.
     permission_classes = [require_permission('settings.manage')]
 
     def get_queryset(self):
@@ -295,12 +296,13 @@ class PaymentGatewayViewSet(viewsets.ModelViewSet):
     """
     Admin CRUD for payment gateways (toggle on/off, set keys, scope to region).
 
-    permission_classes is AllowAny to match the rest of this prototype dashboard;
-    once staff RBAC lands this must be locked to authorised admins (it exposes secret keys).
+    Requires the 'settings.manage' permission; RBAC is always enforced in
+    production. Secret keys are write-only in responses. Only the `available`
+    action (checkout's list of enabled gateways, no secrets) is public.
     """
     queryset = PaymentGateway.objects.select_related('region').all()
     serializer_class = PaymentGatewayAdminSerializer
-    # Exposes secret keys — gate behind 'settings.manage' (enforced when RBAC_ENFORCED=True).
+    # Manages gateway secret keys, so staff need 'settings.manage'.
     permission_classes = [require_permission('settings.manage')]
 
     def get_queryset(self):

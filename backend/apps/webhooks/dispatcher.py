@@ -70,6 +70,17 @@ def send_delivery(delivery):
         delivery.save(update_fields=['status', 'next_attempt_at', 'error_message'])
         return
 
+    if not sub.secret:
+        # An undecryptable secret loads as ''. An HMAC keyed with '' can be
+        # forged by anyone and the receiver would reject it, so do not send.
+        logger.error('Webhook subscription %s has no usable signing secret; delivery %s not sent.',
+                     sub.pk, delivery.id)
+        delivery.status = 'DLQ'
+        delivery.next_attempt_at = None
+        delivery.error_message = 'Signing secret unavailable; delivery not sent.'
+        delivery.save(update_fields=['status', 'next_attempt_at', 'error_message'])
+        return
+
     delivery.attempts += 1
     delivery.last_attempt_at = timezone.now()
     

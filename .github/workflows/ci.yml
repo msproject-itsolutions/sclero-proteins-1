@@ -90,3 +90,10 @@ jobs:
         env:
           POSTGRES_PASSWORD: ci-placeholder
           NEXT_PUBLIC_SITE_URL: https://example.test
+      - name: Validate edge nginx config
+        run: >-
+          docker run --rm
+          -v "$PWD/nginx/conf.d:/etc/nginx/conf.d:ro"
+          --add-host backend:127.0.0.1
+          --add-host frontend:127.0.0.1
+          nginx:1.28-alpine nginx -t

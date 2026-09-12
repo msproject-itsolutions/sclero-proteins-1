@@ -40,9 +40,14 @@ def clean_route(route):
 
 
 def view_actions(callback):
-    """Yield (view_class, action_name, initkwargs) for each action a route serves."""
+    """Yield (view_class, action_name, initkwargs) for each action a route serves.
+
+    A callback with no view class (a plain function view) yields (None, None, {})
+    so the caller can report it instead of silently skipping it.
+    """
     view_class = getattr(callback, 'cls', None) or getattr(callback, 'view_class', None)
     if view_class is None:
+        yield None, None, {}
         return
     initkwargs = getattr(callback, 'initkwargs', None) or getattr(callback, 'view_initkwargs', None) or {}
     actions = getattr(callback, 'actions', None)
@@ -87,24 +92,33 @@ class Command(BaseCommand):
             if '(?P<format>' in route or not route.startswith(SENSITIVE_PREFIXES):
                 continue
             for view_class, action_name, initkwargs in view_actions(pattern.callback):
-                marker = (route, view_class.__name__, action_name)
+                view_name = view_class.__name__ if view_class else getattr(pattern.callback, '__name__', '-')
+                marker = (route, view_name, action_name)
                 if marker in seen:
                     continue
                 seen.add(marker)
                 label = action_name or '-'
+                if view_class is None:
+                    rows.append((route, view_name, label, 'ERROR (no view class)'))
+                    findings.append(f'{route}: no view class to evaluate')
+                    continue
                 try:
                     gate, keys = classify(view_class, action_name, initkwargs)
                 except Exception as exc:  # an unreadable view is itself a finding
-                    rows.append((route, view_class.__name__, label, 'ERROR'))
-                    findings.append(f'{route} {view_class.__name__}.{label}: cannot evaluate ({exc})')
+                    rows.append((route, view_name, label, 'ERROR'))
+                    findings.append(f'{route} {view_name}.{label}: cannot evaluate ({exc})')
                     continue
 
                 if gate == 'rbac':
-                    posture = ', '.join(sorted(keys))
-                    ungrantable = sorted(key for key in keys if key not in ENFORCED_PERMISSION_KEYS)
+                    named = sorted(key for key in keys if key)
+                    if len(named) < len(keys):
+                        # HasPermission without a key admits any staff account.
+                        findings.append(f'{route} {view_name}.{label}: permission class without a key')
+                    posture = ', '.join(named) or 'UNGATED (permission class without a key)'
+                    ungrantable = [key for key in named if key not in ENFORCED_PERMISSION_KEYS]
                     if ungrantable:
                         findings.append(
-                            f'{route} {view_class.__name__}.{label}: key not offered in the role editor '
+                            f'{route} {view_name}.{label}: key not offered in the role editor '
                             f'{ungrantable}'
                         )
                 elif gate == 'auth' and route.startswith(SELF_SERVICE_PREFIXES):
@@ -113,8 +127,8 @@ class Command(BaseCommand):
                     posture = 'public (allow-listed)'
                 else:
                     posture = f'UNGATED ({gate})'
-                    findings.append(f'{route} {view_class.__name__}.{label}: {posture}')
-                rows.append((route, view_class.__name__, label, posture))
+                    findings.append(f'{route} {view_name}.{label}: {posture}')
+                rows.append((route, view_name, label, posture))
 
         rows.sort()
         width_route = max((len(row[0]) for row in rows), default=40)

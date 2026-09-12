@@ -338,7 +338,9 @@ class ProductAdminCreateUpdateSerializer(serializers.ModelSerializer):
             existing = set(self.instance.media.values_list('file_url', flat=True))
         cleaned = []
         for index, item in enumerate(value):
-            url = item.get('file_url')
+            url = item.get('file_url') if isinstance(item, dict) else None
+            if not isinstance(url, str):
+                raise serializers.ValidationError(f'Media item {index + 1}: file_url must be text.')
             if url in existing:
                 cleaned.append(item)
                 continue

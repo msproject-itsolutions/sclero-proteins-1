@@ -1,5 +1,6 @@
 from unittest.mock import patch, MagicMock
-from django.test import TestCase
+from cryptography.fernet import Fernet
+from django.test import TestCase, override_settings
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from rest_framework.test import APITestCase
@@ -45,6 +46,30 @@ class WebhooksDispatcherTest(TestCase):
         delivery.refresh_from_db()
         post.assert_not_called()
         self.assertEqual(delivery.status, 'DLQ')
+
+    @patch('apps.webhooks.dispatcher.validate_webhook_destination')
+    def test_undecryptable_secret_is_not_sent(self, _mock_validate):
+        written_with = Fernet.generate_key().decode()
+        with override_settings(INTEGRATION_ENCRYPTION_KEY=written_with):
+            sub = WebhookSubscription.objects.create(
+                name='Rotated key', url='https://hooks.example.com/receive',
+                events=['order.paid'], secret='written-with-another-key',
+            )
+            delivery = WebhookDelivery.objects.create(
+                subscription=sub, event_type='order.paid', payload={'order_id': 1},
+            )
+        # Under a different key the stored secret decrypts to '' (fail closed).
+        with override_settings(INTEGRATION_ENCRYPTION_KEY=Fernet.generate_key().decode()):
+            delivery = WebhookDelivery.objects.select_related('subscription').get(pk=delivery.pk)
+            self.assertEqual(delivery.subscription.secret, '')
+            with patch('apps.webhooks.dispatcher.requests.post') as post:
+                post.return_value = MagicMock(status_code=200, text='OK')
+                send_delivery(delivery)
+        delivery.refresh_from_db()
+        post.assert_not_called()
+        self.assertEqual(delivery.status, 'DLQ')
+        self.assertIsNone(delivery.next_attempt_at)
+        self.assertEqual(delivery.error_message, 'Signing secret unavailable; delivery not sent.')
 
     @patch('apps.webhooks.dispatcher.validate_webhook_destination')
     @patch('apps.webhooks.dispatcher.requests.post')

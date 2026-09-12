@@ -261,6 +261,11 @@ if [[ -z "$integration_key" ]]; then
     integration_key="$(docker compose exec -T backend python -c 'import base64, hashlib, os; print(base64.urlsafe_b64encode(hashlib.sha256(os.environ["SECRET_KEY"].encode()).digest()).decode())')" ||
       die "Could not read SECRET_KEY from the running backend to pin INTEGRATION_ENCRYPTION_KEY"
   else
+    pin_project="$(env_value COMPOSE_PROJECT_NAME)"
+    pin_project="${pin_project:-sclero-proteins}"
+    if [[ -n "$(docker volume ls --filter "label=com.docker.compose.project=${pin_project}" --format '{{.Name}}' 2>/dev/null || true)" ]]; then
+      die "INTEGRATION_ENCRYPTION_KEY is not set and the backend is not running; start the existing stack (docker compose up -d) and rerun so the key can be read from it"
+    fi
     current_secret_key="$(env_value SECRET_KEY)"
     [[ -n "$current_secret_key" ]] || die "SECRET_KEY is missing from .env"
     integration_key="$(printf '%s' "$current_secret_key" | openssl dgst -sha256 -binary | openssl base64 -A | tr '+/' '-_')"
@@ -401,6 +406,9 @@ docker compose run --rm -T --no-deps \
 docker compose run --rm -T --no-deps \
   -e SKIP_STARTUP_MAINTENANCE=True \
   backend python manage.py migrate --plan
+docker compose run --rm -T --no-deps \
+  -e SKIP_STARTUP_MAINTENANCE=True \
+  backend python manage.py verify_encryption_key
 
 release_replaced=true
 docker compose up -d --wait --force-recreate --remove-orphans
@@ -498,6 +506,10 @@ EOF
   run_root install -d -m 0700 /var/backups/sclero-proteins
 fi
 
+# Encrypt plaintext credentials only after every health and HTTPS check has
+# passed, so an automatic image rollback earlier in this run never meets them.
+log "Encrypting stored credentials"
+docker compose exec -T backend python manage.py encrypt_stored_secrets
 nginx_changed=false
 release_replaced=false
 trap - EXIT

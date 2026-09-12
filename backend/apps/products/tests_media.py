@@ -65,6 +65,8 @@ class MediaUrlValidationTests(SimpleTestCase):
             'https://cdn.example.com/x.SVG?v=1',
             '/media/uploads/page.html',
             '//evil.example/x.png',
+            '/media/x%2Esvg',
+            '/\\evil.example/x.png',
             'http://cdn.example.com/x.png',
             'ftp://files.example.com/x.png',
             '',
@@ -96,6 +98,16 @@ class ProductMediaApiValidationTests(APITestCase):
         }, format='json')
         self.assertEqual(response.status_code, 400)
         self.assertFalse(ProductMedia.objects.filter(product=self.product).exists())
+
+    def test_non_text_media_url_is_a_validation_error(self):
+        response = self.client.post('/api/admin/products/', {
+            'sku': 'SKU-BAD-MEDIA',
+            'name': 'Bad media product',
+            'media_files': [{'file_url': ['x']}],
+        }, format='json')
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertEqual(response.data['media_files'], ['Media item 1: file_url must be text.'])
+        self.assertFalse(Product.objects.filter(sku='SKU-BAD-MEDIA').exists())
 
     def test_legacy_media_url_stays_editable_on_unrelated_change(self):
         svg = 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4='
@@ -160,10 +172,15 @@ class ScanMediaCommandTests(APITestCase):
             handle.write(PNG_BYTES)
         product = Product.objects.create(sku='SKU-SCAN', name='Scan product')
         row = ProductMedia.objects.create(product=product, file_url='/media/products/evil.svg')
+        script_row = ProductMedia.objects.create(product=product, file_url='javascript:alert(1)')
+        valid_row = ProductMedia.objects.create(product=product, file_url='/media/products/ok.png')
         out = StringIO()
         with override_settings(MEDIA_ROOT=media_root):
             call_command('scan_media_svg', stdout=out)
         text = out.getvalue()
         self.assertIn(os.path.join('products', 'evil.svg'), text)
         self.assertNotIn('ok.png', text)
-        self.assertIn(f'media#{row.pk}', text)
+        self.assertIn(f'media#{row.pk}:', text)
+        self.assertIn(f'media#{script_row.pk}:', text)
+        self.assertNotIn(f'media#{valid_row.pk}:', text)
+        self.assertIn('1 file(s) and 2 media row(s) need review.', text)

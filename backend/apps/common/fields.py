@@ -97,12 +97,22 @@ class EncryptedJSONField(EncryptedTextField):
         return encrypt_value(value)
 
 
-SENSITIVE_KEY_PARTS = ('password', 'secret', 'token', 'api_key', 'private_key', 'webhook')
+SENSITIVE_KEY_PARTS = (
+    'password', 'passwd', 'pwd', 'secret', 'token', 'apikey', 'privatekey', 'accesskey', 'webhook',
+)
+
+
+def _normalise_key(value):
+    # apiKey, api_key and api-key are the same secret.
+    return str(value or '').lower().replace('_', '').replace('-', '')
+
+
+_NORMALISED_KEY_PARTS = tuple(_normalise_key(part) for part in SENSITIVE_KEY_PARTS)
 
 
 def is_sensitive_key(key):
-    normalized = str(key or '').lower()
-    return any(part in normalized for part in SENSITIVE_KEY_PARTS)
+    normalized = _normalise_key(key)
+    return any(part in normalized for part in _NORMALISED_KEY_PARTS)
 
 
 def transform_sensitive_values(value, transform, inside_sensitive=False):

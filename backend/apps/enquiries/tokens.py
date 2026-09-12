@@ -13,8 +13,11 @@ def make_unsubscribe_token(email):
 
 
 def email_from_unsubscribe_token(token):
+    # JSON bodies can carry any type; only a non-empty string can be a token.
+    if not isinstance(token, str) or not token:
+        return None
     try:
-        data = signing.loads(token or '', salt=UNSUBSCRIBE_SALT)
+        data = signing.loads(token, salt=UNSUBSCRIBE_SALT)
     except signing.BadSignature:
         return None
     email = data.get('e') if isinstance(data, dict) else None

@@ -4,12 +4,9 @@ import apps.common.fields
 from django.db import migrations
 
 
-def encrypt_existing(apps, schema_editor):
-    subscription_model = apps.get_model('webhooks', 'WebhookSubscription')
-    for subscription in subscription_model.objects.all().iterator():
-        subscription_model.objects.filter(pk=subscription.pk).update(secret=subscription.secret)
-
-
+# Existing plaintext secrets are encrypted by `manage.py encrypt_stored_secrets`,
+# which deploy/vps-install.sh runs only after the release passes every check,
+# so an automatic rollback to the previous images never meets ciphertext.
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -22,5 +19,4 @@ class Migration(migrations.Migration):
             name='secret',
             field=apps.common.fields.EncryptedTextField(blank=True, help_text='Signing secret used to generate X-Sclero-Signature. Auto-generated if left blank.'),
         ),
-        migrations.RunPython(encrypt_existing, migrations.RunPython.noop),
     ]
