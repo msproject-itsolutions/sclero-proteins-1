@@ -162,6 +162,15 @@ def user_has_permission(user, key):
     return key in get_user_permission_keys(user)
 
 
+def is_staff_account(user):
+    """Anyone who can reach the admin: staff flag, superuser, or any role."""
+    if not user or not getattr(user, 'is_authenticated', False):
+        return False
+    if user.is_staff or user.is_superuser:
+        return True
+    return user.roles.exists()
+
+
 def client_ip_is_allowed(client_ip, allowed_rules):
     if not client_ip:
         return False
@@ -181,29 +190,32 @@ def client_ip_is_allowed(client_ip, allowed_rules):
 # --- DRF permission classes -------------------------------------------------- #
 class HasPermission(BasePermission):
     """
-    Enforces that the user has the required action permission key.
-    No-op when settings.RBAC_ENFORCED is falsy.
+    Enforces that the authenticated user holds the required permission key.
+
+    Never grants anonymous access. With RBAC_ENFORCED disabled (local fixture
+    work only; production refuses to start that way) any staff account passes.
     """
     required = None
     message = "You do not have permission to perform this action."
 
     def has_permission(self, request, view):
-        if not getattr(settings, 'RBAC_ENFORCED', False):
-            return True
-        key = getattr(view, 'required_permission', None) or self.required
-        if key is None:
-            return True
         user = request.user
-        
-        # Enforce IP restrict logic if present
-        if user and user.is_authenticated and user.allowed_ip_range:
+        if not (user and user.is_authenticated):
+            return False
+
+        if user.allowed_ip_range:
             client_ip = client_ip_from_request(request)
             allowed_ips = [ip.strip() for ip in user.allowed_ip_range.split(',') if ip.strip()]
             if allowed_ips and not client_ip_is_allowed(client_ip, allowed_ips):
                 self.message = f"IP address {client_ip} is not allowed to access this profile."
                 return False
-                
-        return bool(user and user.is_authenticated and user_has_permission(user, key))
+
+        if not getattr(settings, 'RBAC_ENFORCED', True):
+            return is_staff_account(user)
+        key = getattr(view, 'required_permission', None) or self.required
+        if key is None:
+            return is_staff_account(user)
+        return user_has_permission(user, key)
 
 def require_permission(key):
     """Factory returning a HasPermission subclass bound to `key`."""

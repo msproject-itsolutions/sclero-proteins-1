@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 from dotenv import load_dotenv
 from django.core.exceptions import ImproperlyConfigured
 from corsheaders.defaults import default_headers
+from sclero_backend.config_checks import require_rbac_enforced
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -411,6 +412,7 @@ REST_FRAMEWORK = {
 # RBAC_ENFORCED=False for isolated fixture work, but DEBUG must never silently
 # expose customer/order/payment administration APIs.
 RBAC_ENFORCED = env_bool('RBAC_ENFORCED', True)
+require_rbac_enforced(debug=DEBUG, building_static=_BUILDING_STATIC, rbac_enforced=RBAC_ENFORCED)
 
 # Email / SMTP Settings (overridable per environment, and at runtime via
 # SystemSetting(key='SMTP_SETTINGS') in the admin panel)
