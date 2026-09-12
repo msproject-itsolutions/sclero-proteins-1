@@ -97,6 +97,36 @@ class ProductMediaApiValidationTests(APITestCase):
         self.assertEqual(response.status_code, 400)
         self.assertFalse(ProductMedia.objects.filter(product=self.product).exists())
 
+    def test_legacy_media_url_stays_editable_on_unrelated_change(self):
+        svg = 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4='
+        ProductMedia.objects.create(product=self.product, file_url=svg, media_type='IMAGE')
+        response = self.client.patch(f'/api/admin/products/{self.product.sku}/', {
+            'name': 'Media product renamed',
+            'media_files': [{'file_url': svg, 'media_type': 'IMAGE'}],
+        }, format='json')
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertTrue(ProductMedia.objects.filter(product=self.product, file_url=svg).exists())
+
+    def test_legacy_media_url_does_not_shield_new_invalid_entries(self):
+        svg = 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4='
+        ProductMedia.objects.create(product=self.product, file_url=svg, media_type='IMAGE')
+        response = self.client.patch(f'/api/admin/products/{self.product.sku}/', {
+            'media_files': [
+                {'file_url': svg, 'media_type': 'IMAGE'},
+                {'file_url': 'javascript:alert(1)', 'media_type': 'IMAGE'},
+            ],
+        }, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertTrue(ProductMedia.objects.filter(product=self.product, file_url=svg).exists())
+
+    def test_product_media_endpoint_allows_unchanged_legacy_file_url(self):
+        svg = 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4='
+        media = ProductMedia.objects.create(product=self.product, file_url=svg, media_type='IMAGE')
+        response = self.client.patch(f'/api/admin/product-media/{media.pk}/', {
+            'file_url': svg,
+        }, format='json')
+        self.assertEqual(response.status_code, 200, response.content)
+
 
 class DataUriMigrationTests(APITestCase):
     def setUp(self):

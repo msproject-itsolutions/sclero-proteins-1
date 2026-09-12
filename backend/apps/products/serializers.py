@@ -243,6 +243,8 @@ class ProductMediaAdminSerializer(serializers.ModelSerializer):
         fields = ['id', 'file_url', 'media_type', 'display_order']
 
     def validate_file_url(self, value):
+        if self.instance is not None and value == self.instance.file_url:
+            return value
         try:
             return validate_media_url(value)
         except MediaUrlError as exc:
@@ -329,10 +331,19 @@ class ProductAdminCreateUpdateSerializer(serializers.ModelSerializer):
         ]
 
     def validate_media_files(self, value):
+        # Media already stored on this product stays editable even if it predates
+        # these rules; only new or changed URLs are validated.
+        existing = set()
+        if self.instance is not None:
+            existing = set(self.instance.media.values_list('file_url', flat=True))
         cleaned = []
         for index, item in enumerate(value):
+            url = item.get('file_url')
+            if url in existing:
+                cleaned.append(item)
+                continue
             try:
-                url = validate_media_url(item.get('file_url'))
+                url = validate_media_url(url)
             except MediaUrlError as exc:
                 raise serializers.ValidationError(f'Media item {index + 1}: {exc}')
             cleaned.append({**item, 'file_url': url})

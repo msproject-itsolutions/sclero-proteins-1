@@ -390,6 +390,7 @@ log "Running production application checks"
 docker compose exec -T backend python manage.py check --deploy
 docker compose exec -T backend python manage.py makemigrations --check --dry-run
 docker compose exec -T backend python manage.py migrate_datauri_media --base-url "$site_url"
+docker compose exec -T backend python manage.py scan_media_svg
 docker compose exec -T backend python manage.py verify_storefront_content
 docker compose exec -T backend python manage.py seed_email_templates
 
