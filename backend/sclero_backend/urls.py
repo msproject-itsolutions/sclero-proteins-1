@@ -110,7 +110,6 @@ router.register(r'admin/cron-runs', CronJobRunViewSet, basename='admin-cron-run'
 urlpatterns = [
     path('api/health/live/', live, name='health_live'),
     path('api/health/ready/', ready, name='health_ready'),
-    path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
     path('api/', include('apps.glossary.urls')),
     path('api/', include('apps.analytics.urls')),
@@ -182,6 +181,8 @@ urlpatterns = [
     path('api/site-settings/<str:key>/', PublicSiteSettingView.as_view(), name='public_site_setting'),
 ]
 
-# Serve media files in development
+# Django's built-in admin bypasses the staff console's sign-in rules, IP
+# restrictions and audit trail, so it is only mounted for local development.
 if settings.DEBUG:
+    urlpatterns += [path('admin/', admin.site.urls)]
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
