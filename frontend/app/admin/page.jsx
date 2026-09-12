@@ -16,6 +16,7 @@ import { fetchProfile } from '../../store/authSlice';
 import { getApiUrl } from '../../lib/api';
 import { authenticatedFetch } from '../../lib/authFetch';
 import { DEFAULT_HOMEPAGE_SETTINGS, normalizeHomepageSettings } from '../../lib/homepageContent';
+import { csvCell } from '../../lib/csv';
 import ProductEditorPanel from '../../components/admin/ProductEditorPanel';
 import CreateOrderPanel from '../../components/admin/CreateOrderPanel';
 import ShippingZonePanel from '../../components/admin/ShippingZonePanel';
@@ -753,7 +754,7 @@ function ProductsTab({ authFetch, regions, categories }) {
   const handleExport = () => {
     const headers = ['SKU', 'Name', 'Categories', 'Status'];
     const rows = products.map((p) => [p.sku, p.name, (p.categories || []).map((c) => c.name).join(' | '), p.is_archived ? 'ARCHIVED' : 'ACTIVE']);
-    const csvContent = [headers.join(','), ...rows.map(e => e.map(x => `"${x}"`).join(','))].join('\n');
+    const csvContent = [headers.map(csvCell).join(','), ...rows.map((row) => row.map(csvCell).join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');

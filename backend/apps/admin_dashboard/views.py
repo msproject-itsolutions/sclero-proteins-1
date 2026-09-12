@@ -14,6 +14,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 from apps.users.permissions import require_permission
 from apps.regions.models import Region
+from apps.common.csv_safety import safe_writer
 from .models import FeatureToggle, SystemSetting, HeroBannerSlide, PaymentGateway, EmailTemplate, MarketingIntegration, ContentPage, BlogPost, ApprovalRequest, InstagramReelsConnection
 from .store_config import (
     get_store_tax_mode,
@@ -918,10 +919,9 @@ class ReportAnalyticsView(APIView):
             response['Content-Disposition'] = f'attachment; filename="sclero_{region.code}_performance_report.pdf"'
             return response
         elif export_format == 'csv':
-            import csv
             response = HttpResponse(content_type='text/csv')
             response['Content-Disposition'] = f'attachment; filename="sclero_{region.code}_sales_report.csv"'
-            writer = csv.writer(response)
+            writer = safe_writer(response)
             writer.writerow(['Report', f'Sclero Proteins Ltd {region.name} Sales Report'])
             writer.writerow([])
             writer.writerow(['Sales Performance'])

@@ -16,7 +16,6 @@ Heuristic notes (documented per endpoint):
 """
 from __future__ import annotations
 
-import csv
 import datetime as _dt
 from django.db.models import Count, F, Max, Min, Sum
 from django.db.models.functions import TruncDate
@@ -27,6 +26,7 @@ from rest_framework.response import Response
 
 from apps.orders.models import Cart, Order, OrderItem
 from apps.users.permissions import require_permission
+from apps.common.csv_safety import safe_writer
 
 
 _PAID_STATUSES = ['PAID']  # payment_status values that count as conversion
@@ -66,7 +66,7 @@ class _Echo:
 
 def _stream_csv(filename: str, header: list, rows_iter):
     pseudo = _Echo()
-    writer = csv.writer(pseudo)
+    writer = safe_writer(pseudo)
 
     def gen():
         yield writer.writerow(header)
