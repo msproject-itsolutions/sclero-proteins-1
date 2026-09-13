@@ -19,7 +19,7 @@ class PricingError(Exception):
     """A cart cannot be priced (e.g. a product isn't sold in this region)."""
 
 
-def valid_coupon_for(code, region, subtotal):
+def valid_coupon_for(code, region, subtotal, held=0):
     """Return a usable Coupon for this cart, or None. Does not consume it."""
     if not code:
         return None
@@ -35,7 +35,7 @@ def valid_coupon_for(code, region, subtotal):
     )
     valid_region = not coupon.region or coupon.region == region
     valid_spend = subtotal >= coupon.min_spend
-    valid_limit = not coupon.usage_limit or coupon.usage_count < coupon.usage_limit
+    valid_limit = not coupon.usage_limit or coupon.usage_count - held < coupon.usage_limit
 
     return coupon if (valid_date and valid_region and valid_spend and valid_limit) else None
 
@@ -112,54 +112,73 @@ def cart_shipping_metrics(cart):
     return weight_g, quantity
 
 
-def quote_cart(region, cart, *, country=None, state=None, city=None, postal_code=None,
-               coupon_code=None, shipping_rate_id=None):
-    """Price a cart. Raises PricingError if an item isn't sellable in `region`.
+def price_cart_lines(region, cart):
+    """Price each cart line: returns (lines, subtotal, weight_g, quantity).
 
-    Returns a dict carrying both the money and the resolved line items, so the
-    caller can deduct stock without re-reading prices (and risking a mismatch).
+    Raises PricingError when a line cannot be sold here: the product was
+    deactivated, archived or hidden in this market, the option was retired,
+    or no price exists.
     """
-    from apps.admin_dashboard.store_config import get_store_tax_mode
-    items = []
+    lines = []
     subtotal = Decimal('0.00')
     total_weight_g = Decimal('0')
     total_qty = 0
     for item in cart.items.all():
         product = item.product
-        # 1. Determine variant & weight
+        if not product.is_active or product.is_archived:
+            raise PricingError(
+                f"{product.name} is no longer available. Remove it from your cart to continue."
+            )
         variant = _active_variant(product, item.variant_sku)
         if item.variant_sku and variant is None:
             raise PricingError(
                 f"The selected option for {product.name} is no longer available. "
                 "Remove it from your cart and choose another option."
             )
-        weight_g = _variant_weight_g(variant)
-
-        if weight_g <= 0 and product:
-            weight_g = _configured_weight_g(product)
-
-        total_weight_g += (weight_g * item.quantity)
+        weight_g = _variant_weight_g(variant) or _configured_weight_g(product)
+        total_weight_g += weight_g * item.quantity
         total_qty += item.quantity
 
-        # 2. Resolve item price
+        # Checked for every line, variants included: an option's own price must
+        # never make a product that is hidden in this market purchasable.
         list_price, promo_price, _source = resolve_price(product, region)
+        if list_price is None:
+            raise PricingError(f"{product.name} is not available in your region.")
         if variant:
             list_price = resolve_variant_price(variant, region)
             # A product-level promotional price cannot safely describe every
             # differently-priced option, so variant rows use their resolved
             # price as the checkout source of truth.
             promo_price = None
-
-        if list_price is None:
-            raise PricingError(f"{product.name} is not available in your region.")
+            if list_price is None:
+                raise PricingError(f"{product.name} is not available in your region.")
         price = Decimal(str(promo_price if promo_price else list_price))
         subtotal += price * item.quantity
-        items.append((product, variant, item.quantity, price))
+        lines.append((product, variant, item.quantity, price))
 
-    if not items:
+    if not lines:
         raise PricingError("Cart is empty or invalid.")
+    return lines, subtotal, total_weight_g, total_qty
 
-    coupon = valid_coupon_for(coupon_code, region, subtotal)
+
+def cart_subtotal(region, cart):
+    return price_cart_lines(region, cart)[1]
+
+
+def quote_cart(region, cart, *, country=None, state=None, city=None, postal_code=None,
+               coupon_code=None, shipping_rate_id=None, coupon_uses_held=0):
+    """Price a cart. Raises PricingError if an item isn't sellable in `region`.
+
+    Returns a dict carrying both the money and the resolved line items, so the
+    caller can deduct stock without re-reading prices (and risking a mismatch).
+    `coupon_uses_held` counts coupon uses the shopper's own open order already
+    reserved, so resuming that checkout does not see its own reservation as
+    the coupon being used up.
+    """
+    from apps.admin_dashboard.store_config import get_store_tax_mode
+    items, subtotal, total_weight_g, total_qty = price_cart_lines(region, cart)
+
+    coupon = valid_coupon_for(coupon_code, region, subtotal, held=coupon_uses_held)
     discount_amount = coupon_discount(coupon, subtotal)
 
     tax_rate = Decimal(str(region.tax_rate))

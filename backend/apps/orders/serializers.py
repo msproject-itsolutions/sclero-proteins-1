@@ -20,7 +20,7 @@ class CartSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Cart
-        fields = ['id', 'session_id', 'region_code', 'items', 'created_at']
+        fields = ['id', 'region_code', 'items', 'created_at']
 
 
 class OrderItemSerializer(serializers.ModelSerializer):

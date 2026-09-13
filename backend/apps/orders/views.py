@@ -30,7 +30,8 @@ from .serializers import (
 )
 from .utils import generate_invoice_pdf
 from .payments import resolve_gateway, refund_payment, PaymentError
-from .pricing import quote_cart, PricingError
+from .pricing import PricingError, cart_subtotal, quote_cart
+from .cart_identity import attach_cart_cookie, find_cart, get_or_create_cart, shopper_carts
 from .email_service import send_order_email, send_owner_order_notification
 from apps.admin_dashboard.models import PaymentGateway, SystemSetting
 from apps.audit.recorder import record_audit
@@ -277,80 +278,38 @@ class PublicOrderDetailView(views.APIView):
 
 
 class CartViewSet(viewsets.ViewSet):
+    """The shopper's cart, found by the `sclero_cart` cookie or the signed-in account."""
+
     permission_classes = [AllowAny]
 
-    def get_cart(self, session_id, region_code, user=None):
-        region = get_object_or_404(Region, code=region_code, is_active=True)
-        cart = None
-        if user and user.is_authenticated:
-            user_carts = list(Cart.objects.filter(user=user, region=region).order_by('-updated_at'))
-            if user_carts:
-                cart = user_carts[0]
-                if len(user_carts) > 1:
-                    for dup in user_carts[1:]:
-                        dup.items.all().delete()
-                        dup.delete()
-                if cart.session_id != session_id:
-                    Cart.objects.filter(session_id=session_id).exclude(pk=cart.pk).delete()
-                    cart.session_id = session_id
-                    cart.save(update_fields=['session_id', 'updated_at'])
+    @staticmethod
+    def _region(source):
+        code = _clean_text(source.get('region') or 'UK').upper()
+        return get_object_or_404(Region, code=code, is_active=True)
 
-        if not cart:
-            session_carts = list(Cart.objects.filter(session_id=session_id).order_by('-updated_at'))
-            if session_carts:
-                cart = session_carts[0]
-                if len(session_carts) > 1:
-                    for dup in session_carts[1:]:
-                        dup.items.all().delete()
-                        dup.delete()
-            else:
-                cart = Cart.objects.create(
-                    session_id=session_id,
-                    region=region,
-                    user=user if (user and user.is_authenticated) else None
-                )
-
-        if user and user.is_authenticated and cart.user != user:
-            cart.user = user
-            cart.save(update_fields=['user', 'updated_at'])
-
-        # Regional protection: if the region of the active session changes,
-        # we automatically clear the cart items and update the region to avoid conflicts.
-        if cart.region != region:
-            cart.items.all().delete()
-            cart.region = region
-            cart.save(update_fields=['region', 'updated_at'])
-
-        return cart
+    @staticmethod
+    def _body(cart, region):
+        if cart is None:
+            return {'id': None, 'region_code': region.code, 'items': [], 'created_at': None}
+        return CartSerializer(cart, context={'region': cart.region}).data
 
     def retrieve(self, request):
-        session_id = request.query_params.get('session_id')
-        region_code = request.query_params.get('region', 'UK').upper()
-
-        if not session_id:
-            return Response({"error": "session_id query param is required"}, status=status.HTTP_400_BAD_REQUEST)
-
-        cart = self.get_cart(session_id, region_code, user=request.user)
-        serializer = CartSerializer(cart, context={'region': cart.region})
-        return Response(serializer.data)
+        region = self._region(request.query_params)
+        return Response(self._body(find_cart(request, region), region))
 
     @transaction.atomic
     def add_item(self, request):
-        session_id = _clean_text(request.data.get('session_id'))
-        region_code = _clean_text(request.data.get('region', 'UK')).upper()
-        product_id = request.data.get('product_id')
+        region = self._region(request.data)
         try:
             quantity = int(request.data.get('quantity', 1))
         except (TypeError, ValueError):
             return Response({"error": "quantity must be a positive integer"}, status=status.HTTP_400_BAD_REQUEST)
         if quantity <= 0:
             return Response({"error": "quantity must be a positive integer"}, status=status.HTTP_400_BAD_REQUEST)
+        product_id = request.data.get('product_id')
+        if not product_id:
+            return Response({"error": "product_id is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        if not session_id or not product_id:
-            return Response({"error": "session_id and product_id are required"}, status=status.HTTP_400_BAD_REQUEST)
-
-        cart = self.get_cart(session_id, region_code, user=request.user)
-        cart = Cart.objects.select_for_update().get(pk=cart.pk)
         product = get_object_or_404(Product, id=product_id, is_active=True, is_archived=False)
         variant, requested_sku = _requested_variant(product, request.data)
         if requested_sku and variant is None:
@@ -358,67 +317,53 @@ class CartViewSet(viewsets.ViewSet):
                 {"error": "The selected product option is unavailable."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        
-        # Verify the product is sellable here — same resolver as the catalogue
-        # and checkout, so a shopper can add exactly what they can see and buy.
-        if resolve_price(product, cart.region)[0] is None:
+        # Same resolver as the catalogue and checkout, so a shopper can add
+        # exactly what they can see and buy.
+        if resolve_price(product, region)[0] is None:
             return Response({"error": "Product is not available in your region."}, status=status.HTTP_400_BAD_REQUEST)
-        if variant is not None and resolve_variant_price(variant, cart.region) is None:
+        if variant is not None and resolve_variant_price(variant, region) is None:
             return Response(
                 {"error": "The selected product option has no price in this region."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Check stock level in this region's warehouses
-        total_available = _available_for_variant(product, cart.region, variant)
-
+        cart = Cart.objects.select_for_update().get(pk=get_or_create_cart(request, region).pk)
         # A variant is part of a cart line's identity. Two sizes of the same
         # product must never collapse into one line and silently change price.
         variant_sku = variant.sku if variant else ''
-        cart_items = list(cart.items.filter(product=product, variant_sku=variant_sku))
-        if cart_items:
-            cart_item = cart_items[0]
-            if len(cart_items) > 1:
-                for duplicate in cart_items[1:]:
-                    duplicate.delete()
-            created = False
-        else:
-            cart_item = CartItem.objects.create(
-                cart=cart,
-                product=product,
-                variant_sku=variant_sku,
-                variant_name=variant.name if variant else '',
-                quantity=0,
-            )
-            created = True
-
-        requested_quantity = quantity if created else cart_item.quantity + quantity
+        lines = list(cart.items.filter(product=product, variant_sku=variant_sku))
+        for duplicate in lines[1:]:
+            duplicate.delete()
+        line = lines[0] if lines else None
+        requested_quantity = quantity + (line.quantity if line else 0)
+        total_available = _available_for_variant(product, region, variant)
         if total_available < requested_quantity:
-            return Response(
+            response = Response(
                 {"error": f"Only {total_available} units are available in your region's stock."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        cart_item.quantity = requested_quantity
-        cart_item.variant_name = variant.name if variant else ''
-        cart_item.save(update_fields=['quantity', 'variant_name', 'updated_at'])
-
-        return Response(CartSerializer(cart, context={'region': cart.region}).data)
+            return attach_cart_cookie(response, request, cart)
+        if line is None:
+            CartItem.objects.create(
+                cart=cart, product=product, variant_sku=variant_sku,
+                variant_name=variant.name if variant else '', quantity=requested_quantity,
+            )
+        else:
+            line.quantity = requested_quantity
+            line.variant_name = variant.name if variant else ''
+            line.save(update_fields=['quantity', 'variant_name', 'updated_at'])
+        return attach_cart_cookie(Response(self._body(cart, region)), request, cart)
 
     @transaction.atomic
     def update_item(self, request):
-        session_id = _clean_text(request.data.get('session_id'))
-        region_code = _clean_text(request.data.get('region', 'UK')).upper()
+        region = self._region(request.data)
         try:
             quantity = int(request.data.get('quantity', 1))
         except (TypeError, ValueError):
             return Response({"error": "quantity must be an integer"}, status=status.HTTP_400_BAD_REQUEST)
-
-        if not session_id:
-            return Response({"error": "session_id is required"}, status=status.HTTP_400_BAD_REQUEST)
-
-        cart = self.get_cart(session_id, region_code, user=request.user)
-        cart = Cart.objects.select_for_update().get(pk=cart.pk)
+        cart = find_cart(request, region, for_update=True)
+        if cart is None:
+            return Response({"error": "Cart item was not found."}, status=status.HTTP_404_NOT_FOUND)
         cart_item, selection_error = _select_cart_item(cart, request.data)
         if selection_error:
             return Response({"error": selection_error}, status=status.HTTP_400_BAD_REQUEST)
@@ -428,7 +373,6 @@ class CartViewSet(viewsets.ViewSet):
         if quantity <= 0:
             cart_item.delete()
         else:
-            # Verify stock
             variant = None
             if cart_item.variant_sku:
                 variant = cart_item.product.variants.filter(
@@ -442,54 +386,36 @@ class CartViewSet(viewsets.ViewSet):
             total_available = _available_for_variant(cart_item.product, cart.region, variant)
             if total_available < quantity:
                 return Response({"error": f"Only {total_available} units available in stock."}, status=status.HTTP_400_BAD_REQUEST)
-                
             cart_item.quantity = quantity
             cart_item.save()
 
-        return Response(CartSerializer(cart, context={'region': cart.region}).data)
+        return Response(self._body(cart, region))
 
     @transaction.atomic
     def remove_item(self, request):
-        session_id = _clean_text(request.data.get('session_id'))
-        region_code = _clean_text(request.data.get('region', 'UK')).upper()
-
-        if not session_id:
-            return Response({"error": "session_id is required"}, status=status.HTTP_400_BAD_REQUEST)
-
-        cart = self.get_cart(session_id, region_code, user=request.user)
-        cart = Cart.objects.select_for_update().get(pk=cart.pk)
-        cart_item, selection_error = _select_cart_item(cart, request.data)
-        if selection_error:
-            return Response({"error": selection_error}, status=status.HTTP_400_BAD_REQUEST)
-        if cart_item:
-            cart_item.delete()
-
-        return Response(CartSerializer(cart, context={'region': cart.region}).data)
+        region = self._region(request.data)
+        cart = find_cart(request, region, for_update=True)
+        if cart is not None:
+            cart_item, selection_error = _select_cart_item(cart, request.data)
+            if selection_error:
+                return Response({"error": selection_error}, status=status.HTTP_400_BAD_REQUEST)
+            if cart_item:
+                cart_item.delete()
+        return Response(self._body(cart, region))
 
     @transaction.atomic
     def clear_cart(self, request):
-        session_id = _clean_text(request.data.get('session_id'))
-        region_code = _clean_text(request.data.get('region', 'UK')).upper()
-
-        if not session_id:
-            return Response({"error": "session_id is required"}, status=status.HTTP_400_BAD_REQUEST)
-
-        carts = Cart.objects.filter(session_id=session_id)
-        if request.user and request.user.is_authenticated:
-            carts = carts | Cart.objects.filter(user=request.user)
-
-        for cart in carts.distinct():
+        region = self._region(request.data)
+        for cart in shopper_carts(request):
             cart.items.all().delete()
-
-        cart = self.get_cart(session_id, region_code, user=request.user)
-        return Response(CartSerializer(cart, context={'region': cart.region}).data)
+        return Response(self._body(find_cart(request, region), region))
 
 
 class CreatePaymentIntentView(views.APIView):
     """Open a gateway payment for the current cart.
 
     POST /api/checkout/payment-intent/
-    Body: { session_id, region, country?, state?, postal_code?, coupon_code? }
+    Body: { region, country?, state?, postal_code?, coupon_code? }
 
     The amount is always derived server-side from the cart via quote_cart(); a
     client-supplied amount is never trusted. Returns the data the browser SDK
@@ -499,18 +425,14 @@ class CreatePaymentIntentView(views.APIView):
     throttle_scope = 'checkout'
 
     def post(self, request):
-        session_id = _clean_text(request.data.get('session_id'))
         region_code = _clean_text(request.data.get('region')).upper()
-        if not session_id or not region_code:
-            return Response({"error": "session_id and region are required."},
-                            status=status.HTTP_400_BAD_REQUEST)
+        if not region_code:
+            return Response({"error": "region is required."}, status=status.HTTP_400_BAD_REQUEST)
 
         region = get_object_or_404(Region, code=region_code, is_active=True)
-        cart = (
-            Cart.objects.filter(session_id=session_id, region=region)
-            .prefetch_related('items__product__variants')
-            .first()
-        )
+        cart = find_cart(request, region)
+        if cart is not None:
+            cart = Cart.objects.prefetch_related('items__product__variants').get(pk=cart.pk)
         if not cart or not cart.items.exists():
             return Response({"error": "Cart is empty or invalid."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -535,7 +457,7 @@ class CreatePaymentIntentView(views.APIView):
 
         try:
             intent = adapter.create_intent(quote['total'], region.currency_code, {
-                'session_id': session_id,
+                'cart_id': cart.pk,
                 'region': region.code,
             })
         except NotImplementedError:
@@ -556,26 +478,29 @@ class ApplyCouponView(views.APIView):
     """
     Validate a coupon code and calculate discount.
     POST /api/checkout/apply-coupon/
-    Body: { "code": "SAVE10", "region": "IN", "subtotal": 5000 }
+    Body: { "code": "SAVE10", "region": "IN" } — the subtotal is read from the cart.
     """
     permission_classes = [AllowAny]
     throttle_scope = 'checkout'
 
     def post(self, request):
-        from decimal import Decimal, InvalidOperation
-        code = request.data.get('code')
-        region_code = request.data.get('region', 'UK').upper()
-        try:
-            subtotal = Decimal(str(request.data.get('subtotal', 0)))
-        except (InvalidOperation, ValueError, TypeError):
-            return Response({"error": "Invalid subtotal amount"}, status=status.HTTP_400_BAD_REQUEST)
-
+        code = _clean_text(request.data.get('code'))
         if not code:
             return Response({"error": "Coupon code is required"}, status=status.HTTP_400_BAD_REQUEST)
 
+        region_code = _clean_text(request.data.get('region') or 'UK').upper()
         region = Region.objects.filter(code=region_code, is_active=True).first()
         if not region:
             return Response({"error": "Invalid region"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # The subtotal comes from the shopper's own cart, never the request body.
+        cart = find_cart(request, region)
+        if cart is None or not cart.items.exists():
+            return Response({"error": "Your cart is empty."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            subtotal = cart_subtotal(region, cart)
+        except PricingError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         coupon = Coupon.objects.filter(code__iexact=code, is_active=True).first()
         if not coupon:
@@ -620,7 +545,6 @@ class CheckoutView(views.APIView):
     @transaction.atomic
     def post(self, request):
         from decimal import Decimal
-        session_id = _clean_text(request.data.get('session_id'))
         region_code = _clean_text(request.data.get('region', 'UK')).upper()
         
         # Contact and Address info
@@ -645,7 +569,6 @@ class CheckoutView(views.APIView):
         }
 
         required = {
-            'session_id': session_id,
             'email': email,
             'shipping_name': shipping_name,
             'shipping_phone': shipping_phone,
@@ -687,11 +610,9 @@ class CheckoutView(views.APIView):
         # Serialize checkout completion for one cart. This prevents double-clicks
         # or client retries from deducting stock and creating two orders while
         # the first payment completion is still committing.
-        cart = (
-            Cart.objects.select_for_update().filter(session_id=session_id, region=region)
-            .prefetch_related('items__product__variants')
-            .first()
-        )
+        cart = find_cart(request, region, for_update=True)
+        if cart is not None:
+            cart = Cart.objects.prefetch_related('items__product__variants').get(pk=cart.pk)
         if not cart or not cart.items.exists():
             return Response({"error": "Cart is empty or invalid."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1630,7 +1551,7 @@ class AbandonedCheckoutsView(generics.ListAPIView):
                 price = (cfg.promotional_price or cfg.price) if cfg else Decimal('0')
                 total += price * it.quantity
             out.append({
-                'id': c.id, 'session_id': c.session_id, 'region': c.region.code,
+                'id': c.id, 'session_id': f'cart-{c.id}', 'region': c.region.code,
                 'entity_type': 'CART',
                 'currency': c.region.currency_code,
                 'email': c.user.email if c.user else None,

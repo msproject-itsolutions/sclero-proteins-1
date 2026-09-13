@@ -455,9 +455,7 @@ class VariantCartSafetyTests(APITestCase):
         self.assertEqual(second.status_code, 200, second.data)
         self.assertEqual(len(second.data['items']), 2)
 
-        cart = Cart.objects.prefetch_related('items__product__variants').get(
-            session_id=self.session_id,
-        )
+        cart = Cart.objects.prefetch_related('items__product__variants').get()
         quote = quote_cart(self.region, cart, country='GB')
         self.assertEqual(quote['subtotal'], Decimal('50.00'))
         self.assertEqual(quote['weight_g'], Decimal('6000'))
@@ -578,7 +576,7 @@ class CheckoutChargeRollbackTests(APITestCase):
         self.assertEqual(PaymentLog.objects.count(), 0)
         self.stock.refresh_from_db()
         self.assertEqual(self.stock.available, 25)
-        cart = Cart.objects.get(session_id=self.session_id)
+        cart = Cart.objects.get()
         self.assertEqual(cart.items.count(), 1)
 
 

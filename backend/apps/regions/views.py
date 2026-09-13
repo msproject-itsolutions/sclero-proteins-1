@@ -167,13 +167,11 @@ class ShippingCalculateView(APIView):
             return Response({'error': 'Unknown region'}, status=status.HTTP_400_BAD_REQUEST)
         weight_g = request.data.get('weight_g', 0)
         quantity = request.data.get('quantity', 0)
-        session_id = request.data.get('session_id')
-        if session_id:
-            from apps.orders.models import Cart
-            from apps.orders.pricing import cart_shipping_metrics
-            cart = Cart.objects.filter(session_id=session_id, region=region).prefetch_related('items__product').first()
-            if cart:
-                weight_g, quantity = cart_shipping_metrics(cart)
+        from apps.orders.cart_identity import find_cart
+        from apps.orders.pricing import cart_shipping_metrics
+        cart = find_cart(request, region)
+        if cart is not None:
+            weight_g, quantity = cart_shipping_metrics(cart)
 
         from .shipping import calculate_shipping_options
         options = calculate_shipping_options(
