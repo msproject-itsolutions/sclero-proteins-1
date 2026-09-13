@@ -4,7 +4,8 @@ from django.contrib.auth.password_validation import validate_password
 import re
 from apps.audit.recorder import record_audit
 from .models import UserAddress, Role, Wishlist, WishlistItem, CustomerSegment, CustomerActivity, SupportTicket
-from .permissions import PERMISSIONS, get_user_permission_keys, is_staff_account
+from .permissions import PERMISSIONS, get_user_permission_keys, is_staff_account, role_grants_admin
+from .sessions import revoke_sessions
 
 User = get_user_model()
 
@@ -159,7 +160,50 @@ class RoleSerializer(serializers.ModelSerializer):
         invalid = [k for k in value if k not in PERMISSIONS]
         if invalid:
             raise serializers.ValidationError(f"Unknown permission keys: {invalid}")
+        actor = _request_user(self)
+        if actor is not None and not actor.is_superuser:
+            current = set(self.instance.permissions or []) if self.instance is not None else set()
+            if set(value) != current:
+                if self.instance is not None and actor.roles.filter(pk=self.instance.pk).exists():
+                    raise serializers.ValidationError('You cannot change the permissions of a role you hold.')
+                if 'rbac.manage' in value or 'rbac.manage' in current:
+                    raise serializers.ValidationError('Only a superuser can change roles that manage staff access.')
         return value
+
+
+# Fields an administrator can never change on their own account.
+SELF_LOCKED_FIELDS = {
+    'roles': 'roles',
+    'assigned_regions': 'regions',
+    'verification_email': 'sign-in code email',
+    'allowed_ip_range': 'IP allow-list',
+}
+# Changing any of these ends every session of the account.
+SESSION_ENDING_FIELDS = {'email', 'is_staff', 'roles', 'assigned_regions', 'verification_email', 'credentials_reset'}
+
+
+def _current_value(user, field):
+    if field in ('roles', 'assigned_regions'):
+        return sorted(getattr(user, field).values_list('pk', flat=True))
+    return getattr(user, field)
+
+
+def _proposed_value(field, value):
+    if field in ('roles', 'assigned_regions'):
+        return sorted(item.pk for item in value)
+    return value
+
+
+def staff_security_snapshot(user):
+    return {
+        'email': user.email,
+        'is_staff': user.is_staff,
+        'is_active': user.is_active,
+        'roles': sorted(user.roles.values_list('name', flat=True)),
+        'assigned_regions': sorted(user.assigned_regions.values_list('code', flat=True)),
+        'verification_email': user.verification_email,
+        'allowed_ip_range': user.allowed_ip_range,
+    }
 
 
 class StaffUserSerializer(serializers.ModelSerializer):
@@ -171,11 +215,11 @@ class StaffUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            'id', 'email', 'password', 'first_name', 'last_name', 'is_staff', 'is_active',
+            'id', 'email', 'password', 'first_name', 'last_name', 'is_staff', 'is_active', 'is_superuser',
             'roles', 'permissions', 'assigned_regions', 'assigned_regions_codes',
-            'two_factor_enabled', 'allowed_ip_range', 'current_devices'
+            'verification_email', 'email_verified', 'allowed_ip_range', 'current_devices', 'last_login',
         ]
-        read_only_fields = ['permissions']
+        read_only_fields = ['is_superuser', 'permissions', 'email_verified', 'current_devices', 'last_login']
 
     def get_permissions(self, obj):
         return sorted(get_user_permission_keys(obj))
@@ -193,9 +237,25 @@ class StaffUserSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         if 'email' in attrs:
             attrs['email'] = attrs['email'].strip().lower()
+        if 'verification_email' in attrs:
+            attrs['verification_email'] = attrs['verification_email'].strip().lower()
         for field in ('first_name', 'last_name'):
             if field in attrs:
                 attrs[field] = attrs[field].strip()
+
+        actor = _request_user(self)
+        target = self.instance
+        errors = {}
+        if actor is not None and target is not None and actor.pk == target.pk:
+            for field, label in SELF_LOCKED_FIELDS.items():
+                if field in attrs and _proposed_value(field, attrs[field]) != _current_value(target, field):
+                    errors[field] = f'You cannot change your own {label}.'
+        if 'roles' in attrs and not getattr(actor, 'is_superuser', False):
+            held = set(target.roles.values_list('pk', flat=True)) if target is not None else set()
+            if any(role_grants_admin(role) for role in attrs['roles'] if role.pk not in held):
+                errors['roles'] = 'Only a superuser can grant the Admin role or roles that manage staff access.'
+        if errors:
+            raise serializers.ValidationError(errors)
         return attrs
 
     def create(self, validated_data):
@@ -211,7 +271,43 @@ class StaffUserSerializer(serializers.ModelSerializer):
             user.roles.set(roles)
         if regions:
             user.assigned_regions.set(regions)
+        record_audit(
+            'staff.created', actor=_request_user(self), target_type='User', target_id=user.pk,
+            summary=f'Created staff account {user.email}', changes=staff_security_snapshot(user),
+        )
         return user
+
+    def update(self, instance, validated_data):
+        actor = _request_user(self)
+        before = staff_security_snapshot(instance)
+        password = validated_data.pop('password', None)
+        roles = validated_data.pop('roles', None)
+        regions = validated_data.pop('assigned_regions', None)
+        if 'email' in validated_data and validated_data['email'] != instance.email:
+            instance.email_verified = False
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        if password:
+            instance.set_password(password)
+        instance.save()
+        if roles is not None:
+            instance.roles.set(roles)
+        if regions is not None:
+            instance.assigned_regions.set(regions)
+
+        after = staff_security_snapshot(instance)
+        changes = {field: [before[field], after[field]] for field in before if before[field] != after[field]}
+        if password:
+            changes['credentials_reset'] = True
+        if changes:
+            record_audit(
+                'staff.updated', actor=actor, target_type='User', target_id=instance.pk,
+                summary=f'Updated staff account {instance.email}', changes=changes,
+            )
+        deactivated = before['is_active'] and not after['is_active']
+        if deactivated or SESSION_ENDING_FIELDS & changes.keys():
+            revoke_sessions(instance, reason='staff_account_changed', actor=actor)
+        return instance
 
 
 class RegisterSerializer(serializers.ModelSerializer):

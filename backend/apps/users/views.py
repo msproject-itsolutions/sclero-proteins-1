@@ -11,8 +11,8 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.exceptions import AuthenticationFailed, ValidationError
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.exceptions import AuthenticationFailed, PermissionDenied, ValidationError
+from rest_framework.permissions import SAFE_METHODS, AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.views import TokenRefreshView
@@ -29,7 +29,7 @@ from .serializers import (
     CustomerSegmentSerializer, CustomerActivitySerializer, SupportTicketSerializer,
 )
 from .permissions import (
-    require_permission, ENFORCED_PERMISSION_GROUPS, ip_allowed, is_staff_account,
+    require_permission, ENFORCED_PERMISSION_GROUPS, ip_allowed, is_admin_level, is_staff_account,
 )
 from .middleware import clear_auth_cookies
 from .auth_emails import public_link_base
@@ -751,10 +751,44 @@ class RoleViewSet(viewsets.ModelViewSet):
     serializer_class = RoleSerializer
     permission_classes = [require_permission('rbac.manage')]
 
+    def perform_create(self, serializer):
+        role = serializer.save()
+        record_audit(
+            'role.created', actor=self.request.user, target_type='Role', target_id=role.pk,
+            summary=f'Created role {role.name}', changes={'permissions': sorted(role.permissions or [])},
+        )
+
+    def perform_update(self, serializer):
+        before_name = serializer.instance.name
+        before = sorted(serializer.instance.permissions or [])
+        role = serializer.save()
+        after = sorted(role.permissions or [])
+        changes = {}
+        if before != after:
+            changes['permissions'] = [before, after]
+        if before_name != role.name:
+            changes['name'] = [before_name, role.name]
+        if changes:
+            record_audit(
+                'role.updated', actor=self.request.user, target_type='Role', target_id=role.pk,
+                summary=f'Updated role {role.name}', changes=changes,
+            )
+        if before != after:
+            for holder in role.users.all():
+                revoke_sessions(holder, reason='role_permissions_changed', actor=self.request.user)
+
     def perform_destroy(self, instance):
         if instance.is_system:
             raise ValidationError("System roles cannot be deleted.")
+        holders = list(instance.users.all())
+        role_id, name = instance.pk, instance.name
         instance.delete()
+        record_audit(
+            'role.deleted', actor=self.request.user, target_type='Role', target_id=role_id,
+            summary=f'Deleted role {name}',
+        )
+        for holder in holders:
+            revoke_sessions(holder, reason='role_deleted', actor=self.request.user)
 
     @action(detail=False, methods=['get'])
     def permission_catalog(self, request):
@@ -781,10 +815,34 @@ class StaffUserViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return (
-            User.objects.filter(Q(is_staff=True) | Q(roles__isnull=False))
+            User.objects.filter(Q(is_staff=True) | Q(is_superuser=True) | Q(roles__isnull=False))
             .distinct()
             .prefetch_related('roles')
             .order_by('email')
+        )
+
+    def get_object(self):
+        target = super().get_object()
+        actor = self.request.user
+        # Holders of rbac.manage could otherwise take over a stronger account
+        # (for example by changing its password and sign-in code email).
+        if (
+            self.request.method not in SAFE_METHODS
+            and target.pk != actor.pk
+            and not actor.is_superuser
+            and is_admin_level(target)
+        ):
+            raise PermissionDenied('Only a superuser can change another administrator account.')
+        return target
+
+    def perform_destroy(self, instance):
+        if instance.pk == self.request.user.pk:
+            raise ValidationError('You cannot delete your own account.')
+        user_id, email = instance.pk, instance.email
+        instance.delete()
+        record_audit(
+            'staff.deleted', actor=self.request.user, target_type='User', target_id=user_id,
+            summary=f'Deleted staff account {email}',
         )
 
 

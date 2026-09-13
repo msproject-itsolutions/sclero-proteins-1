@@ -171,6 +171,21 @@ def is_staff_account(user):
     return user.roles.exists()
 
 
+ADMIN_ROLE_NAME = 'Admin'
+
+
+def role_grants_admin(role):
+    """Roles only a superuser may hand out: the Admin role, or any role that manages access."""
+    return role.name == ADMIN_ROLE_NAME or 'rbac.manage' in (role.permissions or [])
+
+
+def is_admin_level(user):
+    """Superusers and holders of a role that only a superuser may grant."""
+    if user.is_superuser:
+        return True
+    return any(role_grants_admin(role) for role in user.roles.all())
+
+
 def client_ip_is_allowed(client_ip, allowed_rules):
     if not client_ip:
         return False
