@@ -102,6 +102,8 @@ Important groups:
 
 Open `http://localhost:3000/admin` and sign in as authorized staff. Direct links are supported for key areas.
 
+Staff always sign in with their password plus a 6-digit code emailed to their sign-in code address (Staff → Manage; defaults to the login email). If email delivery is down, the person enters their email and password first; an operator with shell access on the server then runs `docker compose exec backend python manage.py staff_login_code <email>` and reads them the printed one-time code. Every use is recorded in the audit log.
+
 ### Shipping
 
 Open `http://localhost:3000/admin?section=settings&tab=shipping`.
