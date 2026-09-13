@@ -49,12 +49,17 @@ EXPIRED_REFUND_REASON = 'Paid after the order expired; the items were no longer 
 
 def _reserve_again(order):
     """Take stock and coupon use back for an order paid after it expired."""
+    has_coupon = bool(order.coupon_code and order.discount_amount > 0)
     try:
         with transaction.atomic():
+            # Lock order -> coupon -> stock, matching every other path that
+            # takes both locks, so concurrent transactions cannot deadlock.
+            if has_coupon:
+                list(Coupon.objects.select_for_update().filter(code__iexact=order.coupon_code))
             reserve_order_stock(order)
     except StockError:
         return False
-    if order.coupon_code and order.discount_amount > 0:
+    if has_coupon:
         Coupon.objects.filter(code__iexact=order.coupon_code).update(usage_count=F('usage_count') + 1)
     return True
 
@@ -144,8 +149,13 @@ def release_unpaid_order(order_id, *, reason, actor=None):
         order = Order.objects.select_for_update().select_related('region').get(pk=order_id)
         if order.status != 'AWAITING_PAYMENT' or order.payment_status in PAID_STATES:
             return order
+        has_coupon = bool(order.coupon_code and order.discount_amount > 0)
+        # Lock order -> coupon -> stock: _place_order takes the same order, so
+        # two transactions sharing a coupon and a product cannot deadlock.
+        if has_coupon:
+            list(Coupon.objects.select_for_update().filter(code__iexact=order.coupon_code))
         release_order_stock(order)
-        if order.coupon_code and order.discount_amount > 0:
+        if has_coupon:
             Coupon.objects.filter(
                 code__iexact=order.coupon_code, usage_count__gt=0,
             ).update(usage_count=F('usage_count') - 1)
