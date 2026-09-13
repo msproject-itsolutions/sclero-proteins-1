@@ -7,7 +7,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import validate_email
 from django.db import IntegrityError, transaction
 from rest_framework import status
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -47,8 +47,18 @@ class VerifyEmailRequestView(APIView):
 
 
 class VerifyEmailConfirmView(APIView):
-    permission_classes = [AllowAny]
-    authentication_classes = []
+    """Confirm a signed, time-limited verify-email link.
+
+    Requires the caller to already be signed in as the token's own account.
+    Without this, an attacker could register a victim's address with a
+    password they control, request this link (emailed to the victim's inbox
+    with no "ignore if you didn't sign up" line) and have the victim's click
+    mark the attacker-controlled account verified. A victim who legitimately
+    wants that address instead proves it through a code, magic link or Google
+    sign-in, which purges any pre-registered password first (Task 5,
+    apps.users.challenges) — so this link can never matter for a real takeover.
+    """
+    permission_classes = [IsAuthenticated]
     throttle_scope = 'auth'
 
     def post(self, request):
@@ -56,6 +66,17 @@ class VerifyEmailConfirmView(APIView):
             data = read_verify_email_token(request.data.get('token'))
         except EmailLinkError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        if request.user.pk != data['user_id']:
+            return Response(
+                {
+                    'detail': (
+                        'This link belongs to a different account. Sign in to the account it was '
+                        'sent for, then open the link again.'
+                    ),
+                    'code': 'verify_email_wrong_account',
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
         user = User.objects.filter(pk=data['user_id'], is_active=True).first()
         if user is None or user.email.lower() != data['email']:
             return Response({'detail': 'This link is no longer valid.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -109,10 +130,19 @@ class EmailChangeRequestView(APIView):
 
 
 class EmailChangeConfirmView(APIView):
-    """Apply a confirmed email change. Never signs in: that would let an emailed
-    link skip the staff second factor."""
-    permission_classes = [AllowAny]
-    authentication_classes = []
+    """Apply a confirmed email change.
+
+    Requires the caller to already be signed in as the token's own account.
+    Without this, an attacker could change their own account's address to a
+    victim's and have the victim's click (on a "confirm your new address"
+    email with no warning it wasn't their doing) apply the change to the
+    attacker's account. Never signs in on success either: that would let an
+    emailed link skip the staff second factor. A victim who legitimately wants
+    that address instead proves it through a code, magic link or Google
+    sign-in, which purges any pre-registered password first (Task 5,
+    apps.users.challenges) — so this link can never matter for a real takeover.
+    """
+    permission_classes = [IsAuthenticated]
     throttle_scope = 'auth'
 
     def post(self, request):
@@ -120,6 +150,17 @@ class EmailChangeConfirmView(APIView):
             data = read_email_change_token(request.data.get('token'))
         except EmailLinkError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        if request.user.pk != data['user_id']:
+            return Response(
+                {
+                    'detail': (
+                        'This link belongs to a different account. Sign in to the account it was '
+                        'sent for, then open the link again.'
+                    ),
+                    'code': 'email_change_wrong_account',
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
         try:
             with transaction.atomic():
                 user = User.objects.select_for_update().filter(pk=data['user_id'], is_active=True).first()

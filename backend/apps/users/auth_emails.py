@@ -68,7 +68,7 @@ def send_verify_email_link(to, link):
     _send(
         'Confirm your email address',
         f'Confirm this email address for your Sclero Proteins account:\n\n{link}\n\n'
-        'The link expires in 24 hours.',
+        'The link expires in 24 hours. If you did not create a Sclero Proteins account, ignore this email.',
         to,
     )
 

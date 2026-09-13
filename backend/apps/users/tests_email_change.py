@@ -32,8 +32,13 @@ class EmailChangeTests(APITestCase):
     def request_change(self, new_email='new@example.com', password=PASSWORD):
         return self.client.post('/api/auth/email-change/', {'new_email': new_email, 'password': password}, format='json')
 
-    def confirm(self, token):
-        self.client.credentials()
+    def confirm(self, token, as_user=None):
+        # The confirming client must be signed in as the token's own account
+        # (see EmailChangeConfirmView). Re-fetch auth_version so a token
+        # issued after an earlier confirm in the same test still authenticates.
+        user = as_user or self.user
+        user.refresh_from_db(fields=['auth_version'])
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {issue_tokens(user)["access"]}')
         return self.client.post('/api/auth/email-change/confirm/', {'token': token}, format='json')
 
     def test_wrong_password_is_refused(self):
@@ -93,6 +98,26 @@ class EmailChangeTests(APITestCase):
         response = self.client.post('/api/auth/email-change/', {'new_email': 'fresh@example.com'}, format='json')
         self.assertEqual(response.status_code, 200)
 
+    def test_anonymous_confirm_is_refused(self):
+        self.request_change()
+        token = link_token(CHANGE_LINK_RE, 'new@example.com')
+        self.client.credentials()
+        with self.assertLogs('django.request', 'WARNING'):
+            response = self.client.post('/api/auth/email-change/confirm/', {'token': token}, format='json')
+        self.assertEqual(response.status_code, 401)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.email, 'old@example.com')
+
+    def test_a_different_signed_in_account_cannot_confirm(self):
+        self.request_change()
+        token = link_token(CHANGE_LINK_RE, 'new@example.com')
+        stranger = User.objects.create_user(email='stranger@example.com', password=PASSWORD)
+        with self.assertLogs('django.request', 'WARNING'):
+            response = self.confirm(token, as_user=stranger)
+        self.assertEqual(response.status_code, 403)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.email, 'old@example.com')
+
 
 class VerifyEmailTests(APITestCase):
     def setUp(self):
@@ -103,7 +128,7 @@ class VerifyEmailTests(APITestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {issue_tokens(self.user)["access"]}')
         self.assertEqual(self.client.post('/api/auth/verify-email/', {}, format='json').status_code, 200)
         token = link_token(VERIFY_LINK_RE, 'buyer@example.com')
-        self.client.credentials()
+        # Confirming requires staying signed in as the account the link was sent for.
         response = self.client.post('/api/auth/verify-email/confirm/', {'token': token}, format='json')
         self.assertEqual(response.status_code, 200)
         self.user.refresh_from_db()
@@ -112,8 +137,33 @@ class VerifyEmailTests(APITestCase):
     def test_link_for_a_previous_address_is_refused(self):
         token = make_verify_email_token(self.user)
         User.objects.filter(pk=self.user.pk).update(email='changed@example.com')
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {issue_tokens(self.user)["access"]}')
         with self.assertLogs('django.request', 'WARNING'):
             response = self.client.post('/api/auth/verify-email/confirm/', {'token': token}, format='json')
         self.assertEqual(response.status_code, 400)
         self.user.refresh_from_db()
         self.assertFalse(self.user.email_verified)
+
+    def test_anonymous_confirm_is_refused(self):
+        token = make_verify_email_token(self.user)
+        with self.assertLogs('django.request', 'WARNING'):
+            response = self.client.post('/api/auth/verify-email/confirm/', {'token': token}, format='json')
+        self.assertEqual(response.status_code, 401)
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.email_verified)
+
+    def test_a_different_signed_in_account_cannot_confirm(self):
+        token = make_verify_email_token(self.user)
+        stranger = User.objects.create_user(email='stranger@example.com', password=PASSWORD)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {issue_tokens(stranger)["access"]}')
+        with self.assertLogs('django.request', 'WARNING'):
+            response = self.client.post('/api/auth/verify-email/confirm/', {'token': token}, format='json')
+        self.assertEqual(response.status_code, 403)
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.email_verified)
+
+    def test_verification_email_warns_about_unrequested_accounts(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {issue_tokens(self.user)["access"]}')
+        self.client.post('/api/auth/verify-email/', {}, format='json')
+        message = next(m for m in mail.outbox if m.to == ['buyer@example.com'])
+        self.assertIn('If you did not create a Sclero Proteins account, ignore this email.', message.body)
