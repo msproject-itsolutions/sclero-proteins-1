@@ -60,6 +60,7 @@ class Command(BaseCommand):
         intervals = {
             'process_webhooks': int(os.getenv('SCHEDULE_WEBHOOK_SECONDS', '60')),
             'reconcile_pending_payments': int(os.getenv('SCHEDULE_PAYMENT_RECONCILIATION_SECONDS', '300')),
+            'expire_unpaid_orders': int(os.getenv('SCHEDULE_PAYMENT_EXPIRY_SECONDS', '60')),
             'process_outgoing_webhooks': int(os.getenv('SCHEDULE_WEBHOOK_SECONDS', '60')),
             'fetch_support_emails': int(os.getenv('SCHEDULE_EMAIL_SYNC_SECONDS', '900')),
             'process_email_deliveries': int(os.getenv('SCHEDULE_EMAIL_RETRY_SECONDS', '300')),

@@ -542,6 +542,8 @@ class CronJobRunViewSet(viewsets.ReadOnlyModelViewSet):
     # is itself a finding worth surfacing in the summary.
     EXPECTED_JOBS = [
         'process_webhooks',
+        'reconcile_pending_payments',
+        'expire_unpaid_orders',
         'process_outgoing_webhooks',
         'fetch_support_emails',
         'process_email_deliveries',

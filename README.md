@@ -156,14 +156,15 @@ python manage.py run_scheduler
 python manage.py run_scheduler --once
 ```
 
-Production runs this as the dedicated `scheduler` Compose service. A renewable database lease prevents a second scheduler replica from processing the same periodic workload. It processes incoming and outgoing webhooks, support-mail ingestion, abandoned-cart reminders, review requests, and queued browser push campaigns. Each job records its outcome for operational review; push deliveries use bounded retries and disable expired browser subscriptions.
+Production runs this as the dedicated `scheduler` Compose service. A renewable database lease prevents a second scheduler replica from processing the same periodic workload. It processes incoming and outgoing webhooks, reconciles unpaid orders with their payment gateways, releases orders whose payment window closed, support-mail ingestion, abandoned-cart reminders, review requests, and queued browser push campaigns. Each job records its outcome for operational review; push deliveries use bounded retries and disable expired browser subscriptions.
 
 Gateway readiness:
 
-- COD is available when enabled for the region.
-- Stripe live intent verification and refunds are implemented; validate them in a provider sandbox before launch.
-- Razorpay live capture verification is implemented; perform sandbox/live acceptance and add stronger provider refund idempotency before relying on automated refunds.
-- PayPal webhook verification is implemented, but live checkout charge/refund collection remains unavailable and fails closed.
+- Checkout is order-first: `POST /api/checkout/` reserves stock and coupon use and opens a Stripe PaymentIntent or Razorpay order for that exact order; `POST /api/checkout/confirm/` verifies it with the provider. Unpaid orders are released after `CHECKOUT_PAYMENT_WINDOW_MINUTES` (default 30), with one 15-minute extension while a payment is still processing.
+- COD is available when enabled for the region; staff record the collected cash on the order ("Record COD payment").
+- Stripe and Razorpay are offered with live keys. With TEST keys they use the provider sandbox and are offered only when `ALLOW_TEST_GATEWAYS=True`. A gateway without keys is simulated, and only in development and tests.
+- Configure the provider webhooks (`/api/webhooks/stripe/`: `payment_intent.succeeded`, `payment_intent.payment_failed`, `charge.succeeded`, `charge.refunded`; `/api/webhooks/razorpay/`: `payment.captured`, `order.paid`, `payment.failed`, `refund.processed`) so a payment completes the order even when the shopper closes the browser early.
+- PayPal webhook verification is implemented, but there is no storefront PayPal flow, so PayPal is never offered at checkout.
 
 ## Quality checks
 
