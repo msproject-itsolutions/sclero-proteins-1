@@ -24,6 +24,9 @@ function VerifyEmailContent() {
     if (started.current) return;
     started.current = true;
     const token = params.get('token');
+    // Keep the emailed token out of the address bar, history and any referrer
+    // or analytics that could read the URL, before any network call.
+    if (window.location.search) window.history.replaceState(null, '', window.location.pathname);
     if (!token) {
       setStatus('error');
       setMessage('This link is missing its token.');

@@ -1,3 +1,6 @@
+import importlib
+
+from django.apps import apps as django_apps
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
@@ -6,6 +9,7 @@ from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 
 from apps.audit.models import AuditLog
+from apps.users.models import Role
 from apps.users.sessions import AUTH_VERSION_CLAIM, issue_tokens, revoke_sessions, start_session
 
 User = get_user_model()
@@ -154,6 +158,37 @@ class LegacyTokenRefreshTests(SessionTestCase):
         self.client.cookies[settings.AUTH_COOKIE_REFRESH_NAME] = str(legacy)
         response = self.client.post('/api/auth/token/refresh/', {}, format='json', **BROWSER)
         self.assertEqual(response.status_code, 200)
+
+
+class EndLegacyStaffSessionsMigrationTests(APITestCase):
+    """Refresh rotation keeps pre-P1-B tokens (no `av` claim) alive forever,
+    so staff would never meet the emailed-code step without this migration."""
+
+    def test_staff_and_role_holders_are_signed_out_and_customers_are_not(self):
+        migration = importlib.import_module('apps.users.migrations.0016_end_legacy_staff_sessions')
+        staff = User.objects.create_user(email='staff@example.com', password=PASSWORD, is_staff=True)
+        User.objects.create_user(email='owner@example.com', password=PASSWORD, is_superuser=True)
+        role_holder = User.objects.create_user(email='packer@example.com', password=PASSWORD)
+        # Two roles: the join must not bump the account twice.
+        role_holder.roles.add(Role.objects.get(name='Staff'), Role.objects.create(name='Packer'))
+        customer = User.objects.create_user(email='buyer@example.com', password=PASSWORD)
+        User.objects.filter(pk=staff.pk).update(auth_version=3)
+        legacy_staff_access = str(RefreshToken.for_user(role_holder).access_token)
+        legacy_customer_access = str(RefreshToken.for_user(customer).access_token)
+
+        migration.end_legacy_staff_sessions(django_apps, None)
+
+        self.assertEqual(dict(User.objects.values_list('email', 'auth_version')), {
+            'staff@example.com': 4,
+            'owner@example.com': 1,
+            'packer@example.com': 1,
+            'buyer@example.com': 0,
+        })
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {legacy_staff_access}')
+        with self.assertLogs('django.request', 'WARNING'):
+            self.assertEqual(self.client.get('/api/auth/profile/').status_code, 401)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {legacy_customer_access}')
+        self.assertEqual(self.client.get('/api/auth/profile/').status_code, 200)
 
 
 class AuthCookieBodyTests(SessionTestCase):

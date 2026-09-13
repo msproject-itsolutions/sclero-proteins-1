@@ -3,7 +3,11 @@
 The staff member first enters their email and password, which creates a
 pending STAFF_2FA challenge; an operator with shell access on the server then
 runs this command and reads them the code. The password step is never skipped.
+Before reading the code out, the operator checks with the staff member that the
+pending sign-in's time and IP address are theirs.
 """
+from datetime import timezone as dt_timezone
+
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 
@@ -35,5 +39,10 @@ class Command(BaseCommand):
             summary=f'Recovery sign-in code issued on the server for {user.email}',
             changes={'challenge': str(challenge.pk)},
         )
+        started = challenge.created_at.astimezone(dt_timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
         minutes = int(CODE_TTL.total_seconds() // 60)
+        self.stdout.write(
+            f'Pending sign-in for {user.email} started {started} from IP {challenge.created_ip or "unknown"}.\n'
+            'Confirm with the staff member that this sign-in is theirs before reading them the code.'
+        )
         self.stdout.write(f'Sign-in code for {user.email}: {code} (valid {minutes} minutes, single use)')

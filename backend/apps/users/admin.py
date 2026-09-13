@@ -16,6 +16,8 @@ class UserAdmin(admin.ModelAdmin):
     list_filter = ('is_staff', 'is_active')
     search_fields = ('email', 'first_name', 'last_name')
     filter_horizontal = ('roles',)
+    # Unused since P1-B; kept on the model only for the installer's image rollback.
+    exclude = ('otp_secret', 'totp_secret', 'totp_enabled', 'totp_backup_codes')
 
 
 @admin.register(UserAddress)

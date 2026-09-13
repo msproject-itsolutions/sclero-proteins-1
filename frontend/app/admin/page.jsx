@@ -3104,6 +3104,7 @@ function CustomersTab({ authFetch }) {
   const [pageSize, setPageSize] = useState(10);
   const [totalCount, setTotalCount] = useState(0);
   const [editingCustomer, setEditingCustomer] = useState(null);
+  const [customerSaveError, setCustomerSaveError] = useState('');
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -3150,25 +3151,34 @@ function CustomersTab({ authFetch }) {
       .catch(() => setCustomerDetails(null));
   };
 
-  const startNew = () => setEditingCustomer({ email: '', first_name: '', last_name: '', phone_number: '' });
+  const startNew = () => {
+    setCustomerSaveError('');
+    setEditingCustomer({ email: '', first_name: '', last_name: '', phone_number: '' });
+  };
   const startEdit = (profile) => {
     const { loyalty_points, ...rest } = profile;
+    setCustomerSaveError('');
     setEditingCustomer({ ...rest });
   };
 
-  const saveCustomer = () => {
+  const saveCustomer = async () => {
     const isNew = !editingCustomer.id;
-    authFetch(isNew ? '/api/admin/customers/' : `/api/admin/customers/${editingCustomer.id}/`, {
-      method: isNew ? 'POST' : 'PUT',
-      body: JSON.stringify(editingCustomer)
-    })
-      .then((r) => r.json())
-      .then(() => {
-        setEditingCustomer(null);
-        setSelectedCustomer(null);
-        setCustomerDetails(null);
-        load();
+    setCustomerSaveError('');
+    try {
+      const response = await authFetch(isNew ? '/api/admin/customers/' : `/api/admin/customers/${editingCustomer.id}/`, {
+        method: isNew ? 'POST' : 'PUT',
+        body: JSON.stringify(editingCustomer)
       });
+      const data = await response.json().catch(() => ({}));
+      // A refused change keeps the editor open with the reason.
+      if (!response.ok) throw new Error(firstApiError(data, 'Could not save this customer.'));
+      setEditingCustomer(null);
+      setSelectedCustomer(null);
+      setCustomerDetails(null);
+      load();
+    } catch (err) {
+      setCustomerSaveError(err.message || 'Could not save this customer.');
+    }
   };
 
   return (
@@ -3323,9 +3333,12 @@ function CustomersTab({ authFetch }) {
                 <input placeholder="Last Name" value={editingCustomer.last_name} onChange={(e) => setEditingCustomer({ ...editingCustomer, last_name: e.target.value })} className="rounded-sm border border-edge p-2.5 text-sm" />
               </div>
               <input placeholder="Phone Number" value={editingCustomer.phone_number || ''} onChange={(e) => setEditingCustomer({ ...editingCustomer, phone_number: e.target.value })} className="w-full rounded-sm border border-edge p-2.5 text-sm" />
+              {customerSaveError && (
+                <p role="alert" className="rounded-sm bg-surface-muted px-3 py-2 text-sm font-semibold text-ink-danger">{customerSaveError}</p>
+              )}
               <div className="flex gap-2">
                 <button onClick={saveCustomer} className="btn-primary flex-1 py-2.5 text-sm uppercase font-semibold">Save Profile</button>
-                <button onClick={() => setEditingCustomer(null)} className="flex-1 rounded-sm border border-edge py-2.5 text-sm font-semibold uppercase">Cancel</button>
+                <button onClick={() => { setEditingCustomer(null); setCustomerSaveError(''); }} className="flex-1 rounded-sm border border-edge py-2.5 text-sm font-semibold uppercase">Cancel</button>
               </div>
             </div>
           </div>

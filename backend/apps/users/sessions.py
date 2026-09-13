@@ -32,7 +32,8 @@ MAX_DEVICES = 5
 
 def token_auth_version(token):
     # Tokens issued before auth_version existed have no claim. They count as
-    # version 0, so sessions that were open at deploy keep working until expiry.
+    # version 0, so customer sessions open at deploy keep working until expiry;
+    # migration 0016_end_legacy_staff_sessions ends every staff one.
     try:
         return int(token.get(AUTH_VERSION_CLAIM, 0))
     except (TypeError, ValueError):

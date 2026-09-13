@@ -174,7 +174,9 @@ function MagicLinkLogin() {
 
 function LoginChallengeStep() {
   const dispatch = useDispatch();
-  const { status, error, challengeSentTo, challengeSentAt, challengeResendIn, sandboxOtp } = useSelector((s) => s.auth);
+  const {
+    status, error, challengeSentTo, challengeSentAt, challengeResendIn, challengeNotice, sandboxOtp,
+  } = useSelector((s) => s.auth);
   const [code, setCode] = useState('');
   const [formError, setFormError] = useState('');
   const [now, setNow] = useState(() => Date.now());
@@ -210,12 +212,19 @@ function LoginChallengeStep() {
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-surface-muted">
             <ShieldCheck className="h-6 w-6 text-brand-accent" />
           </div>
-          <h1 className="text-heading-2">Check your email</h1>
-          <p className="mt-1 text-sm text-ink-secondary">
-            Enter the 6-digit code we sent to <span className="font-semibold text-ink-primary">{challengeSentTo}</span>. It expires in 10 minutes.
-          </p>
+          <h1 className="text-heading-2">{challengeNotice ? 'Enter your sign-in code' : 'Check your email'}</h1>
+          {!challengeNotice && (
+            <p className="mt-1 text-sm text-ink-secondary">
+              Enter the 6-digit code we sent to <span className="font-semibold text-ink-primary">{challengeSentTo}</span>. It expires in 10 minutes.
+            </p>
+          )}
         </div>
         <form onSubmit={submit} className="space-y-3">
+          {challengeNotice && (
+            <p role="status" className="rounded-sm border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+              {challengeNotice}
+            </p>
+          )}
           {sandboxOtp && (
             <p className="rounded-lg bg-amber-50 px-3 py-2 text-center text-xs text-amber-700">
               Sandbox code: <span className="font-mono font-bold">{sandboxOtp}</span>
@@ -247,6 +256,78 @@ function LoginChallengeStep() {
   );
 }
 
+const RESET_SENT_MESSAGE = "If an account exists for that address, we've emailed a reset link.";
+
+// Asks for a password reset link. Whether the address has an account is never
+// revealed: every accepted request shows the same neutral confirmation.
+function ForgotPasswordForm({ initialEmail, onBack }) {
+  const [email, setEmail] = useState(initialEmail || '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [sentMessage, setSentMessage] = useState('');
+
+  const submit = async (e) => {
+    e.preventDefault();
+    const cleaned = email.trim().toLowerCase();
+    if (!isValidEmail(cleaned)) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      const { response, data } = await postJson('/api/auth/password/reset/request/', {
+        email: cleaned,
+        origin: window.location.origin,
+      });
+      if (!response.ok) throw new Error(firstApiError(data, 'Could not send the reset email. Try again in a few minutes.'));
+      setEmail(cleaned);
+      setSentMessage(data.message || RESET_SENT_MESSAGE);
+    } catch (err) {
+      setError(err.message || 'Could not send the reset email. Try again in a few minutes.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mx-auto max-w-md">
+      <div className="rounded-lg border border-edge bg-surface p-6 shadow-card sm:p-8">
+        <div className="mb-6 text-center">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-surface-muted">
+            <ShieldCheck className="h-6 w-6 text-brand-accent" />
+          </div>
+          <h1 className="text-heading-2">Reset your password</h1>
+          {!sentMessage && (
+            <p className="mt-1 text-sm text-ink-secondary">Enter your email and we'll send you a link to choose a new password.</p>
+          )}
+        </div>
+        {sentMessage ? (
+          <p role="status" className="rounded-md border border-ink-success/20 bg-surface-muted p-4 text-center text-sm font-semibold text-ink-primary">
+            {sentMessage}
+          </p>
+        ) : (
+          <form onSubmit={submit} className="space-y-3">
+            <label htmlFor="reset-email" className="sr-only">Email address</label>
+            <input id="reset-email" type="email" autoComplete="email" required placeholder="Email" value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full rounded-sm border border-edge bg-surface p-3 text-sm focus:border-ink-primary focus:outline-none" />
+            {error && <p className="rounded-sm bg-surface-muted px-3 py-2 text-xs font-semibold text-ink-danger">{error}</p>}
+            <button type="submit" disabled={busy}
+              className="btn-primary w-full py-3 text-sm uppercase tracking-wider disabled:opacity-60">
+              {busy ? 'Sending…' : 'Email me a reset link'}
+            </button>
+          </form>
+        )}
+        <button type="button" onClick={onBack}
+          className="mt-4 w-full text-xs font-semibold text-ink-secondary hover:text-ink-primary">
+          Back to sign in
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function AuthForms() {
   const dispatch = useDispatch();
   const { status, error, challengeId } = useSelector((s) => s.auth);
@@ -256,6 +337,7 @@ function AuthForms() {
   });
   const [showMoreSignIn, setShowMoreSignIn] = useState(false);
   const [formError, setFormError] = useState('');
+  const [forgotPassword, setForgotPassword] = useState(false);
 
   const update = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
@@ -305,7 +387,18 @@ function AuthForms() {
     dispatch(clearAuthError());
   };
 
+  const openForgotPassword = () => {
+    // The reset flow never needs the password, so drop it from the form.
+    setForm((f) => ({ ...f, password: '' }));
+    setFormError('');
+    dispatch(clearAuthError());
+    setForgotPassword(true);
+  };
+
   if (challengeId) return <LoginChallengeStep />;
+  if (forgotPassword) {
+    return <ForgotPasswordForm initialEmail={form.email.trim()} onBack={() => setForgotPassword(false)} />;
+  }
 
   return (
     <div className="mx-auto max-w-md">
@@ -367,6 +460,14 @@ function AuthForms() {
           <PasswordInput id="auth-password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required placeholder="Password" value={form.password}
             onChange={update('password')}
             className="w-full rounded-sm border border-edge bg-surface p-3 text-sm focus:border-ink-primary focus:outline-none" />
+          {mode === 'login' && (
+            <div className="mt-1.5 text-right">
+              <button type="button" onClick={openForgotPassword}
+                className="text-xs font-semibold text-ink-accent hover:underline">
+                Forgot password?
+              </button>
+            </div>
+          )}
         </div>
 
         {(formError || error) && (

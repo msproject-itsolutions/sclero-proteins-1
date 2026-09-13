@@ -111,6 +111,19 @@ class StaffEditorTests(EditorTestCase):
             response = self.client.get('/api/auth/profile/')
         self.assertEqual(response.status_code, 401)
 
+    def test_role_change_ends_the_members_sessions_but_not_the_actors(self):
+        packer_role = Role.objects.create(name='Packer', permissions=['orders.view'])
+        actor_version = self.manager.auth_version
+        response = self.patch(self.manager, self.member, {'roles': [packer_role.pk]})
+        self.assertEqual(response.status_code, 200, response.data)
+        self.member.refresh_from_db()
+        self.manager.refresh_from_db()
+        self.assertEqual(list(self.member.roles.values_list('name', flat=True)), ['Packer'])
+        self.assertEqual(self.member.auth_version, 1)
+        self.assertEqual(self.manager.auth_version, actor_version)
+        audit = AuditLog.objects.filter(action='staff.updated', target_id=str(self.member.pk)).latest('created_at')
+        self.assertEqual(audit.changes['roles'], [['Staff'], ['Packer']])
+
     def test_deactivation_ends_sessions(self):
         self.assertEqual(self.patch(self.manager, self.member, {'is_active': False}).status_code, 200)
         self.member.refresh_from_db()

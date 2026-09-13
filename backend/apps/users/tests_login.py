@@ -1,6 +1,8 @@
+import json
 import re
 from datetime import timedelta
 from unittest.mock import patch
+from urllib.parse import urlencode
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password
@@ -12,6 +14,7 @@ from rest_framework.test import APITestCase
 from apps.audit.models import AuditLog
 from apps.users.challenges import issue_code_challenge
 from apps.users.models import LoginChallenge, Role
+from apps.users.sessions import issue_tokens
 
 User = get_user_model()
 PASSWORD = 'Str0ng-pass-123'
@@ -20,6 +23,9 @@ LOGIN_URL = '/api/auth/login/'
 VERIFY_URL = '/api/auth/login/verify/'
 RESEND_URL = '/api/auth/login/resend/'
 CODE_RE = re.compile(r'\b(\d{6})\b')
+DELIVERY_FAILED_DETAIL = (
+    "We couldn't email your sign-in code. Ask an administrator for a one-time code, then enter it here."
+)
 
 
 def last_code():
@@ -143,3 +149,116 @@ class PasswordLoginTests(APITestCase):
         }, format='json', **BROWSER)
         self.assertEqual(response.status_code, 201)
         self.assertIsNotNone(User.objects.get(email='new@example.com').last_login)
+
+
+class EmailOutageTests(APITestCase):
+    """Staff must still be able to sign in, with an administrator's help, when SMTP is down."""
+
+    def setUp(self):
+        cache.clear()
+        self.staff = User.objects.create_user(email='staff@example.com', password=PASSWORD, is_staff=True)
+
+    def login(self, email):
+        return self.client.post(LOGIN_URL, {'email': email, 'password': PASSWORD}, format='json', **BROWSER)
+
+    def test_staff_login_keeps_the_challenge_when_the_email_fails(self):
+        with patch('apps.orders.email_service.send_branded_email', side_effect=OSError('smtp down')), \
+                self.assertLogs('apps.users.challenges', 'ERROR'):
+            response = self.login(self.staff.email)
+        self.assertEqual(response.status_code, 200)
+        self.assertIs(response.data['delivery_failed'], True)
+        self.assertIs(response.data['challenge_required'], True)
+        self.assertEqual(response.data['detail'], DELIVERY_FAILED_DETAIL)
+        self.assertNotIn('sclero_access', response.cookies)
+        challenge = LoginChallenge.objects.get(pk=response.data['challenge_id'])
+        self.assertEqual(challenge.user, self.staff)
+        self.assertIsNone(challenge.consumed_at)
+        self.assertTrue(AuditLog.objects.filter(action='login.challenge_delivery_failed').exists())
+
+    def test_failed_resend_keeps_the_challenge(self):
+        challenge_id = self.login(self.staff.email).data['challenge_id']
+        LoginChallenge.objects.filter(pk=challenge_id).update(last_sent_at=timezone.now() - timedelta(seconds=61))
+        with patch('apps.orders.email_service.send_branded_email', side_effect=OSError('smtp down')), \
+                self.assertLogs('apps.users.challenges', 'ERROR'), self.assertLogs('django.request', 'ERROR'):
+            response = self.client.post(RESEND_URL, {'challenge_id': challenge_id}, format='json', **BROWSER)
+        self.assertEqual(response.status_code, 503)
+        self.assertTrue(LoginChallenge.objects.filter(pk=challenge_id, consumed_at__isnull=True).exists())
+
+
+class SecondFactorCapTests(APITestCase):
+    def setUp(self):
+        cache.clear()
+        self.staff = User.objects.create_user(email='staff@example.com', password=PASSWORD, is_staff=True)
+
+    def login(self):
+        return self.client.post(
+            LOGIN_URL, {'email': self.staff.email, 'password': PASSWORD}, format='json', **BROWSER,
+        )
+
+    def test_sixth_code_in_fifteen_minutes_is_refused(self):
+        for _ in range(5):
+            self.assertEqual(self.login().status_code, 200)
+        with self.assertLogs('django.request', 'WARNING'):
+            response = self.login()
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(response.data, {
+            'detail': 'Too many sign-in codes were requested for this account. Try again in a few minutes.',
+            'code': 'too_many_codes',
+        })
+        self.assertEqual(LoginChallenge.objects.filter(user=self.staff).count(), 5)
+        self.assertEqual(len(mail.outbox), 5)
+        self.assertTrue(
+            AuditLog.objects.filter(action='login.challenge_rate_limited', target_id=str(self.staff.pk)).exists()
+        )
+
+        LoginChallenge.objects.filter(user=self.staff).update(created_at=timezone.now() - timedelta(minutes=16))
+        response = self.login()
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data['challenge_required'])
+        self.assertEqual(LoginChallenge.objects.filter(user=self.staff).count(), 6)
+
+
+class JsonOnlyAuthTests(APITestCase):
+    """A cross-site HTML form cannot send application/json without a CORS
+    preflight, so the unauthenticated auth endpoints accept nothing else."""
+
+    def setUp(self):
+        cache.clear()
+        self.customer = User.objects.create_user(email='buyer@example.com', password=PASSWORD)
+
+    def assert_refused(self, response):
+        self.assertEqual(response.status_code, 415)
+        self.assertNotIn('sclero_access', response.cookies)
+        self.assertNotIn('sclero_refresh', response.cookies)
+
+    def test_form_login_is_refused_and_sets_no_cookies(self):
+        data = {'email': self.customer.email, 'password': PASSWORD}
+        for name, body in (
+            ('urlencoded', {'data': urlencode(data), 'content_type': 'application/x-www-form-urlencoded'}),
+            ('multipart', {'data': data, 'format': 'multipart'}),
+            ('text/plain', {'data': json.dumps(data), 'content_type': 'text/plain'}),
+        ):
+            with self.subTest(body=name):
+                with self.assertLogs('django.request', 'WARNING'):
+                    response = self.client.post(LOGIN_URL, **body)
+                self.assert_refused(response)
+
+    def test_form_registration_is_refused_and_creates_nothing(self):
+        data = {
+            'email': 'new@example.com', 'password': 'Another-str0ng-pass', 'first_name': 'New', 'last_name': 'Buyer',
+        }
+        with self.assertLogs('django.request', 'WARNING'):
+            response = self.client.post(
+                '/api/auth/register/', urlencode(data), content_type='application/x-www-form-urlencoded',
+            )
+        self.assert_refused(response)
+        self.assertFalse(User.objects.filter(email='new@example.com').exists())
+
+    def test_form_refresh_with_a_foreign_token_is_refused(self):
+        refresh = issue_tokens(self.customer)['refresh']
+        with self.assertLogs('django.request', 'WARNING'):
+            response = self.client.post(
+                '/api/auth/token/refresh/', urlencode({'refresh': refresh}),
+                content_type='application/x-www-form-urlencoded',
+            )
+        self.assert_refused(response)

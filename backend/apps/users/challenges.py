@@ -30,6 +30,10 @@ MAX_ATTEMPTS = 5
 RESEND_COOLDOWN = timedelta(seconds=60)
 MAX_SENDS = 5
 PASSWORDLESS_HOURLY_LIMIT = 5
+# Per-account cap on password-then-code challenges, on top of the IP throttles:
+# stops one correct password being used to flood the inbox, or SMTP.
+SECOND_FACTOR_WINDOW = timedelta(minutes=15)
+SECOND_FACTOR_WINDOW_LIMIT = 5
 PURGE_AFTER = timedelta(days=1)
 SECOND_FACTOR_PURPOSES = (LoginChallenge.Purpose.STAFF_2FA, LoginChallenge.Purpose.CUSTOMER_2FA)
 PASSWORDLESS_PURPOSES = (LoginChallenge.Purpose.EMAIL_LOGIN, LoginChallenge.Purpose.MAGIC_LINK)
@@ -43,6 +47,7 @@ _MESSAGES = {
     'cooldown': 'Please wait before requesting another code.',
     'send_limit': 'Too many codes were requested. Please sign in again.',
     'rate_limited': 'Too many sign-in emails were requested for this address. Try again later.',
+    'too_many_codes': 'Too many sign-in codes were requested for this account. Try again in a few minutes.',
 }
 
 
@@ -64,7 +69,17 @@ class ChallengeError(Exception):
 
 
 class ChallengeDeliveryError(Exception):
-    """The email carrying the code or link could not be sent."""
+    """The email carrying the code or link could not be sent.
+
+    `challenge` (and its `secret`) are set only when the challenge was kept:
+    a second-factor sign-in whose code an administrator can still issue with
+    `manage.py staff_login_code`. Otherwise the challenge was deleted.
+    """
+
+    def __init__(self, message='', *, challenge=None, secret=None):
+        super().__init__(message)
+        self.challenge = challenge
+        self.secret = secret
 
 
 def requires_second_factor(user):
@@ -120,6 +135,15 @@ def enforce_passwordless_limit(email):
         raise ChallengeError('rate_limited')
 
 
+def enforce_second_factor_limit(user):
+    recent = LoginChallenge.objects.filter(
+        user=user, purpose__in=SECOND_FACTOR_PURPOSES,
+        created_at__gte=timezone.now() - SECOND_FACTOR_WINDOW,
+    ).count()
+    if recent >= SECOND_FACTOR_WINDOW_LIMIT:
+        raise ChallengeError('too_many_codes')
+
+
 def issue_code_challenge(*, purpose, email, user=None, ip=None):
     code = generate_code()
     challenge = _create(purpose=purpose, email=email, user=user, ip=ip, ttl=CODE_TTL, secret=code)
@@ -127,6 +151,10 @@ def issue_code_challenge(*, purpose, email, user=None, ip=None):
         send_code_email(challenge.sent_to, code, purpose, minutes=_minutes(CODE_TTL))
     except Exception as exc:
         logger.exception('Could not email a %s sign-in code.', purpose)
+        if purpose in SECOND_FACTOR_PURPOSES:
+            # The password was already proven: keep the challenge so staff can
+            # still finish signing in with a code from `staff_login_code`.
+            raise ChallengeDeliveryError(str(exc), challenge=challenge, secret=code) from exc
         challenge.delete()
         raise ChallengeDeliveryError(str(exc)) from exc
     return challenge, code
@@ -244,6 +272,7 @@ def resend_code(challenge_id, *, purposes):
         send_code_email(challenge.sent_to, code, challenge.purpose, minutes=_minutes(CODE_TTL))
     except Exception as exc:
         logger.exception('Could not email a replacement %s sign-in code.', challenge.purpose)
+        # Never delete here: `staff_login_code` can still complete this sign-in.
         raise ChallengeDeliveryError(str(exc)) from exc
     return challenge, code
 

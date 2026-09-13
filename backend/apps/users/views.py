@@ -12,6 +12,7 @@ from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.exceptions import AuthenticationFailed, PermissionDenied, ValidationError
+from rest_framework.parsers import JSONParser
 from rest_framework.permissions import SAFE_METHODS, AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
@@ -35,8 +36,8 @@ from .middleware import clear_auth_cookies
 from .auth_emails import public_link_base
 from .challenges import (
     SECOND_FACTOR_PURPOSES, SECOND_FACTOR_REQUIRED_MESSAGE, ChallengeDeliveryError, ChallengeError,
-    challenge_response_data, enforce_passwordless_limit, issue_code_challenge, issue_magic_link, mask_email,
-    requires_second_factor, resend_code, verify_code, verify_magic_token,
+    challenge_response_data, enforce_passwordless_limit, enforce_second_factor_limit, issue_code_challenge,
+    issue_magic_link, mask_email, requires_second_factor, resend_code, verify_code, verify_magic_token,
 )
 from .sessions import (
     SESSION_ENDED_MESSAGE, VersionedTokenRefreshSerializer, issue_tokens, record_device, revoke_sessions,
@@ -51,6 +52,16 @@ logger = logging.getLogger(__name__)
 
 GENERIC_LOGIN_ERROR = 'Invalid email or password.'
 CODE_SEND_FAILED = 'We could not send your sign-in code. Try again in a few minutes.'
+CODE_DELIVERY_FAILED = (
+    "We couldn't email your sign-in code. Ask an administrator for a one-time code, then enter it here."
+)
+
+# Invariant: every unauthenticated /api/auth/ POST view accepts JSON only. A
+# cross-site HTML form can send only urlencoded, multipart or text/plain
+# bodies; sending application/json from another origin needs a CORS preflight,
+# which the API does not grant. Accepting form bodies would let a hidden form
+# sign a victim's browser into an attacker's account (login CSRF).
+JSON_ONLY = (JSONParser,)
 
 
 def _network_refusal(request):
@@ -70,6 +81,7 @@ class AuditedLoginView(APIView):
     """
     permission_classes = [AllowAny]
     authentication_classes = []
+    parser_classes = JSON_ONLY
     throttle_scope = 'auth'
 
     def post(self, request, *args, **kwargs):
@@ -109,9 +121,31 @@ class AuditedLoginView(APIView):
                 LoginChallenge.Purpose.STAFF_2FA if is_staff_account(user) else LoginChallenge.Purpose.CUSTOMER_2FA
             )
             try:
+                enforce_second_factor_limit(user)
+            except ChallengeError as exc:
+                record_audit(
+                    'login.challenge_rate_limited', actor=user, target_type='User', target_id=user.pk,
+                    summary=f'Sign-in code refused for {user.email}: too many codes requested',
+                    changes={'purpose': purpose, 'ip': client_ip},
+                )
+                return Response(exc.as_response_data(), status=status.HTTP_429_TOO_MANY_REQUESTS)
+            try:
                 challenge, code = issue_code_challenge(purpose=purpose, email=user.email, user=user, ip=client_ip)
-            except ChallengeDeliveryError:
-                return Response({'detail': CODE_SEND_FAILED}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            except ChallengeDeliveryError as exc:
+                if exc.challenge is None:
+                    return Response({'detail': CODE_SEND_FAILED}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+                # The challenge is kept, so an administrator can issue its code
+                # with `manage.py staff_login_code` while email is down.
+                record_audit(
+                    'login.challenge_delivery_failed', actor=user, target_type='User', target_id=user.pk,
+                    summary=f'Sign-in code for {user.email} could not be emailed',
+                    changes={'purpose': purpose, 'challenge': str(exc.challenge.pk)},
+                )
+                return Response({
+                    **challenge_response_data(exc.challenge, exc.secret),
+                    'delivery_failed': True,
+                    'detail': CODE_DELIVERY_FAILED,
+                })
             record_audit(
                 'login.challenge_sent', actor=user, target_type='User', target_id=user.pk,
                 summary=f'Sign-in code sent for {user.email}',
@@ -127,6 +161,7 @@ class LoginVerifyView(APIView):
     """Second step of password sign-in: exchange the emailed code for a session."""
     permission_classes = [AllowAny]
     authentication_classes = []
+    parser_classes = JSON_ONLY
     throttle_scope = 'otp'
 
     def post(self, request):
@@ -149,6 +184,7 @@ class LoginResendView(APIView):
     """Send a new code for a pending password sign-in (60 s cooldown)."""
     permission_classes = [AllowAny]
     authentication_classes = []
+    parser_classes = JSON_ONLY
     throttle_scope = 'otp'
 
     def post(self, request):
@@ -168,6 +204,9 @@ class CookieTokenRefreshView(TokenRefreshView):
     """Rotate the refresh token from an HttpOnly cookie for browser clients."""
 
     permission_classes = [AllowAny]
+    # A form could otherwise post an attacker's refresh token and have the
+    # response set the attacker's session cookies in the victim's browser.
+    parser_classes = JSON_ONLY
     throttle_scope = 'auth'
     serializer_class = VersionedTokenRefreshSerializer
 
@@ -197,6 +236,7 @@ class LogoutView(APIView):
     """Blacklist the browser refresh token and clear both auth cookies."""
 
     permission_classes = [AllowAny]
+    parser_classes = JSON_ONLY
     throttle_scope = 'auth'
 
     def post(self, request):
@@ -214,6 +254,7 @@ class LogoutView(APIView):
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     permission_classes = [AllowAny]
+    parser_classes = JSON_ONLY
     serializer_class = RegisterSerializer
     throttle_scope = 'auth'
 
@@ -620,6 +661,7 @@ def _passwordless_user(challenge):
 class SendOTPView(APIView):
     """Email a one-time sign-in code. Never creates an account."""
     permission_classes = [AllowAny]
+    parser_classes = JSON_ONLY
     throttle_scope = 'otp'
 
     def post(self, request):
@@ -668,6 +710,7 @@ class SendOTPView(APIView):
 class VerifyOTPView(APIView):
     """Exchange an emailed sign-in code for a session, creating the account on first use."""
     permission_classes = [AllowAny]
+    parser_classes = JSON_ONLY
     throttle_scope = 'otp'
 
     def post(self, request):
@@ -688,6 +731,7 @@ class VerifyOTPView(APIView):
 class MagicLinkRequestView(APIView):
     """Email a single-use sign-in link. Never creates an account."""
     permission_classes = [AllowAny]
+    parser_classes = JSON_ONLY
     throttle_scope = 'auth'
 
     def post(self, request):
@@ -723,6 +767,7 @@ class MagicLinkRequestView(APIView):
 class MagicLinkVerifyView(APIView):
     """Exchange a magic-link token for a session, creating the account on first use."""
     permission_classes = [AllowAny]
+    parser_classes = JSON_ONLY
     throttle_scope = 'auth'
 
     def post(self, request):
@@ -935,6 +980,7 @@ class PublicWishlistView(APIView):
 
 class GoogleLoginView(APIView):
     permission_classes = [AllowAny]
+    parser_classes = JSON_ONLY
     throttle_scope = 'auth'
 
     def post(self, request):
@@ -1158,6 +1204,7 @@ class PasswordResetRequestView(APIView):
     template is dispatched with ``{reset_url}`` populated.
     """
     permission_classes = [AllowAny]
+    parser_classes = JSON_ONLY
     throttle_scope = 'password_reset'
 
     def post(self, request):
@@ -1212,6 +1259,7 @@ class PasswordResetConfirmView(APIView):
     saved.
     """
     permission_classes = [AllowAny]
+    parser_classes = JSON_ONLY
     throttle_scope = 'password_reset'
 
     def post(self, request):

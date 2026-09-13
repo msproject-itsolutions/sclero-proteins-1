@@ -109,10 +109,35 @@ class CodeChallengeTests(TestCase):
         self.assertEqual(ctx.exception.code, 'send_limit')
 
     def test_failed_delivery_leaves_no_challenge(self):
-        with patch('apps.orders.email_service.send_branded_email', side_effect=OSError('smtp down')):
-            with self.assertRaises(ChallengeDeliveryError):
-                self.issue()
+        """Passwordless codes and links are useless once their email failed."""
+        with patch('apps.orders.email_service.send_branded_email', side_effect=OSError('smtp down')), \
+                self.assertLogs('apps.users.challenges', 'ERROR'):
+            with self.assertRaises(ChallengeDeliveryError) as ctx:
+                issue_code_challenge(purpose=LoginChallenge.Purpose.EMAIL_LOGIN, email='buyer@example.com')
+            self.assertIsNone(ctx.exception.challenge)
+            with self.assertRaises(ChallengeDeliveryError) as ctx:
+                issue_magic_link(email='buyer@example.com', link_base='https://shop.example')
+            self.assertIsNone(ctx.exception.challenge)
         self.assertFalse(LoginChallenge.objects.exists())
+
+    def test_failed_second_factor_delivery_keeps_the_challenge(self):
+        """Kept so `manage.py staff_login_code` can still complete the sign-in."""
+        with patch('apps.orders.email_service.send_branded_email', side_effect=OSError('smtp down')), \
+                self.assertLogs('apps.users.challenges', 'ERROR'):
+            with self.assertRaises(ChallengeDeliveryError) as ctx:
+                self.issue()
+        kept = ctx.exception.challenge
+        self.assertIsNotNone(kept)
+        self.assertTrue(LoginChallenge.objects.filter(pk=kept.pk, purpose=STAFF, consumed_at__isnull=True).exists())
+
+    def test_second_factor_codes_are_capped_per_account(self):
+        for _ in range(challenges.SECOND_FACTOR_WINDOW_LIMIT):
+            self.issue()
+        with self.assertRaises(ChallengeError) as ctx:
+            challenges.enforce_second_factor_limit(self.user)
+        self.assertEqual(ctx.exception.code, 'too_many_codes')
+        LoginChallenge.objects.update(created_at=timezone.now() - challenges.SECOND_FACTOR_WINDOW - timedelta(seconds=1))
+        challenges.enforce_second_factor_limit(self.user)
 
 
 class MagicLinkChallengeTests(TestCase):

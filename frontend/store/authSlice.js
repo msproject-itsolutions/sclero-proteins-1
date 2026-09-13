@@ -60,6 +60,8 @@ export const login = createAsyncThunk(
           resendIn: data.resend_available_in || 60,
           sentAt: Date.now(),
           sandboxCode: data.otp_preview_for_sandbox || '',
+          // The email failed; the backend explains how to get a code instead.
+          notice: data.delivery_failed ? (data.detail || '') : '',
         },
       };
     }
@@ -180,6 +182,7 @@ const noChallenge = {
   challengeSentTo: '',
   challengeSentAt: 0,
   challengeResendIn: 0,
+  challengeNotice: '',
   sandboxOtp: '',
 };
 
@@ -251,6 +254,7 @@ const authSlice = createSlice({
         state.challengeSentTo = challenge.sentTo;
         state.challengeSentAt = challenge.sentAt;
         state.challengeResendIn = challenge.resendIn;
+        state.challengeNotice = challenge.notice;
         state.sandboxOtp = challenge.sandboxCode;
       })
       .addCase(login.rejected, rejected)
@@ -265,6 +269,8 @@ const authSlice = createSlice({
         state.challengeSentTo = action.payload.sentTo || state.challengeSentTo;
         state.challengeSentAt = action.payload.sentAt;
         state.challengeResendIn = action.payload.resendIn;
+        // A new code was emailed, so an earlier delivery failure no longer applies.
+        state.challengeNotice = '';
         state.sandboxOtp = action.payload.sandboxCode;
       })
       .addCase(resendLoginCode.rejected, challengeRejected)

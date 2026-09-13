@@ -202,7 +202,7 @@ class PasswordChangeView(APIView):
     Ends every other session; the caller receives a fresh one.
     """
     permission_classes = [IsAuthenticated]
-    throttle_scope = 'auth'
+    throttle_scope = 'password_reset'
 
     def post(self, request):
         user = request.user

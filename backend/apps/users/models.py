@@ -75,10 +75,12 @@ class User(AbstractBaseUser, PermissionsMixin):
     # accounts always need one, whatever this says.
     two_factor_enabled = models.BooleanField(default=False)
     # Bumped to end every session at once; JWTs carry it as the `av` claim.
-    auth_version = models.PositiveIntegerField(default=0)
-    email_verified = models.BooleanField(default=False)
+    # The database defaults (db_default) let the previous release, which does
+    # not know these three columns, still create users after a rollback.
+    auth_version = models.PositiveIntegerField(default=0, db_default=0)
+    email_verified = models.BooleanField(default=False, db_default=False)
     # Staff sign-in codes go here instead of `email`. Only administrators set it.
-    verification_email = models.EmailField(blank=True, default='')
+    verification_email = models.EmailField(blank=True, default='', db_default='')
     allowed_ip_range = models.CharField(max_length=255, blank=True, default='')
     current_devices = models.JSONField(default=list, blank=True)
     # Password reset (request → email link → confirm) — token is a uuid4 hex.
@@ -86,6 +88,12 @@ class User(AbstractBaseUser, PermissionsMixin):
     password_reset_token_expires = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    # Unused since P1-B. Kept for one release so the installer's image rollback still works; drop in the next release.
+    otp_secret = models.CharField(max_length=255, blank=True, null=True)
+    totp_secret = models.CharField(max_length=64, blank=True, default='')
+    totp_enabled = models.BooleanField(default=False, db_index=True)
+    totp_backup_codes = models.JSONField(default=list, blank=True)
 
     objects = UserManager()
 

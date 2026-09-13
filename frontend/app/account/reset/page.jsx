@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, Suspense } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Loader2, CheckCircle2, AlertCircle, ShieldCheck } from 'lucide-react';
@@ -11,12 +11,20 @@ import { firstApiError } from '../../../lib/formValidation';
 
 function ResetPasswordContent() {
   const params = useSearchParams();
-  const token = params.get('token');
+  // Read once: the token is then removed from the address bar, which updates
+  // the search params, so it must live in state for the later POST.
+  const [token] = useState(() => params.get('token') || '');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [done, setDone] = useState(false);
+
+  useEffect(() => {
+    // Keep the emailed token out of the address bar, history and any
+    // referrer or analytics that could read the URL.
+    if (window.location.search) window.history.replaceState(null, '', window.location.pathname);
+  }, []);
 
   if (!token) {
     return (
@@ -24,7 +32,7 @@ function ResetPasswordContent() {
         <AlertCircle className="mb-4 h-10 w-10 text-ink-danger" />
         <h1 className="text-heading-2">Link incomplete</h1>
         <p className="mt-1 text-sm text-ink-secondary">
-          This reset link is incomplete. Request a new one from the sign-in page.
+          This reset link is incomplete. Request a new one from the sign-in page ('Forgot password?').
         </p>
         <Link href="/account" className="btn-primary mt-5 px-5 py-2.5 text-xs uppercase tracking-wider">
           Back to your account

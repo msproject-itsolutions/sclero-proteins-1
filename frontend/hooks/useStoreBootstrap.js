@@ -17,6 +17,21 @@ const trackingSettings = {
 
 let activeTrackingSettings = { ...trackingSettings };
 
+// Pages opened from emailed links carry a secret token in the URL. No
+// third-party tracking script may load on them, so it can never read the URL.
+const TOKEN_LINK_PATHS = new Set(['/account/reset', '/auth/magic', '/auth/verify-email', '/auth/confirm-email-change']);
+
+function onTokenLinkPage() {
+  if (typeof window === 'undefined') return false;
+  const path = window.location.pathname.replace(/\/+$/, '') || '/';
+  return TOKEN_LINK_PATHS.has(path);
+}
+
+function loadTracking(settings, consent) {
+  if (onTokenLinkPage()) return;
+  initTrackingScripts(settings, consent);
+}
+
 function readCookieConsent() {
   if (typeof window === 'undefined') return null;
   try {
@@ -60,7 +75,7 @@ export default function useStoreBootstrap() {
     dispatch(setSessionId(sid));
 
     const consent = readCookieConsent();
-    if (consent) initTrackingScripts(activeTrackingSettings, consent);
+    if (consent) loadTracking(activeTrackingSettings, consent);
 
     // Load store-wide config (tax mode + guest checkout + branding) once on boot.
     fetch(getApiUrl('/api/store-config/'))
@@ -89,10 +104,10 @@ export default function useStoreBootstrap() {
           tiktok_pixel_id: process.env.NEXT_PUBLIC_TIKTOK_PIXEL_ID || '',
         };
         
-        if (consent) {
+        if (consent && !onTokenLinkPage()) {
           // Re-initialize scripts with DB settings
           window.__scleroTrackingInitialized = false;
-          initTrackingScripts(activeTrackingSettings, consent);
+          loadTracking(activeTrackingSettings, consent);
         }
 
         // Inject google-site-verification meta tag if present
@@ -110,8 +125,9 @@ export default function useStoreBootstrap() {
 
 
     const onConsentUpdated = (event) => {
+      if (onTokenLinkPage()) return;
       window.__scleroTrackingInitialized = false;
-      initTrackingScripts(activeTrackingSettings, event.detail || {});
+      loadTracking(activeTrackingSettings, event.detail || {});
     };
     window.addEventListener('cookie-consent-updated', onConsentUpdated);
 
@@ -140,7 +156,9 @@ export default function useStoreBootstrap() {
       const hasRegionCookie = document.cookie.split('; ').some((c) => c.startsWith('sclero_region='));
       const userChose = hasRegionCookie || localStorage.getItem('sclero_region_set') === 'true';
       const alreadyChecked = sessionStorage.getItem('sclero_geo_checked') === 'true';
-      if (!userChose && !alreadyChecked) {
+      // Emailed-link pages remove their token from the URL straight away, so
+      // moving them to the other domain afterwards would lose the token.
+      if (!userChose && !alreadyChecked && !onTokenLinkPage()) {
         sessionStorage.setItem('sclero_geo_checked', 'true');
         fetch(getApiUrl('/api/geo/'))
           .then((r) => (r.ok ? r.json() : null))
