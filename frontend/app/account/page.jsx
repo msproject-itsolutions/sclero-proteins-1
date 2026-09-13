@@ -17,7 +17,7 @@ import {
   login, register, fetchProfile, logout, clearAuthError, sendOtp, verifyOtp,
   verifyLoginCode, resendLoginCode, cancelChallenge, requestMagicLink,
 } from '../../store/authSlice';
-import { getApiUrl } from '../../lib/api';
+import { getApiUrl, postJson } from '../../lib/api';
 import { authenticatedFetch } from '../../lib/authFetch';
 import { addToCart } from '../../store/cartSlice';
 import PasswordInput from '../../components/PasswordInput';
@@ -765,6 +765,233 @@ function WishlistTab() {
   );
 }
 
+function VerifyEmailBanner({ email }) {
+  const [state, setState] = useState('idle'); // idle | sending | sent | error
+  const [message, setMessage] = useState('');
+
+  const send = async () => {
+    setState('sending');
+    setMessage('');
+    try {
+      const { response, data } = await postJson('/api/auth/verify-email/', { origin: window.location.origin });
+      if (!response.ok) throw new Error(firstApiError(data, 'Could not send the verification email.'));
+      setState('sent');
+      setMessage(data.message || `We sent a verification link to ${email}.`);
+    } catch (err) {
+      setState('error');
+      setMessage(err.message || 'Could not send the verification email.');
+    }
+  };
+
+  return (
+    <div className="mb-6 flex flex-col gap-3 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <p className="font-semibold text-amber-900">Please verify your email address</p>
+        <p className="mt-0.5 text-xs text-amber-800">
+          {state === 'sent' || state === 'error'
+            ? message
+            : `Confirm ${email} to see orders you placed as a guest with this address.`}
+        </p>
+      </div>
+      {state !== 'sent' && (
+        <button type="button" onClick={send} disabled={state === 'sending'}
+          className="shrink-0 rounded-sm bg-surface-inverse px-4 py-2 text-xs font-semibold uppercase tracking-wider text-white disabled:opacity-60">
+          {state === 'sending' ? 'Sending…' : 'Send verification link'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function EmailChangeForm({ user, onClose }) {
+  const [newEmail, setNewEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [sentTo, setSentTo] = useState('');
+
+  const submit = async (e) => {
+    e.preventDefault();
+    const cleaned = newEmail.trim().toLowerCase();
+    if (!isValidEmail(cleaned)) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+    if (user.has_password && !password) {
+      setError('Please enter your current password.');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      const { response, data } = await postJson('/api/auth/email-change/', {
+        new_email: cleaned,
+        password,
+        origin: window.location.origin,
+      });
+      if (!response.ok) throw new Error(firstApiError(data, 'Could not start the email change.'));
+      setSentTo(cleaned);
+      setPassword('');
+    } catch (err) {
+      setError(err.message || 'Could not start the email change.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (sentTo) {
+    return (
+      <div className="rounded-md border border-ink-success/20 bg-surface-muted p-4 text-xs">
+        <p className="font-semibold text-ink-primary">Check your inbox at {sentTo}.</p>
+        <p className="mt-1 text-ink-secondary">Open the link in that email to finish. Your current address keeps working until then.</p>
+        <button type="button" onClick={onClose} className="mt-2 font-semibold text-ink-secondary hover:text-ink-primary">Close</button>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-2">
+      <label htmlFor="new-email" className="sr-only">New email address</label>
+      <input id="new-email" type="email" autoComplete="email" required placeholder="New email address" value={newEmail}
+        onChange={(e) => setNewEmail(e.target.value)}
+        className="w-full rounded-sm border border-edge bg-surface p-2.5 text-sm focus:border-ink-primary focus:outline-none" />
+      {user.has_password && (
+        <>
+          <label htmlFor="email-change-password" className="sr-only">Current password</label>
+          <PasswordInput id="email-change-password" autoComplete="current-password" placeholder="Current password" value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full rounded-sm border border-edge bg-surface p-2.5 text-sm focus:border-ink-primary focus:outline-none" />
+        </>
+      )}
+      {error && <p className="text-xs font-semibold text-ink-danger">{error}</p>}
+      <div className="flex gap-2">
+        <button type="submit" disabled={busy} className="btn-primary px-4 py-2 text-xs uppercase tracking-wider disabled:opacity-60">
+          {busy ? 'Sending…' : 'Send confirmation link'}
+        </button>
+        <button type="button" onClick={onClose} className="rounded-sm border border-edge px-4 py-2 text-xs font-medium text-ink-primary">Cancel</button>
+      </div>
+    </form>
+  );
+}
+
+function SecuritySettings({ user, authFetch, onChanged }) {
+  const isStaffAccount = Boolean(user.is_staff || user.is_superuser || (user.roles || []).length);
+  const [passwords, setPasswords] = useState({ current: '', next: '' });
+  const [passwordState, setPasswordState] = useState({ busy: false, error: '', done: '' });
+  const [twoStep, setTwoStep] = useState(Boolean(user.two_factor_enabled));
+  const [twoStepState, setTwoStepState] = useState({ busy: false, error: '' });
+  const [signOutState, setSignOutState] = useState({ busy: false, error: '', done: '' });
+
+  const changePassword = async (e) => {
+    e.preventDefault();
+    if (user.has_password && !passwords.current) {
+      setPasswordState({ busy: false, error: 'Please enter your current password.', done: '' });
+      return;
+    }
+    if (passwords.next.length < 8) {
+      setPasswordState({ busy: false, error: 'Your new password must be at least 8 characters long.', done: '' });
+      return;
+    }
+    setPasswordState({ busy: true, error: '', done: '' });
+    try {
+      const { response, data } = await postJson('/api/auth/password/change/', {
+        current_password: passwords.current,
+        new_password: passwords.next,
+      });
+      if (!response.ok) throw new Error(firstApiError(data, 'Could not change your password.'));
+      setPasswords({ current: '', next: '' });
+      setPasswordState({ busy: false, error: '', done: data.message || 'Password updated.' });
+      onChanged();
+    } catch (err) {
+      setPasswordState({ busy: false, error: err.message || 'Could not change your password.', done: '' });
+    }
+  };
+
+  const toggleTwoStep = async (enabled) => {
+    setTwoStepState({ busy: true, error: '' });
+    try {
+      const response = await authFetch('/api/auth/profile/', {
+        method: 'PATCH',
+        body: JSON.stringify({ two_factor_enabled: enabled }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(firstApiError(data, 'Could not update two-step sign-in.'));
+      setTwoStep(enabled);
+      setTwoStepState({ busy: false, error: '' });
+      onChanged();
+    } catch (err) {
+      setTwoStepState({ busy: false, error: err.message || 'Could not update two-step sign-in.' });
+    }
+  };
+
+  const signOutOthers = async () => {
+    setSignOutState({ busy: true, error: '', done: '' });
+    try {
+      const { response, data } = await postJson('/api/auth/profile/terminate-devices/', {});
+      if (!response.ok) throw new Error(firstApiError(data, 'Could not sign out your other devices.'));
+      setSignOutState({ busy: false, error: '', done: data.message || 'Signed out of all other devices.' });
+    } catch (err) {
+      setSignOutState({ busy: false, error: err.message || 'Could not sign out your other devices.', done: '' });
+    }
+  };
+
+  return (
+    <div className="space-y-5 rounded-md border border-edge bg-surface p-4 shadow-card">
+      <div className="flex items-center gap-2">
+        <ShieldCheck className="h-4 w-4 text-brand-accent" />
+        <p className="text-sm font-bold text-ink-primary">Sign-in &amp; security</p>
+      </div>
+
+      <form onSubmit={changePassword} className="space-y-2">
+        <p className="text-xs font-semibold text-ink-primary">{user.has_password ? 'Change password' : 'Set a password'}</p>
+        {user.has_password && (
+          <PasswordInput autoComplete="current-password" placeholder="Current password" value={passwords.current}
+            onChange={(e) => setPasswords((p) => ({ ...p, current: e.target.value }))}
+            className="w-full rounded-sm border border-edge bg-surface p-2.5 text-sm focus:border-ink-primary focus:outline-none" />
+        )}
+        <PasswordInput autoComplete="new-password" placeholder="New password (at least 8 characters)" value={passwords.next}
+          onChange={(e) => setPasswords((p) => ({ ...p, next: e.target.value }))}
+          className="w-full rounded-sm border border-edge bg-surface p-2.5 text-sm focus:border-ink-primary focus:outline-none" />
+        {passwordState.error && <p className="text-xs font-semibold text-ink-danger">{passwordState.error}</p>}
+        {passwordState.done && <p className="text-xs font-semibold text-ink-success">{passwordState.done}</p>}
+        <button type="submit" disabled={passwordState.busy}
+          className="btn-primary px-5 py-2 text-xs uppercase tracking-wider disabled:opacity-60">
+          {passwordState.busy ? 'Saving…' : 'Update password'}
+        </button>
+        <p className="text-[11px] text-ink-muted">Changing your password signs you out on every other device.</p>
+      </form>
+
+      {isStaffAccount ? (
+        <p className="border-t border-edge-subtle pt-4 text-xs text-ink-secondary">
+          Staff accounts always sign in with a password and an emailed code.
+        </p>
+      ) : (
+        <label className="flex cursor-pointer items-start gap-3 border-t border-edge-subtle pt-4">
+          <input type="checkbox" checked={twoStep} disabled={twoStepState.busy || !user.has_password}
+            onChange={(e) => toggleTwoStep(e.target.checked)} className="mt-0.5 accent-brand-accent" />
+          <span>
+            <span className="block text-sm font-semibold text-ink-primary">Two-step sign-in</span>
+            <span className="block text-xs text-ink-secondary">
+              When you sign in with your password we also email you a 6-digit code.
+              {!user.has_password && ' Set a password first.'}
+            </span>
+            {twoStepState.error && <span className="mt-1 block text-xs font-semibold text-ink-danger">{twoStepState.error}</span>}
+          </span>
+        </label>
+      )}
+
+      <div className="border-t border-edge-subtle pt-4">
+        <button type="button" onClick={signOutOthers} disabled={signOutState.busy}
+          className="rounded-sm border border-edge bg-surface px-4 py-2 text-xs font-semibold text-ink-primary hover:bg-surface-muted disabled:opacity-60">
+          {signOutState.busy ? 'Signing out…' : 'Sign out of all other devices'}
+        </button>
+        {signOutState.error && <p className="mt-2 text-xs font-semibold text-ink-danger">{signOutState.error}</p>}
+        {signOutState.done && <p className="mt-2 text-xs font-semibold text-ink-success">{signOutState.done}</p>}
+      </div>
+    </div>
+  );
+}
+
 function ProfileTab({ user, authFetch, regions, onSaved }) {
   const [homeRegion, setHomeRegion] = useState(user.home_region || '');
   const [prefs, setPrefs] = useState({
@@ -775,6 +1002,7 @@ function ProfileTab({ user, authFetch, regions, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState('');
   const [saveError, setSaveError] = useState('');
+  const [changingEmail, setChangingEmail] = useState(false);
 
   const save = async () => {
     setSaving(true); setSavedMsg(''); setSaveError('');
@@ -811,10 +1039,29 @@ function ProfileTab({ user, authFetch, regions, onSaved }) {
       
       {/* Identity */}
       <div className="space-y-3">
-        <div className="flex items-center gap-3 rounded-md border border-edge bg-surface p-4 shadow-card">
-          <Mail className="h-5 w-5 text-brand-accent" />
-          <div><p className="text-[11px] uppercase tracking-wide text-ink-secondary">Email</p>
-            <p className="text-sm font-semibold text-ink-primary">{user.email}</p></div>
+        <div className="rounded-md border border-edge bg-surface p-4 shadow-card">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <Mail className="h-5 w-5 text-brand-accent" />
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-ink-secondary">Email</p>
+                <p className="text-sm font-semibold text-ink-primary">{user.email}</p>
+                <p className={`text-[11px] font-semibold ${user.email_verified ? 'text-ink-success' : 'text-amber-700'}`}>
+                  {user.email_verified ? 'Verified' : 'Not verified yet'}
+                </p>
+              </div>
+            </div>
+            {!changingEmail && (
+              <button type="button" onClick={() => setChangingEmail(true)} className="text-xs font-semibold text-ink-accent hover:underline">
+                Change email
+              </button>
+            )}
+          </div>
+          {changingEmail && (
+            <div className="mt-3">
+              <EmailChangeForm user={user} onClose={() => setChangingEmail(false)} />
+            </div>
+          )}
         </div>
       </div>
 
@@ -859,6 +1106,8 @@ function ProfileTab({ user, authFetch, regions, onSaved }) {
         {savedMsg && <span className="text-xs font-semibold text-ink-success">{savedMsg}</span>}
         {saveError && <span className="text-xs font-semibold text-ink-danger">{saveError}</span>}
       </div>
+
+      <SecuritySettings user={user} authFetch={authFetch} onChanged={onSaved} />
 
       <PrivacyControls authFetch={authFetch} userEmail={user.email} />
     </div>
@@ -1023,6 +1272,8 @@ export default function AccountPage() {
             <span className="text-sm font-medium text-ink-accent">Open →</span>
           </Link>
         )}
+
+        {!user.email_verified && <VerifyEmailBanner email={user.email} />}
 
         {/* Tabs */}
         <div className="mb-6 flex gap-1 border-b border-edge overflow-x-auto scrollbar-none">
