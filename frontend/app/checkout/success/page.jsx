@@ -126,9 +126,9 @@ function OrderConfirmationContent() {
   // take it out of the address bar straight away.
   useEffect(() => {
     const fromUrl = searchParams.get('token') || '';
-    if (fromUrl && orderId) {
-      storeToken(orderId, fromUrl);
-      window.history.replaceState(null, '', `/checkout/success?order=${encodeURIComponent(orderId)}`);
+    if (fromUrl) {
+      if (orderId) storeToken(orderId, fromUrl);
+      window.history.replaceState(null, '', orderId ? `/checkout/success?order=${encodeURIComponent(orderId)}` : '/checkout/success');
     }
     setToken(fromUrl || (orderId ? readStoredToken(orderId) : ''));
     setTokenReady(true);
@@ -137,7 +137,9 @@ function OrderConfirmationContent() {
   const lookup = useCallback(async () => {
     const response = await fetch(getApiUrl(`/api/orders/lookup/?token=${encodeURIComponent(token)}`), { credentials: 'omit' });
     if (!response.ok) {
-      throw new Error(response.status === 404 ? 'This order link is invalid or has expired.' : 'Unable to load the order details.');
+      const error = new Error(response.status === 404 ? 'This order link is invalid or has expired.' : 'Unable to load the order details.');
+      error.permanent = response.status === 404;
+      throw error;
     }
     return response.json();
   }, [token]);
@@ -152,21 +154,26 @@ function OrderConfirmationContent() {
     let timer = null;
     let attempts = 0;
     const poll = async () => {
+      let again = false;
       try {
         const data = await lookup();
         if (cancelled) return;
         setOrder(data);
         setError('');
-        // A payment the provider is still confirming normally settles within
-        // moments; check again every 5 seconds for about two minutes.
-        if (data.status === 'AWAITING_PAYMENT' && attempts < 24) {
-          attempts += 1;
-          timer = setTimeout(poll, 5000);
-        }
+        again = data.status === 'AWAITING_PAYMENT';
       } catch (err) {
-        if (!cancelled) setError(err.message);
+        if (cancelled) return;
+        setError(err.message);
+        // A dropped connection should not end the wait; an invalid link should.
+        again = !err.permanent;
       } finally {
         if (!cancelled) setLoading(false);
+      }
+      // A payment the provider is still confirming normally settles within
+      // moments; check again every 5 seconds for about two minutes.
+      if (again && attempts < 24) {
+        attempts += 1;
+        timer = setTimeout(poll, 5000);
       }
     };
     poll();
