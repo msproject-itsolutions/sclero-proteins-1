@@ -38,7 +38,7 @@ from .challenges import (
     challenge_response_data, enforce_passwordless_limit, issue_code_challenge, issue_magic_link, mask_email,
     requires_second_factor, resend_code, verify_code, verify_magic_token,
 )
-from .sessions import SESSION_ENDED_MESSAGE, VersionedTokenRefreshSerializer, start_session
+from .sessions import SESSION_ENDED_MESSAGE, VersionedTokenRefreshSerializer, revoke_sessions, start_session
 from apps.audit.context import client_ip_from_request
 from apps.audit.recorder import record_audit
 from apps.orders.models import Order
@@ -598,7 +598,16 @@ def _passwordless_user(challenge):
         )
     elif not user.email_verified:
         user.email_verified = True
-        user.save(update_fields=['email_verified'])
+        # Security invariant: a password set before ownership of the address
+        # was proven by email must not survive that proof — otherwise anyone
+        # could pre-register a victim's address and keep a working password
+        # after the victim later verifies it by code, link or Google.
+        if user.has_usable_password():
+            user.set_unusable_password()
+            user.save(update_fields=['email_verified', 'password'])
+            revoke_sessions(user, reason='passwordless_verification')
+        else:
+            user.save(update_fields=['email_verified'])
     return user, None
 
 
@@ -921,6 +930,7 @@ class GoogleLoginView(APIView):
             return _second_factor_refusal()
 
         updates = []
+        revoke_needed = False
         if not user.google_id:
             user.google_id = google_id
             updates.append('google_id')
@@ -928,8 +938,18 @@ class GoogleLoginView(APIView):
         if not user.email_verified and user.email.lower() == email:
             user.email_verified = True
             updates.append('email_verified')
+            # Security invariant: a password set before ownership of the
+            # address was proven by Google must not survive that proof —
+            # otherwise anyone could pre-register a victim's address and keep
+            # a working password after the victim later signs in with Google.
+            if user.has_usable_password():
+                user.set_unusable_password()
+                updates.append('password')
+                revoke_needed = True
         if updates:
             user.save(update_fields=updates)
+        if revoke_needed:
+            revoke_sessions(user, reason='passwordless_verification')
         if created:
             record_audit(
                 'account.registered', actor=user, target_type='User', target_id=user.pk,

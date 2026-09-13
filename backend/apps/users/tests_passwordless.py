@@ -9,6 +9,7 @@ from rest_framework.test import APITestCase
 
 from apps.audit.models import AuditLog
 from apps.users.models import LoginChallenge
+from apps.users.sessions import issue_tokens
 
 User = get_user_model()
 PASSWORD = 'Str0ng-pass-123'
@@ -96,6 +97,35 @@ class EmailCodeSignInTests(APITestCase):
         with self.assertLogs('django.request', 'WARNING'):
             self.assertEqual(self.send('busy@example.com').status_code, 429)
 
+    def test_pre_registered_password_dies_on_email_code_verification(self):
+        """A password set before the address was proven by email must not
+        survive that proof, and any session issued on that stale password
+        must be ended — otherwise pre-registering a victim's address would
+        let an attacker keep signing in with their own chosen password."""
+        victim = User.objects.create_user(email='victim@example.com', password=PASSWORD)
+        old_access = issue_tokens(victim)['access']
+        challenge_id = self.send(victim.email).data['challenge_id']
+        response = self.verify(challenge_id, last_code())
+        self.assertEqual(response.status_code, 200)
+        victim.refresh_from_db()
+        self.assertTrue(victim.email_verified)
+        self.assertFalse(victim.has_usable_password())
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {old_access}')
+        with self.assertLogs('django.request', 'WARNING'):
+            self.assertEqual(self.client.get('/api/auth/profile/').status_code, 401)
+        self.client.credentials()
+        self.assertEqual(self.client.get('/api/auth/profile/').status_code, 200)
+
+    def test_already_verified_account_keeps_its_password(self):
+        customer = User.objects.create_user(
+            email='verified@example.com', password=PASSWORD, email_verified=True,
+        )
+        challenge_id = self.send(customer.email).data['challenge_id']
+        self.assertEqual(self.verify(challenge_id, last_code()).status_code, 200)
+        customer.refresh_from_db()
+        self.assertTrue(customer.has_usable_password())
+        self.assertTrue(customer.check_password(PASSWORD))
+
 
 class MagicLinkSignInTests(APITestCase):
     def setUp(self):
@@ -122,6 +152,16 @@ class MagicLinkSignInTests(APITestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.data['error'], REFUSAL)
         self.assertEqual(len(mail.outbox), 0)
+
+    def test_pre_registered_password_dies_on_magic_link_verification(self):
+        victim = User.objects.create_user(email='reader@example.com', password=PASSWORD)
+        self.assertEqual(self.request_link(victim.email).status_code, 200)
+        token = LINK_RE.search(mail.outbox[-1].body).group(1)
+        response = self.client.post('/api/auth/magic-link/verify/', {'token': token}, format='json', **BROWSER)
+        self.assertEqual(response.status_code, 200)
+        victim.refresh_from_db()
+        self.assertTrue(victim.email_verified)
+        self.assertFalse(victim.has_usable_password())
 
 
 @override_settings(GOOGLE_CLIENT_ID='client-123')
@@ -166,3 +206,25 @@ class GoogleSignInTests(APITestCase):
         self.assertEqual(User.objects.filter(google_id='sub-1').count(), 1)
         self.assertEqual(response.data['user']['email'], 'new-address@example.com')
         self.assertFalse(User.objects.get(google_id='sub-1').email_verified)
+
+    def test_pre_registered_password_dies_on_google_verification(self):
+        victim = User.objects.create_user(email='g@example.com', password=PASSWORD)
+        old_access = issue_tokens(victim)['access']
+        response = self.google()
+        self.assertEqual(response.status_code, 200)
+        victim.refresh_from_db()
+        self.assertTrue(victim.email_verified)
+        self.assertFalse(victim.has_usable_password())
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {old_access}')
+        with self.assertLogs('django.request', 'WARNING'):
+            self.assertEqual(self.client.get('/api/auth/profile/').status_code, 401)
+        self.client.credentials()
+        self.assertEqual(self.client.get('/api/auth/profile/').status_code, 200)
+
+    def test_already_verified_google_account_keeps_its_password(self):
+        User.objects.create_user(email='g@example.com', password=PASSWORD, email_verified=True)
+        response = self.google()
+        self.assertEqual(response.status_code, 200)
+        user = User.objects.get(email='g@example.com')
+        self.assertTrue(user.has_usable_password())
+        self.assertTrue(user.check_password(PASSWORD))
