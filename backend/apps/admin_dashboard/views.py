@@ -379,8 +379,8 @@ class PaymentGatewayViewSet(viewsets.ModelViewSet):
         gateways = PaymentGateway.objects.filter(
             region=region, is_enabled=True
         ).order_by('sort_order')
-        from apps.orders.payments import gateway_is_checkout_ready
-        ready_gateways = [gateway for gateway in gateways if gateway_is_checkout_ready(gateway)]
+        from apps.orders.payments import gateway_checkout_allowed
+        ready_gateways = [gateway for gateway in gateways if gateway_checkout_allowed(gateway)]
         return Response(PaymentGatewayPublicSerializer(ready_gateways, many=True).data)
 
     @action(detail=True, methods=['post'])

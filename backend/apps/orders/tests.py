@@ -1,7 +1,6 @@
 import hashlib
 import hmac
 import json
-import os
 import time
 from datetime import timedelta
 from decimal import Decimal
@@ -29,7 +28,7 @@ from .models import (
 from .pricing import quote_cart
 from .payments import (
     PaymentError,
-    gateway_is_checkout_ready,
+    gateway_checkout_allowed,
     resolve_gateway,
     verify_paypal_signature,
     verify_stripe_signature,
@@ -64,8 +63,7 @@ class PaymentSafetyTests(TestCase):
             tax_rate='20.00',
         )
 
-    @override_settings(DEBUG=False, TESTING=False)
-    @patch.dict(os.environ, {'ALLOW_SANDBOX_PAYMENTS': 'False'})
+    @override_settings(ALLOW_SIMULATED_PAYMENTS=False, ALLOW_TEST_GATEWAYS=False)
     def test_test_gateway_is_hidden_and_rejected_in_production(self):
         gateway = PaymentGateway.objects.create(
             code='STRIPE',
@@ -74,12 +72,12 @@ class PaymentSafetyTests(TestCase):
             is_enabled=True,
             mode='TEST',
         )
-        self.assertFalse(gateway_is_checkout_ready(gateway))
+        self.assertFalse(gateway_checkout_allowed(gateway))
         with self.assertRaises(PaymentError):
             resolve_gateway(self.region, 'STRIPE')
 
     @override_settings(DEBUG=False, TESTING=False)
-    def test_live_paypal_is_checkout_ready(self):
+    def test_paypal_is_not_offered_without_a_browser_flow(self):
         gateway = PaymentGateway.objects.create(
             code='PAYPAL',
             display_name='PayPal',
@@ -89,8 +87,9 @@ class PaymentSafetyTests(TestCase):
             publishable_key='paypal-client-id',
             secret_key='not-a-real-key',
         )
-        self.assertTrue(gateway_is_checkout_ready(gateway))
-        self.assertIsNotNone(resolve_gateway(self.region, 'PAYPAL'))
+        self.assertFalse(gateway_checkout_allowed(gateway))
+        with self.assertRaises(PaymentError):
+            resolve_gateway(self.region, 'PAYPAL')
 
     @override_settings(DEBUG=False, TESTING=False)
     def test_live_stripe_is_checkout_ready(self):
@@ -102,7 +101,7 @@ class PaymentSafetyTests(TestCase):
             mode='LIVE',
             secret_key='sk_live_not_a_real_key',
         )
-        self.assertTrue(gateway_is_checkout_ready(gateway))
+        self.assertTrue(gateway_checkout_allowed(gateway))
         self.assertIsNotNone(resolve_gateway(self.region, 'STRIPE'))
 
     @override_settings(DEBUG=False, TESTING=False)
@@ -116,7 +115,7 @@ class PaymentSafetyTests(TestCase):
             publishable_key='rzp_key',
             secret_key='rzp_secret',
         )
-        self.assertTrue(gateway_is_checkout_ready(gateway))
+        self.assertTrue(gateway_checkout_allowed(gateway))
 
     @override_settings(DEBUG=False, TESTING=False)
     def test_live_razorpay_rejects_forged_signature(self):
@@ -181,7 +180,7 @@ class PaymentSafetyTests(TestCase):
             is_enabled=True,
             mode='TEST',
         )
-        self.assertTrue(gateway_is_checkout_ready(gateway))
+        self.assertTrue(gateway_checkout_allowed(gateway))
         self.assertEqual(resolve_gateway(self.region, 'COD').code, 'COD')
 
     def test_admin_serializer_never_returns_secret_material(self):

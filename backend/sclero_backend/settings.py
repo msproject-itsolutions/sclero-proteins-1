@@ -418,6 +418,15 @@ REST_FRAMEWORK = {
 RBAC_ENFORCED = env_bool('RBAC_ENFORCED', True)
 require_rbac_enforced(debug=DEBUG, building_static=_BUILDING_STATIC, rbac_enforced=RBAC_ENFORCED)
 
+# Payments. Simulated results (no provider call) exist only for local
+# development and the test suite, with no environment override. TEST-mode
+# gateways talk to the provider's sandbox and are hidden in production unless
+# an operator opts in on a staging host.
+ALLOW_SIMULATED_PAYMENTS = DEBUG or TESTING
+ALLOW_TEST_GATEWAYS = env_bool('ALLOW_TEST_GATEWAYS', DEBUG)
+# How long an unpaid online order holds its stock and coupon use.
+CHECKOUT_PAYMENT_WINDOW_MINUTES = max(5, int(os.getenv('CHECKOUT_PAYMENT_WINDOW_MINUTES', '30')))
+
 # Email / SMTP Settings (overridable per environment, and at runtime via
 # SystemSetting(key='SMTP_SETTINGS') in the admin panel)
 EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')

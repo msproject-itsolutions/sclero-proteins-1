@@ -2,15 +2,19 @@
 Payment gateway routing + adapters.
 
 Goals:
-  * Smart, region-locked routing — a gateway can only be charged if it is
-    enabled for the order's region (Razorpay/COD for India, Stripe/PayPal for UK).
-  * One uniform interface (`charge` / `verify_transaction` / `refund` / `verify_webhook_signature` / `parse_webhook_event`) regardless of provider.
-  * Refund integrity — refunds are always issued through the SAME gateway and
-    currency the order was paid with.
+  * Region-locked routing — a gateway can only be used when it is enabled for
+    the order's region (Razorpay/COD for India, Stripe/COD for the UK).
+  * Order-first collection — each online payment is opened for one order and
+    counts only once the provider confirms that order's amount and currency.
+  * Refund integrity — refunds go through the SAME gateway and currency the
+    order was paid with, carrying an idempotency key.
 
-Live SDK calls are made only when a gateway is configured with real credentials
-AND the provider SDK is installed. Otherwise a deterministic sandbox result is
-returned, preserving the project's existing sandbox checkout behaviour.
+Environment rules:
+  * A gateway with credentials always talks to its provider — live keys, or the
+    provider's sandbox with TEST keys — and never falls back to a simulated
+    result. TEST-mode gateways are offered only when ALLOW_TEST_GATEWAYS is on.
+  * A gateway without credentials is simulated (no provider call), which is
+    allowed only when ALLOW_SIMULATED_PAYMENTS is on: DEBUG or the test suite.
 """
 import hashlib
 import hmac
@@ -29,6 +33,10 @@ logger = logging.getLogger(__name__)
 
 class PaymentError(Exception):
     """Raised for routing/validation/charge failures. Carries an HTTP-friendly message."""
+
+
+class PaymentOutcomeUnknown(PaymentError):
+    """The provider could not be reached, so whether the call took effect is unknown."""
 
 
 # Stripe quotes amounts in a currency's smallest unit. Most currencies have 100
@@ -55,11 +63,8 @@ def to_minor_units(amount, currency_code: str) -> int:
 
 
 def _sandbox_payments_allowed() -> bool:
-    return (
-        settings.DEBUG
-        or getattr(settings, 'TESTING', False)
-        or os.getenv('ALLOW_SANDBOX_PAYMENTS', 'False') == 'True'
-    )
+    """Simulated results are for DEBUG and the test suite only (no override)."""
+    return bool(settings.ALLOW_SIMULATED_PAYMENTS)
 
 
 # --------------------------------------------------------------------------- #
@@ -68,13 +73,27 @@ def _sandbox_payments_allowed() -> bool:
 class BaseGatewayAdapter:
     code = None
     supports_live = False
+    # True when the storefront can collect this gateway in the browser.
+    browser_checkout = False
 
     def __init__(self, gateway):
         self.gateway = gateway  # PaymentGateway instance
 
-    # --- sandbox helpers (used until live credentials + SDK are present) ----
+    @property
+    def simulated(self):
+        """No credentials: results are simulated and no provider is ever called."""
+        return not (self.gateway and self.gateway.is_configured)
+
+    def _require_simulation_allowed(self):
+        if not _sandbox_payments_allowed():
+            raise PaymentError('Simulated payments are disabled outside development.')
+
+    def _simulated_reference(self, order):
+        return f'sim_{(self.code or "gateway").lower()}_{order.pk}'
+
+    # --- charge-first helpers used by the current checkout view -------------
     def _sandbox_charge(self, order, payload):
-        if not _sandbox_payments_allowed() and not (self.gateway and self.gateway.is_enabled and self.gateway.mode == 'TEST'):
+        if not _sandbox_payments_allowed():
             raise PaymentError('Sandbox payments are disabled outside development.')
         return {
             "status": "SUCCESS",
@@ -88,8 +107,6 @@ class BaseGatewayAdapter:
         }
 
     def _sandbox_refund(self, order, amount, reason):
-        if not _sandbox_payments_allowed() and not (self.gateway and self.gateway.mode == 'TEST'):
-            raise PaymentError('Sandbox refunds are disabled outside development.')
         return {
             "status": "REFUNDED",
             "refund_id": f"sandbox_refund_{self.code.lower()}_{order.id}",
@@ -105,14 +122,8 @@ class BaseGatewayAdapter:
     def _is_live(self):
         return bool(self.gateway and self.gateway.mode == "LIVE" and self.gateway.secret_key)
 
-    # --- public interface ----------------------------------------------------
     def charge(self, order, payload):
-        """Verify/capture a payment. Returns a normalized result dict.
-
-        In LIVE mode subclasses should call the provider SDK to VERIFY the
-        client-supplied payment reference (e.g. Razorpay signature, Stripe
-        PaymentIntent) before returning SUCCESS. Until keys exist we sandbox.
-        """
+        """Verify/capture a payment for the charge-first checkout."""
         if self._is_live:
             raise PaymentError(
                 f'{self.code} live capture is not implemented; disable this gateway '
@@ -120,15 +131,87 @@ class BaseGatewayAdapter:
             )
         return self._sandbox_charge(order, payload)
 
-    def refund(self, order, amount, reason=""):
+    # --- order-first collection ---------------------------------------------
+    def open_payment(self, order):
+        """Open the provider payment for this order: {'reference', 'client'}."""
+        if self.simulated:
+            self._require_simulation_allowed()
+            return {'reference': self._simulated_reference(order), 'client': {'simulated': True}}
+        return self._open_provider_payment(order)
+
+    def resume_payment(self, order):
+        """State of the order's open payment ('open', 'processing', 'succeeded'
+        or 'closed') plus the fields the browser SDK needs."""
+        if self.simulated:
+            self._require_simulation_allowed()
+            return {'state': 'open', 'client': {'simulated': True}}
+        return self._resume_provider_payment(order)
+
+    def cancel_payment(self, order):
+        """Close the order's open payment: 'canceled', 'processing' or 'succeeded'."""
+        if self.simulated or not order.payment_reference:
+            return 'canceled'
+        return self._cancel_provider_payment(order)
+
+    def verify_payment(self, order, client_payload):
+        """Ask the provider whether this order's payment completed.
+
+        Returns {'state': 'paid', 'transaction_id', 'amount_minor', 'currency',
+        'raw'} or {'state': 'processing', 'raw'}; raises PaymentError otherwise.
+        """
+        if self.simulated:
+            self._require_simulation_allowed()
+            return self._simulated_verification(order)
+        return self._verify_provider_payment(order, client_payload or {})
+
+    def reconcile_order(self, order):
+        """Server-side lookup of the order's payment: 'paid' (with the
+        verification fields), 'pending', 'failed' or 'unavailable'."""
+        if self.simulated:
+            # Only the shopper's browser confirms a simulated payment.
+            return {'state': 'unavailable'}
+        if not order.payment_reference:
+            return {'state': 'failed'}
+        return self._reconcile_provider_order(order)
+
+    def _simulated_verification(self, order):
+        return {
+            'state': 'paid',
+            'transaction_id': order.payment_reference or self._simulated_reference(order),
+            'amount_minor': to_minor_units(order.total, order.currency_code),
+            'currency': (order.currency_code or '').upper(),
+            'raw': {'simulated': True, 'gateway': self.code},
+        }
+
+    def _open_provider_payment(self, order):
+        raise PaymentError(f'{self.code} cannot collect payments in the browser.')
+
+    def _resume_provider_payment(self, order):
+        raise PaymentError(f'{self.code} cannot collect payments in the browser.')
+
+    def _cancel_provider_payment(self, order):
+        return 'canceled'
+
+    def _verify_provider_payment(self, order, client_payload):
+        raise PaymentError(f'{self.code} cannot confirm browser payments.')
+
+    def _reconcile_provider_order(self, order):
+        return {'state': 'unavailable'}
+
+    # --- refunds ------------------------------------------------------------
+    def refund(self, order, amount, reason='', idempotency_key=None):
         if not (self.gateway and self.gateway.supports_refunds):
             raise PaymentError(f"{self.code} does not support refunds.")
-        if self._is_live:
-            raise PaymentError(
-                f'{self.code} live refunds are not implemented; reconcile this '
-                'refund in the provider dashboard.'
-            )
-        return self._sandbox_refund(order, amount, reason)
+        if self.simulated:
+            self._require_simulation_allowed()
+            return self._sandbox_refund(order, amount, reason)
+        return self._provider_refund(order, amount, reason, idempotency_key)
+
+    def _provider_refund(self, order, amount, reason, idempotency_key):
+        raise PaymentError(
+            f'{self.code} refunds are not implemented; reconcile this refund in the '
+            'provider dashboard.'
+        )
 
     def create_intent(self, amount, currency_code, metadata=None):
         """Open a payment with the provider so the browser SDK can collect it.
@@ -189,9 +272,12 @@ class BaseGatewayAdapter:
 class RazorpayAdapter(BaseGatewayAdapter):
     code = "RAZORPAY"
     supports_live = True
+    browser_checkout = True
 
     API_BASE = "https://api.razorpay.com/v1"
     TIMEOUT = 20
+    VERIFY_FAILED = "Payment verification failed. Please contact support before retrying."
+    REFUND_STATES = {'processed': 'REFUNDED', 'pending': 'PENDING', 'failed': 'FAILED'}
 
     def _auth(self):
         # Razorpay authenticates with key_id:key_secret basic auth.
@@ -205,7 +291,7 @@ class RazorpayAdapter(BaseGatewayAdapter):
             )
         except requests.RequestException as exc:
             logger.exception("Razorpay %s %s failed to connect", method, path)
-            raise PaymentError("Could not reach Razorpay. No money has been taken; please try again.") from exc
+            raise PaymentOutcomeUnknown("Could not reach Razorpay. Please try again.") from exc
 
         try:
             body = resp.json()
@@ -342,27 +428,121 @@ class RazorpayAdapter(BaseGatewayAdapter):
             return {'state': 'failed', 'raw': payment}
         return {'state': 'pending', 'raw': payment}
 
-    def refund(self, order, amount, reason=""):
-        if not (self.gateway and self.gateway.supports_refunds):
-            raise PaymentError(f"{self.code} does not support refunds.")
-        if not self._is_live:
-            return self._sandbox_refund(order, amount, reason)
+    # --- order-first collection ---------------------------------------------
+    def _client(self, order, reference):
+        return {
+            'razorpay_order_id': reference,
+            'key_id': self.gateway.publishable_key or '',
+            'amount': to_minor_units(order.total, order.currency_code),
+            'currency': (order.currency_code or '').upper(),
+        }
 
+    def _open_provider_payment(self, order):
+        rzp_order = self._request('POST', '/orders', data={
+            'amount': to_minor_units(order.total, order.currency_code),
+            'currency': (order.currency_code or '').upper(),
+            'receipt': f'order-{order.pk}',
+            'notes[order_id]': str(order.pk),
+        })
+        reference = rzp_order.get('id') or ''
+        if not reference.startswith('order_'):
+            raise PaymentError('Razorpay returned an unexpected response.')
+        return {'reference': reference, 'client': self._client(order, reference)}
+
+    def _resume_provider_payment(self, order):
+        rzp_order = self._request('GET', f'/orders/{order.payment_reference}')
+        state = 'succeeded' if rzp_order.get('status') == 'paid' else 'open'
+        return {'state': state, 'client': self._client(order, order.payment_reference)}
+
+    def _order_payments(self, order):
+        return self._request('GET', f'/orders/{order.payment_reference}/payments').get('items') or []
+
+    def _cancel_provider_payment(self, order):
+        # Razorpay orders cannot be cancelled; an unpaid one simply expires.
+        statuses = {payment.get('status') for payment in self._order_payments(order)}
+        if 'captured' in statuses:
+            return 'succeeded'
+        if 'authorized' in statuses:
+            return 'processing'
+        return 'canceled'
+
+    def _verify_provider_payment(self, order, client_payload):
+        reference = order.payment_reference or ''
+        payment_id = str(client_payload.get('razorpay_payment_id') or '')
+        if not reference.startswith('order_'):
+            raise PaymentError('This order has no Razorpay payment to confirm.')
+        if str(client_payload.get('razorpay_order_id') or '') != reference or not payment_id.startswith('pay_'):
+            raise PaymentError(self.VERIFY_FAILED)
+        # The handler signature proves the callback came from Razorpay for this
+        # Razorpay order. It is mandatory: nothing is fetched without it.
+        signed = f'{reference}|{payment_id}'.encode()
+        signature = str(client_payload.get('razorpay_signature') or '')
+        if not verify_razorpay_signature(signed, signature, self.gateway.secret_key):
+            logger.error('Razorpay signature mismatch for order %s', order.pk)
+            raise PaymentError(self.VERIFY_FAILED)
+        return self._verification_from_payment(order, self._request('GET', f'/payments/{payment_id}'))
+
+    def _verification_from_payment(self, order, payment):
+        """Accept a payment only for this Razorpay order, amount and currency."""
+        payment_id = payment.get('id') or ''
+        if payment.get('order_id') != order.payment_reference:
+            raise PaymentError('The payment does not belong to this order.')
+        expected = to_minor_units(order.total, order.currency_code)
+        currency = (payment.get('currency') or '').upper()
+        if currency != (order.currency_code or '').upper():
+            raise PaymentError('The payment currency does not match the order.')
+        if int(payment.get('amount') or 0) != expected:
+            logger.error('Razorpay amount mismatch on order %s: got %s', order.pk, payment.get('amount'))
+            raise PaymentError('The amount paid does not match the order total.')
+        state = payment.get('status')
+        if state == 'authorized':
+            # Funds are held but not taken; capture or they auto-void.
+            try:
+                payment = self._request(
+                    'POST', f'/payments/{payment_id}/capture',
+                    data={'amount': expected, 'currency': currency},
+                )
+            except PaymentOutcomeUnknown:
+                raise
+            except PaymentError:
+                # A concurrent confirmation may already have captured it.
+                payment = self._request('GET', f'/payments/{payment_id}')
+            state = payment.get('status')
+        if state != 'captured':
+            raise PaymentError(f'Payment was not completed (status: {state}).')
+        return {
+            'state': 'paid', 'transaction_id': payment_id, 'amount_minor': expected,
+            'currency': currency,
+            'raw': {'gateway': self.code, 'payment': payment_id, 'method': payment.get('method')},
+        }
+
+    def _reconcile_provider_order(self, order):
+        payments = self._order_payments(order)
+        for payment in payments:
+            if payment.get('status') in ('captured', 'authorized'):
+                return self._verification_from_payment(order, payment)
+        if any(payment.get('status') == 'created' for payment in payments):
+            return {'state': 'pending'}
+        return {'state': 'failed'}
+
+    def _provider_refund(self, order, amount, reason, idempotency_key):
         if not (order.payment_id or "").startswith("pay_"):
             raise PaymentError("This order has no Razorpay payment to refund against.")
-
-        minor = to_minor_units(amount, order.currency_code)
-        # NOTE: unlike Stripe, Razorpay's refund API has no idempotency key, so a
-        # retry after a timeout can issue a second refund. The caller records the
-        # refund row; reconcile in the Razorpay dashboard before re-running one.
-        body = self._request(
-            "POST", f"/payments/{order.payment_id}/refund",
-            data={"amount": minor, "notes[order_id]": str(order.id), "notes[reason]": (reason or "")[:255]},
-        )
+        data = {
+            "amount": to_minor_units(amount, order.currency_code),
+            "notes[order_id]": str(order.id),
+            "notes[reason]": (reason or "")[:255],
+        }
+        if idempotency_key:
+            # Razorpay has no idempotency header; the key in the notes lets the
+            # refund webhook and staff match the refund to our record.
+            data["notes[refund_id]"] = idempotency_key
+        body = self._request("POST", f"/payments/{order.payment_id}/refund", data=data)
+        razorpay_status = body.get("status")
         return {
-            "status": "REFUNDED" if body.get("status") in ("processed", "pending") else "FAILED",
-            "refund_id": body.get("id"),
-            "raw": {"gateway": self.code, "mode": "LIVE", "razorpay_status": body.get("status")},
+            "status": self.REFUND_STATES.get(razorpay_status, "PENDING"),
+            "refund_id": body.get("id") or "",
+            "raw": {"gateway": self.code, "razorpay_status": razorpay_status},
         }
 
     def verify_webhook_signature(self, raw_body: bytes, headers: dict, secret: str) -> bool:
@@ -405,27 +585,38 @@ class RazorpayAdapter(BaseGatewayAdapter):
 class StripeAdapter(BaseGatewayAdapter):
     code = "STRIPE"
     supports_live = True
+    browser_checkout = True
 
     API_BASE = "https://api.stripe.com/v1"
     TIMEOUT = 20
+    SESSION_STATES = {
+        'succeeded': 'succeeded', 'processing': 'processing', 'requires_capture': 'processing',
+        'canceled': 'closed',
+    }
+    REFUND_STATES = {
+        'succeeded': 'REFUNDED', 'pending': 'PENDING', 'requires_action': 'PENDING',
+        'failed': 'FAILED', 'canceled': 'FAILED',
+    }
 
-    def _request(self, method, path, data=None):
+    def _request(self, method, path, data=None, idempotency_key=None):
         """Call the Stripe REST API with the gateway's secret key.
 
         Uses `requests` rather than the stripe SDK to stay consistent with the
         PayPal adapter and avoid a new runtime dependency.
         """
+        headers = {'Idempotency-Key': idempotency_key} if idempotency_key else None
         try:
             resp = requests.request(
                 method,
                 f"{self.API_BASE}{path}",
                 auth=(self.gateway.secret_key, ""),
                 data=data,
+                headers=headers,
                 timeout=self.TIMEOUT,
             )
         except requests.RequestException as exc:
             logger.exception("Stripe %s %s failed to connect", method, path)
-            raise PaymentError("Could not reach Stripe. No money has been taken; please try again.") from exc
+            raise PaymentOutcomeUnknown("Could not reach Stripe. Please try again.") from exc
 
         try:
             body = resp.json()
@@ -547,48 +738,115 @@ class StripeAdapter(BaseGatewayAdapter):
             return {'state': 'failed', 'raw': intent}
         return {'state': 'pending', 'raw': intent}
 
-    def refund(self, order, amount, reason=""):
-        if not (self.gateway and self.gateway.supports_refunds):
-            raise PaymentError(f"{self.code} does not support refunds.")
-        if not self._is_live:
-            return self._sandbox_refund(order, amount, reason)
+    # --- order-first collection ---------------------------------------------
+    def _client(self, intent):
+        return {
+            'client_secret': intent.get('client_secret'),
+            'publishable_key': self.gateway.publishable_key or '',
+        }
 
+    def _open_provider_payment(self, order):
+        intent = self._request('POST', '/payment_intents', data={
+            'amount': to_minor_units(order.total, order.currency_code),
+            'currency': (order.currency_code or '').lower(),
+            'automatic_payment_methods[enabled]': 'true',
+            'description': f'Order #{order.pk}',
+            'metadata[order_id]': str(order.pk),
+            'metadata[region]': order.region.code,
+        }, idempotency_key=f'order-{order.pk}-intent')
+        reference = intent.get('id') or ''
+        if not reference.startswith('pi_'):
+            raise PaymentError('Stripe returned an unexpected response.')
+        return {'reference': reference, 'client': self._client(intent)}
+
+    def _resume_provider_payment(self, order):
+        intent = self._request('GET', f'/payment_intents/{order.payment_reference}')
+        return {
+            'state': self.SESSION_STATES.get(intent.get('status'), 'open'),
+            'client': self._client(intent),
+        }
+
+    def _cancel_provider_payment(self, order):
+        reference = order.payment_reference
+        try:
+            intent = self._request('POST', f'/payment_intents/{reference}/cancel')
+        except PaymentOutcomeUnknown:
+            raise
+        except PaymentError:
+            # Stripe refuses to cancel a paid or processing intent; ask which.
+            intent = self._request('GET', f'/payment_intents/{reference}')
+        status_ = intent.get('status')
+        if status_ == 'succeeded':
+            return 'succeeded'
+        if status_ in ('processing', 'requires_capture'):
+            return 'processing'
+        if status_ == 'canceled':
+            return 'canceled'
+        raise PaymentError(f'Stripe could not cancel payment {reference} (status: {status_}).')
+
+    def _verify_provider_payment(self, order, client_payload):
+        if not (order.payment_reference or '').startswith('pi_'):
+            raise PaymentError('This order has no Stripe payment to confirm.')
+        intent = self._request('GET', f'/payment_intents/{order.payment_reference}')
+        return self._verification_from_intent(order, intent)
+
+    def _verification_from_intent(self, order, intent):
+        """Accept an intent only for this order, amount and currency."""
+        metadata = intent.get('metadata') or {}
+        if str(metadata.get('order_id') or '') != str(order.pk):
+            logger.error('Stripe intent %s is not for order %s', intent.get('id'), order.pk)
+            raise PaymentError('The payment does not belong to this order.')
+        status_ = intent.get('status')
+        if status_ in ('processing', 'requires_capture'):
+            return {'state': 'processing', 'raw': {'gateway': self.code, 'status': status_}}
+        if status_ != 'succeeded':
+            raise PaymentError(f'Payment was not completed (status: {status_}).')
+        currency = (intent.get('currency') or '').upper()
+        if currency != (order.currency_code or '').upper():
+            raise PaymentError('The payment currency does not match the order.')
+        received = int(intent.get('amount_received') or 0)
+        if received != to_minor_units(order.total, order.currency_code):
+            logger.error('Stripe amount mismatch on order %s: got %s', order.pk, received)
+            raise PaymentError('The amount paid does not match the order total.')
+        return {
+            'state': 'paid', 'transaction_id': intent.get('id'), 'amount_minor': received,
+            'currency': currency,
+            'raw': {'gateway': self.code, 'intent': intent.get('id'), 'latest_charge': intent.get('latest_charge')},
+        }
+
+    def _reconcile_provider_order(self, order):
+        intent = self._request('GET', f'/payment_intents/{order.payment_reference}')
+        status_ = intent.get('status')
+        if status_ == 'succeeded':
+            return self._verification_from_intent(order, intent)
+        if status_ in ('processing', 'requires_capture', 'requires_action'):
+            return {'state': 'pending', 'raw': {'status': status_}}
+        return {'state': 'failed', 'raw': {'status': status_}}
+
+    def _provider_refund(self, order, amount, reason, idempotency_key):
         if not (order.payment_id or "").startswith("pi_"):
             raise PaymentError("This order has no Stripe PaymentIntent to refund against.")
-
+        minor = to_minor_units(amount, order.currency_code)
         data = {
             "payment_intent": order.payment_id,
-            "amount": to_minor_units(amount, order.currency_code),
+            "amount": minor,
             "metadata[order_id]": str(order.id),
         }
         if reason:
             data["metadata[reason]"] = reason[:500]
-
-        # Stripe dedupes retries of the same refund for 24h via this key, so a
-        # timeout-and-retry cannot pay the customer twice.
-        headers_key = f"refund_{order.id}_{to_minor_units(amount, order.currency_code)}"
-        try:
-            resp = requests.post(
-                f"{self.API_BASE}/refunds",
-                auth=(self.gateway.secret_key, ""),
-                data=data,
-                headers={"Idempotency-Key": headers_key},
-                timeout=self.TIMEOUT,
-            )
-            body = resp.json()
-        except (requests.RequestException, ValueError) as exc:
-            logger.exception("Stripe refund failed for order %s", order.id)
-            raise PaymentError("Could not reach Stripe to issue the refund.") from exc
-
-        if resp.status_code >= 400:
-            err = (body.get("error") or {})
-            logger.error("Stripe refund error for order %s: %s", order.id, err.get("message"))
-            raise PaymentError(err.get("message") or "Stripe rejected the refund.")
-
+        if idempotency_key:
+            data["metadata[refund_key]"] = idempotency_key
+        # Stripe dedupes retries with the same key for 24h, so a timeout and
+        # retry cannot pay the customer twice.
+        body = self._request(
+            "POST", "/refunds", data=data,
+            idempotency_key=idempotency_key or f"refund_{order.id}_{minor}",
+        )
+        stripe_status = body.get("status")
         return {
-            "status": "REFUNDED" if body.get("status") in ("succeeded", "pending") else "FAILED",
-            "refund_id": body.get("id"),
-            "raw": {"gateway": self.code, "mode": "LIVE", "stripe_status": body.get("status")},
+            "status": self.REFUND_STATES.get(stripe_status, "PENDING"),
+            "refund_id": body.get("id") or "",
+            "raw": {"gateway": self.code, "stripe_status": stripe_status},
         }
 
     def verify_webhook_signature(self, raw_body: bytes, headers: dict, secret: str) -> bool:
@@ -749,11 +1007,7 @@ class PayPalAdapter(BaseGatewayAdapter):
             return {'state': 'failed', 'raw': remote}
         return {'state': 'pending', 'raw': remote}
 
-    def refund(self, order, amount, reason=''):
-        if not (self.gateway and self.gateway.supports_refunds):
-            raise PaymentError('PayPal refunds are disabled for this gateway.')
-        if not self._is_live:
-            return self._sandbox_refund(order, amount, reason)
+    def _provider_refund(self, order, amount, reason, idempotency_key):
         if not order.payment_id:
             raise PaymentError('This order has no PayPal capture reference to refund.')
         body = self._request(
@@ -765,12 +1019,14 @@ class PayPalAdapter(BaseGatewayAdapter):
                 },
                 'note_to_payer': (reason or 'Refund from Sclero Proteins')[:255],
             },
-            idempotency_key=f'paypal_refund_{order.id}_{to_minor_units(amount, order.currency_code)}',
+            idempotency_key=idempotency_key
+            or f'paypal_refund_{order.id}_{to_minor_units(amount, order.currency_code)}',
         )
+        paypal_status = body.get('status')
         return {
-            'status': 'REFUNDED' if body.get('status') in ('COMPLETED', 'PENDING') else 'FAILED',
+            'status': {'COMPLETED': 'REFUNDED', 'PENDING': 'PENDING'}.get(paypal_status, 'FAILED'),
             'refund_id': body.get('id', ''),
-            'raw': {'gateway': self.code, 'mode': 'LIVE', 'paypal_status': body.get('status')},
+            'raw': {'gateway': self.code, 'paypal_status': paypal_status},
         }
 
     def verify_webhook_signature(self, raw_body: bytes, headers: dict, secret: str) -> bool:
@@ -815,6 +1071,14 @@ class CODAdapter(BaseGatewayAdapter):
     code = "COD"
     supports_live = True
 
+    @property
+    def simulated(self):
+        # Cash is collected offline; there is never a provider to simulate.
+        return False
+
+    def _open_provider_payment(self, order):
+        raise PaymentError('Cash on delivery takes no online payment.')
+
     def charge(self, order, payload):
         return {
             "status": "PENDING",
@@ -822,7 +1086,7 @@ class CODAdapter(BaseGatewayAdapter):
             "raw": {"gateway": "COD", "message": "Cash to be collected on delivery"},
         }
 
-    def refund(self, order, amount, reason=""):
+    def refund(self, order, amount, reason="", idempotency_key=None):
         return {
             "status": "REFUND_PENDING",
             "refund_id": f"cod_refund_{order.id}",
@@ -866,47 +1130,52 @@ def get_adapter(gateway):
     return adapter
 
 
-def resolve_gateway(region, code, allow_disabled=False):
-    """
-    Region-locked gateway resolution ("smart routing").
-    """
-    code = (code or "").upper()
-    filter_kwargs = {'region': region, 'code': code}
-    if not allow_disabled:
-        filter_kwargs['is_enabled'] = True
-    gateway = PaymentGateway.objects.filter(**filter_kwargs).first()
-    if not gateway and allow_disabled:
-        gateway = PaymentGateway.objects.filter(code=code).first()
-    if not gateway:
-        if allow_disabled:
-            return CODAdapter(None)
-        region_str = region.code if region else 'N/A'
-        raise PaymentError(f"Payment method '{code}' is not available for region {region_str}.")
-    adapter = get_adapter(gateway)
-    if gateway.code == 'COD' or allow_disabled:
-        return adapter
-    if gateway.mode == 'LIVE' and not adapter.supports_live:
-        raise PaymentError(
-            f"Payment method '{code}' is disabled because its live provider adapter "
-            'has not been implemented.'
-        )
-    if gateway.mode != 'LIVE' and not gateway.is_configured and not _sandbox_payments_allowed():
-        raise PaymentError(f"Test payment method '{code}' is disabled in production.")
-    return adapter
+def gateway_checkout_allowed(gateway) -> bool:
+    """Whether the storefront may offer and accept this gateway.
 
-
-def gateway_is_checkout_ready(gateway) -> bool:
-    """Return whether a gateway can safely be offered to a shopper."""
-    if not gateway or not gateway.is_enabled:
+    COD is always allowed. An online gateway needs a browser flow; without
+    credentials it can only be simulated (development and tests); with TEST-mode
+    credentials it talks to the provider sandbox, allowed only when
+    ALLOW_TEST_GATEWAYS is on.
+    """
+    if gateway is None or not gateway.is_enabled:
         return False
-    adapter = get_adapter(gateway)
     if gateway.code == 'COD':
         return True
+    adapter_class = _ADAPTERS.get(gateway.code)
+    if adapter_class is None or not adapter_class.browser_checkout:
+        return False
+    if not gateway.is_configured:
+        return bool(settings.ALLOW_SIMULATED_PAYMENTS)
     if gateway.mode == 'LIVE':
-        return adapter.supports_live
-    if gateway.is_configured:
         return True
-    return _sandbox_payments_allowed()
+    return bool(settings.ALLOW_TEST_GATEWAYS)
+
+
+def resolve_gateway(region, code, allow_disabled=False):
+    """Region-locked gateway resolution ("smart routing").
+
+    Checkout uses the default: the gateway must be enabled and pass
+    gateway_checkout_allowed. allow_disabled=True serves refunds and the
+    reconciliation of existing orders, whose gateway may since be disabled.
+    """
+    code = (code or "").upper()
+    if allow_disabled:
+        gateway = (
+            PaymentGateway.objects.filter(region=region, code=code).first()
+            or PaymentGateway.objects.filter(code=code).first()
+        )
+        return get_adapter(gateway) if gateway else CODAdapter(None)
+    gateway = PaymentGateway.objects.filter(region=region, code=code, is_enabled=True).first()
+    if not gateway_checkout_allowed(gateway):
+        region_str = region.code if region else 'N/A'
+        raise PaymentError(f"Payment method '{code}' is not available for region {region_str}.")
+    return get_adapter(gateway)
+
+
+def adapter_for_order(order):
+    """The adapter for an existing order's gateway, even if it was since disabled."""
+    return resolve_gateway(order.region, order.payment_method, allow_disabled=True)
 
 
 def refund_payment(order, amount=None, reason=""):
