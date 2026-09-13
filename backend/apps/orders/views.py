@@ -17,16 +17,19 @@ from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import validate_email
 from django.utils import timezone
-from apps.regions.models import Region, Warehouse
-from apps.products.models import Product, ProductRegionConfig, ProductVariant
+from apps.regions.models import Region
+from apps.products.models import Product, ProductRegionConfig
 from apps.products.pricing import resolve_price, resolve_variant_price
-from apps.inventory.models import StockLevel
 from apps.users.permissions import require_permission
 from .models import Cart, CartItem, Order, OrderItem, Invoice, PaymentLog, Refund, AuditLog, Coupon, WebhookEvent
 from .serializers import (
     CartSerializer, OrderSerializer, RefundSerializer,
     OrderAdminSerializer, OrderAdminUpdateSerializer, RefundAdminSerializer, InvoiceAdminSerializer,
     CouponAdminSerializer,
+)
+from .stock import (
+    StockError, available_for_variant, deduct_region_stock, deduct_variant_stock,
+    restock_region_item, restock_variant_item,
 )
 from .utils import generate_invoice_pdf
 from .payments import resolve_gateway, refund_payment, PaymentError
@@ -66,13 +69,6 @@ def _requested_variant(product, data):
     return active.first(), ''
 
 
-def _available_for_variant(product, region, variant=None):
-    region_stock = _region_total_available_stock(product, region)
-    if variant is None:
-        return region_stock
-    return min(region_stock, variant.stock_qty)
-
-
 def _select_cart_item(cart, data):
     cart_item_id = data.get('cart_item_id')
     if cart_item_id:
@@ -89,94 +85,6 @@ def _select_cart_item(cart, data):
     if queryset.count() > 1:
         return None, 'This product has multiple options in the cart; cart_item_id is required.'
     return queryset.first(), None
-
-
-def _region_warehouse_queryset(region):
-    return Warehouse.objects.filter(region=region, is_active=True).order_by('id')
-
-
-def _region_stock_queryset(product, region, *, for_update=False):
-    queryset = StockLevel.objects.filter(
-        product=product,
-        warehouse__in=_region_warehouse_queryset(region),
-    ).select_related('warehouse')
-    if for_update:
-        queryset = queryset.select_for_update()
-    return queryset.order_by('-available', 'warehouse_id', 'id')
-
-
-def _region_total_available_stock(product, region):
-    return _region_stock_queryset(product, region).aggregate(
-        total=Sum('available')
-    )['total'] or 0
-
-
-def _deduct_region_stock(product, region, quantity):
-    remaining = quantity
-    stock_rows = list(_region_stock_queryset(product, region, for_update=True))
-    total_available = sum(stock.available for stock in stock_rows)
-    if total_available < quantity:
-        raise PaymentError(
-            f"Product {product.name} is out of stock in this region."
-        )
-
-    for stock in stock_rows:
-        if remaining <= 0:
-            break
-        take = min(stock.available, remaining)
-        if take <= 0:
-            continue
-        stock.available -= take
-        stock.save(update_fields=['available', 'updated_at'])
-        remaining -= take
-
-
-def _deduct_variant_stock(product, variant_sku, quantity):
-    if not variant_sku:
-        return
-    variant = ProductVariant.objects.select_for_update().filter(
-        product=product, sku=variant_sku, is_active=True,
-    ).first()
-    if variant is None:
-        raise PaymentError(f"The selected option for {product.name} is no longer available.")
-    if variant.stock_qty < quantity:
-        raise PaymentError(f"Only {variant.stock_qty} units of {variant.name} are available.")
-    variant.stock_qty -= quantity
-    variant.save(update_fields=['stock_qty', 'updated_at'])
-
-
-def _restock_region_item(product, region, quantity):
-    stock_rows = list(_region_stock_queryset(product, region, for_update=True))
-    if stock_rows:
-        target = stock_rows[0]
-    else:
-        warehouse = _region_warehouse_queryset(region).first()
-        if not warehouse:
-            return
-        target, _created = StockLevel.objects.get_or_create(
-            warehouse=warehouse,
-            product=product,
-            defaults={'available': 0, 'reserved': 0, 'low_stock_threshold': 10},
-        )
-    target.available += quantity
-    target.save(update_fields=['available', 'updated_at'])
-
-
-def _restock_variant_item(product, variant_sku, quantity):
-    if not variant_sku:
-        return
-    variant = ProductVariant.objects.select_for_update().filter(
-        product=product, sku=variant_sku,
-    ).first()
-    if variant is None:
-        logger.warning(
-            'Could not restock removed variant %s for product %s.',
-            variant_sku,
-            product.pk,
-        )
-        return
-    variant.stock_qty += quantity
-    variant.save(update_fields=['stock_qty', 'updated_at'])
 
 
 def _run_checkout_followups(order_id):
@@ -336,7 +244,7 @@ class CartViewSet(viewsets.ViewSet):
             duplicate.delete()
         line = lines[0] if lines else None
         requested_quantity = quantity + (line.quantity if line else 0)
-        total_available = _available_for_variant(product, region, variant)
+        total_available = available_for_variant(product, region, variant)
         if total_available < requested_quantity:
             response = Response(
                 {"error": f"Only {total_available} units are available in your region's stock."},
@@ -383,7 +291,7 @@ class CartViewSet(viewsets.ViewSet):
                         {"error": "The selected product option is no longer available."},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
-            total_available = _available_for_variant(cart_item.product, cart.region, variant)
+            total_available = available_for_variant(cart_item.product, cart.region, variant)
             if total_available < quantity:
                 return Response({"error": f"Only {total_available} units available in stock."}, status=status.HTTP_400_BAD_REQUEST)
             cart_item.quantity = quantity
@@ -663,13 +571,13 @@ class CheckoutView(views.APIView):
         try:
             with transaction.atomic():
                 for product, variant, qty, _price in order_items_to_create:
-                    _deduct_region_stock(product, region, qty)
-                    _deduct_variant_stock(
+                    deduct_region_stock(product, region, qty)
+                    deduct_variant_stock(
                         product,
                         variant.sku if variant else '',
                         qty,
                     )
-        except PaymentError as exc:
+        except StockError as exc:
             return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         # 2c. Consume the coupon only once the sale is actually going through.
@@ -957,8 +865,8 @@ class RefundView(views.APIView):
         # Optionally return stock to the region's warehouse.
         if str(request.data.get('restock', '')).lower() in ('1', 'true', 'yes'):
             for item in order.items.all():
-                _restock_region_item(item.product, order.region, item.quantity)
-                _restock_variant_item(
+                restock_region_item(item.product, order.region, item.quantity)
+                restock_variant_item(
                     item.product, item.variant_sku, item.quantity,
                 )
 

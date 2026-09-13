@@ -1,4 +1,5 @@
 import os
+import secrets
 from pathlib import Path
 from xml.sax.saxutils import escape
 from reportlab.lib.pagesizes import letter
@@ -8,7 +9,6 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from django.utils import timezone
 
 # ---------------------------------------------------------------------------
 # Register Unicode-capable fonts so ₹ and £ render correctly in the PDF.
@@ -132,6 +132,17 @@ def _company_block(region):
     }
 
 
+def _invoice_filename(order):
+    """Keep an invoice's existing file name; new invoices get an unguessable one."""
+    from .models import Invoice
+
+    existing = Invoice.objects.filter(order=order).values_list('pdf_file', flat=True).first() or ''
+    name = Path(existing).name
+    if existing.startswith('invoices/') and name.endswith('.pdf'):
+        return name
+    return f"invoice_{order.id}_{secrets.token_hex(8)}.pdf"
+
+
 def generate_invoice_pdf(order):
     """
     Generates a professional GST Tax Invoice or VAT Receipt PDF using ReportLab.
@@ -154,8 +165,7 @@ def generate_invoice_pdf(order):
     invoice_dir = Path(settings.MEDIA_ROOT) / 'invoices'
     os.makedirs(invoice_dir, exist_ok=True)
     
-    created_at_dt = getattr(order, 'created_at', None) or timezone.now()
-    invoice_filename = f"invoice_{order.id}_{created_at_dt.strftime('%Y%m%d%H%M%S')}.pdf"
+    invoice_filename = _invoice_filename(order)
     pdf_path = invoice_dir / invoice_filename
     
     # Setup document template
