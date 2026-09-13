@@ -35,6 +35,7 @@ const BANNER_SPECS = [
 
 const ORDER_STATUSES = ['PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'COMPLETED', 'CANCELLED', 'REFUNDED'];
 const STATUS_COLOR = {
+  AWAITING_PAYMENT: 'bg-amber-50 text-amber-800 border border-amber-200',
   PENDING: 'bg-amber-50 text-amber-800 border border-amber-200',
   PROCESSING: 'bg-blue-50 text-blue-700 border border-blue-200',
   SHIPPED: 'bg-indigo-50 text-indigo-700 border border-indigo-200',
@@ -50,7 +51,11 @@ const PAYMENT_STATUS_COLOR = {
   PAID: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
   FAILED: 'bg-rose-50 text-rose-700 border border-rose-200',
   REFUNDED: 'bg-slate-50 text-slate-600 border border-slate-200',
+  PARTIALLY_REFUNDED: 'bg-violet-50 text-violet-700 border border-violet-200',
+  EXPIRED: 'bg-slate-50 text-slate-500 border border-slate-200',
 };
+// Payment statuses an order in the Orders workspace can have.
+const ORDER_PAYMENT_FILTERS = ['PENDING', 'PAID', 'PARTIALLY_REFUNDED', 'REFUNDED'];
 const RECOVERY_STATUS_COLOR = {
   NOT_CONTACTED: 'bg-surface-muted text-ink-secondary',
   CONTACTED: 'bg-blue-50 text-blue-700',
@@ -1152,7 +1157,6 @@ function OrderDetail({ authFetch, order, onClose, onChanged }) {
   const [timeline, setTimeline] = useState([]);
   const [note, setNote] = useState('');
   const [noteKind, setNoteKind] = useState('NOTE');
-  const [captureAmount, setCaptureAmount] = useState('');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
 
@@ -1357,27 +1361,25 @@ function OrderDetail({ authFetch, order, onClose, onChanged }) {
       .finally(() => setSaving(false));
   };
 
-  const authorized = Number(order.payment_authorized_amount || order.total || 0);
-  const captured = Number(order.payment_captured_amount || 0);
-  const captureRemaining = Math.max(0, authorized - captured);
+  const collected = Number(order.payment_captured_amount || 0);
+  const awaitingCash = order.payment_method === 'COD' && order.payment_status === 'PENDING'
+    && !['CANCELLED', 'REFUNDED'].includes(order.status);
   const paymentLogs = order.payment_logs || [];
 
   const refreshDetail = (nextOrder) => {
     if (nextOrder?.id) onChanged(nextOrder);
     else onChanged();
   };
-  const authorizePayment = () => {
+  const recordCodPayment = () => {
+    if (!window.confirm(`Record that ${formatMoney(order.currency_code, order.total)} in cash was collected for order #${order.id}?`)) return;
     setSaving(true); setErr('');
-    authFetch(`/api/admin/orders/${order.id}/authorize_payment/`, { method: 'POST', body: JSON.stringify({ amount: order.total }) })
+    authFetch(`/api/admin/orders/${order.id}/record_cod_payment/`, { method: 'POST', body: JSON.stringify({}) })
       .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
-      .then(({ ok, d }) => { if (!ok) throw new Error(d.error || 'Unable to authorize payment.'); refreshDetail(d); })
-      .catch((e) => setErr(e.message)).finally(() => setSaving(false));
-  };
-  const capturePayment = () => {
-    setSaving(true); setErr('');
-    authFetch(`/api/admin/orders/${order.id}/capture_payment/`, { method: 'POST', body: JSON.stringify({ amount: captureAmount || captureRemaining }) })
-      .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
-      .then(({ ok, d }) => { if (!ok) throw new Error(d.error || 'Unable to capture payment.'); setCaptureAmount(''); refreshDetail(d); })
+      .then(({ ok, d }) => {
+        if (!ok) throw new Error(d.error || 'Could not record the payment.');
+        refreshDetail(d);
+        return authFetch(`/api/admin/orders/${order.id}/timeline/`).then((r) => r.json()).then((items) => setTimeline(Array.isArray(items) ? items : []));
+      })
       .catch((e) => setErr(e.message)).finally(() => setSaving(false));
   };
   const addTimelineEvent = () => {
@@ -1597,27 +1599,23 @@ function OrderDetail({ authFetch, order, onClose, onChanged }) {
                   <p className="text-sm font-bold text-ink-primary">{order.payment_method || 'N/A'}</p>
                 </div>
                 <div className="bg-surface-subtle p-3 rounded border border-edge-subtle">
-                  <p className="text-[12px] text-ink-muted font-bold uppercase tracking-wider mb-1">Authorized</p>
-                  <p className="text-sm font-bold text-ink-primary">{formatMoney(order.currency_code, authorized)}</p>
+                  <p className="text-[12px] text-ink-muted font-bold uppercase tracking-wider mb-1">Order total</p>
+                  <p className="text-sm font-bold text-ink-primary">{formatMoney(order.currency_code, order.total)}</p>
                 </div>
                 <div className="bg-surface-subtle p-3 rounded border border-edge-subtle">
-                  <p className="text-[12px] text-ink-muted font-bold uppercase tracking-wider mb-1">Captured</p>
-                  <p className="text-sm font-bold text-ink-primary">{formatMoney(order.currency_code, captured)}</p>
+                  <p className="text-[12px] text-ink-muted font-bold uppercase tracking-wider mb-1">Collected</p>
+                  <p className="text-sm font-bold text-ink-primary">{formatMoney(order.currency_code, collected)}</p>
                 </div>
               </div>
 
-              {/* Manual capture options if applicable */}
-              {captureRemaining > 0 && (
+              {awaitingCash && (
                 <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50/50 p-4 space-y-3">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-bold text-ink-accent">Uncaptured Authorization</p>
-                    <span className="rounded bg-amber-100 text-amber-800 px-2 py-0.5 text-[13px] font-bold uppercase tracking-wide">{order.payment_capture_mode || 'MANUAL'} mode</span>
+                    <p className="text-sm font-bold text-ink-accent">Cash on delivery — not collected yet</p>
+                    <span className="rounded bg-amber-100 text-amber-800 px-2 py-0.5 text-[13px] font-bold">{formatMoney(order.currency_code, order.total)}</span>
                   </div>
-                  <div className="flex flex-col gap-2 sm:flex-row">
-                    <button onClick={authorizePayment} disabled={saving} className="rounded border border-edge bg-white px-3 py-2 text-sm font-semibold text-ink-primary hover:bg-surface-muted transition disabled:opacity-50">Re-Authorize</button>
-                    <input value={captureAmount} onChange={(e) => setCaptureAmount(e.target.value)} placeholder={`Remaining ${captureRemaining.toFixed(2)}`} className="min-w-0 flex-1 rounded border border-edge px-3 py-2 text-sm focus:outline-none" />
-                    <button onClick={capturePayment} disabled={saving || captureRemaining <= 0} className="btn-primary px-4 py-2 text-sm uppercase disabled:opacity-50 font-semibold shadow-sm">Capture Funds</button>
-                  </div>
+                  <p className="text-sm text-ink-secondary">Record the payment once the courier or the store has collected the cash.</p>
+                  <button onClick={recordCodPayment} disabled={saving} className="btn-primary px-4 py-2 text-sm uppercase disabled:opacity-50 font-semibold shadow-sm">Record COD payment</button>
                   {err && <p className="mt-2 rounded bg-brand-danger/10 p-2 text-sm text-brand-danger font-medium">{err}</p>}
                 </div>
               )}
@@ -1964,7 +1962,7 @@ function OrdersTab({ authFetch, initialStatus = 'ALL', title = 'orders' }) {
           </select>
           <select value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)} className="rounded-sm border border-edge px-3 py-2 text-sm">
             <option value="ALL">All payments</option>
-            {Object.keys(PAYMENT_STATUS_COLOR).map((s) => <option key={s} value={s}>{s}</option>)}
+            {ORDER_PAYMENT_FILTERS.map((s) => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
           </select>
           <select value={sort} onChange={(e) => setSort(e.target.value)} className="rounded-sm border border-edge px-3 py-2 text-sm">
             <option value="newest">Newest first</option>
@@ -2107,9 +2105,9 @@ function AbandonedTab({ authFetch }) {
   useEffect(() => { load(); }, [load]);
 
   const updateRecovery = (cart, nextStatus) => {
-    authFetch(`/api/admin/abandoned-checkouts/${cart.id || cart.session_id}/update_recovery/`, {
+    authFetch('/api/admin/abandoned-checkouts/', {
       method: 'POST',
-      body: JSON.stringify({ recovery_status: nextStatus }),
+      body: JSON.stringify({ cart_id: cart.id, recovery_status: nextStatus }),
     }).then(load);
   };
 
@@ -2131,7 +2129,7 @@ function AbandonedTab({ authFetch }) {
       <div className="grid gap-3 rounded-md border border-edge bg-white p-3 sm:grid-cols-2 lg:grid-cols-[1fr_auto_auto]">
         <label className="relative block">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-muted" />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search email, session ID" className="w-full rounded-sm border border-edge py-2.5 pl-9 pr-3 text-sm" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search email or reference" className="w-full rounded-sm border border-edge py-2.5 pl-9 pr-3 text-sm" />
         </label>
         <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-sm border border-edge px-3 py-2.5 text-sm">
           <option value="ALL">All recovery states</option>
@@ -2288,7 +2286,7 @@ function PaymentsTab({ authFetch, regions }) {
 
   if (loading) return <p className="text-sm text-brand-muted">Loading gateways and rules registry...</p>;
 
-  const manualCapture = orders.filter((o) => ['AUTHORIZED', 'PARTIALLY_CAPTURED', 'PENDING'].includes(o.payment_status));
+  const cashToCollect = orders.filter((o) => o.payment_method === 'COD' && o.payment_status === 'PENDING' && !['CANCELLED', 'REFUNDED'].includes(o.status));
 
   // Sort gateways: region code first, then sort_order priority
   const sortedGateways = [...gateways].sort((a, b) => {
@@ -2311,7 +2309,7 @@ function PaymentsTab({ authFetch, regions }) {
         <div className="space-y-5">
           <div className="grid gap-4 md:grid-cols-3">
             <div className="rounded-md border border-edge bg-white shadow-card p-4"><p className="text-sm text-brand-muted">Gateways</p><p className="mt-1 text-2xl font-semibold text-ink-primary">{gateways.length}</p></div>
-            <div className="rounded-md border border-edge bg-white shadow-card p-4"><p className="text-sm text-brand-muted">Manual capture queue</p><p className="mt-1 text-2xl font-semibold text-ink-primary">{manualCapture.length}</p></div>
+            <div className="rounded-md border border-edge bg-white shadow-card p-4"><p className="text-sm text-brand-muted">Cash to collect</p><p className="mt-1 text-2xl font-semibold text-ink-primary">{cashToCollect.length}</p></div>
             <div className="rounded-md border border-edge bg-white shadow-card p-4"><p className="text-sm text-brand-muted">Captured orders</p><p className="mt-1 text-2xl font-semibold text-ink-primary">{orders.filter((o) => (o.payment_status || 'PAID') === 'PAID').length}</p></div>
           </div>
           <div className="flex items-center justify-between"><p className="text-sm text-brand-muted">{gateways.length} gateways · region-routed by priority</p><button onClick={() => setForm({ code: providerCatalog[0]?.code || 'RAZORPAY', display_name: providerCatalog[0]?.name || '', region: regions[0]?.id, is_enabled: false, mode: 'TEST', publishable_key: '', secret_key: '', webhook_secret: '', webhook_id: '', supports_refunds: true, sort_order: 0 })} className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-sm uppercase"><Plus className="h-4 w-4" /> New gateway</button></div>
@@ -2338,15 +2336,15 @@ function PaymentsTab({ authFetch, regions }) {
           </div>
 
           <div className="rounded-md border border-edge bg-white">
-            <div className="flex items-center gap-2 border-b border-edge-subtle px-4 py-3"><ReceiptText className="h-4 w-4 text-ink-accent" /><p className="text-sm font-semibold text-ink-primary">Authorization and capture queue</p></div>
+            <div className="flex items-center gap-2 border-b border-edge-subtle px-4 py-3"><ReceiptText className="h-4 w-4 text-ink-accent" /><p className="text-sm font-semibold text-ink-primary">Cash on delivery to collect</p></div>
             <div className="divide-y divide-edge-subtle">
-              {manualCapture.slice(0, 6).map((o) => (
+              {cashToCollect.slice(0, 6).map((o) => (
                 <div key={o.id} className="flex flex-col justify-between gap-2 px-4 py-3 text-sm sm:flex-row sm:items-center">
-                  <div><p className="font-semibold text-ink-primary">Order #{o.id} | {o.email}</p><p className="text-sm text-brand-muted">{o.payment_method} | {formatMoney(o.currency_code, o.payment_captured_amount)} captured of {formatMoney(o.currency_code, o.payment_authorized_amount || o.total)}</p></div>
+                  <div><p className="font-semibold text-ink-primary">Order #{o.id} | {o.email}</p><p className="text-sm text-brand-muted">{formatMoney(o.currency_code, o.total)} to collect · {o.status}</p></div>
                   <span className={`w-fit rounded-xs px-2 py-0.5 text-[12px] font-semibold ${PAYMENT_STATUS_COLOR[o.payment_status] || 'bg-surface-muted text-ink-secondary'}`}>{o.payment_status || 'PENDING'}</span>
                 </div>
               ))}
-              {!manualCapture.length && <p className="px-4 py-5 text-sm text-brand-muted">No orders are waiting for manual capture.</p>}
+              {!cashToCollect.length && <p className="px-4 py-5 text-sm text-brand-muted">No cash-on-delivery orders are waiting for payment.</p>}
             </div>
           </div>
         </div>
