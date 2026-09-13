@@ -1,6 +1,7 @@
 import hashlib
 import logging
 import secrets
+import uuid
 import requests
 from django.conf import settings
 from django.core.validators import validate_email
@@ -16,9 +17,10 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.views import TokenRefreshView
 from django.db.models import Q, Sum
+from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
-from django.contrib.auth.hashers import check_password, make_password
+from django.contrib.auth.hashers import make_password
 from django.contrib.auth.password_validation import validate_password
 from .models import UserAddress, Role, Wishlist, WishlistItem, CustomerSegment, CustomerActivity, SupportTicket, LoginChallenge
 from .serializers import (
@@ -30,50 +32,19 @@ from .permissions import (
     require_permission, ENFORCED_PERMISSION_GROUPS, ip_allowed, is_staff_account,
 )
 from .middleware import clear_auth_cookies
+from .auth_emails import public_link_base
 from .challenges import (
-    SECOND_FACTOR_PURPOSES, ChallengeDeliveryError, ChallengeError, challenge_response_data,
-    issue_code_challenge, mask_email, requires_second_factor, resend_code, verify_code,
+    SECOND_FACTOR_PURPOSES, SECOND_FACTOR_REQUIRED_MESSAGE, ChallengeDeliveryError, ChallengeError,
+    challenge_response_data, enforce_passwordless_limit, issue_code_challenge, issue_magic_link, mask_email,
+    requires_second_factor, resend_code, verify_code, verify_magic_token,
 )
-from .sessions import SESSION_ENDED_MESSAGE, VersionedTokenRefreshSerializer, issue_tokens, start_session
+from .sessions import SESSION_ENDED_MESSAGE, VersionedTokenRefreshSerializer, start_session
 from apps.audit.context import client_ip_from_request
 from apps.audit.recorder import record_audit
 from apps.orders.models import Order
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
-
-OTP_MAX_AGE_SECONDS = 10 * 60
-
-
-def _new_otp_value():
-    from django.utils import timezone
-    code = f'{secrets.randbelow(900000) + 100000:06d}'
-    expires = int(timezone.now().timestamp()) + OTP_MAX_AGE_SECONDS
-    return code, f'otp:{expires}:{make_password(code)}'
-
-
-def _verify_otp_value(stored, candidate):
-    from django.utils import timezone
-    try:
-        purpose, expires, encoded = (stored or '').split(':', 2)
-        if purpose != 'otp' or int(expires) < int(timezone.now().timestamp()):
-            return False
-        return check_password(str(candidate), encoded)
-    except (TypeError, ValueError):
-        return False
-
-
-def _send_email_otp(email, code, subject='Your Sclero Proteins sign-in code'):
-    from apps.orders.email_service import send_branded_email
-    send_branded_email(
-        subject,
-        f'Your verification code is {code}. It expires in 10 minutes. '
-        'If you did not request this code, ignore this email.',
-        email,
-    )
-
-def get_tokens_for_user(user):
-    return issue_tokens(user)
 
 GENERIC_LOGIN_ERROR = 'Invalid email or password.'
 CODE_SEND_FAILED = 'We could not send your sign-in code. Try again in a few minutes.'
@@ -593,12 +564,51 @@ class UserAddressViewSet(viewsets.ModelViewSet):
         serializer.save()
 
 
+def _second_factor_refusal():
+    return Response(
+        {'error': SECOND_FACTOR_REQUIRED_MESSAGE, 'code': 'second_factor_required'},
+        status=status.HTTP_403_FORBIDDEN,
+    )
+
+
+def _passwordless_user(challenge):
+    """Return (user, None) for the account a verified passwordless challenge
+    proves, creating it on first use, or (None, error response)."""
+    user = challenge.user or User.objects.filter(email__iexact=challenge.email).first()
+    created = False
+    if user is None:
+        try:
+            with transaction.atomic():
+                user = User.objects.create_user(email=challenge.email, password=None, email_verified=True)
+            created = True
+        except IntegrityError:
+            user = User.objects.get(email__iexact=challenge.email)
+    # Checked again at use: the account may have become staff after the email was sent.
+    if requires_second_factor(user):
+        return None, _second_factor_refusal()
+    if not user.is_active:
+        return None, Response(
+            {'error': 'This sign-in code is no longer valid.', 'code': 'invalid'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if created:
+        record_audit(
+            'account.registered', actor=user, target_type='User', target_id=user.pk,
+            summary=f'New account registered by email sign-in: {user.email}',
+        )
+    elif not user.email_verified:
+        user.email_verified = True
+        user.save(update_fields=['email_verified'])
+    return user, None
+
+
 class SendOTPView(APIView):
+    """Email a one-time sign-in code. Never creates an account."""
     permission_classes = [AllowAny]
     throttle_scope = 'otp'
 
     def post(self, request):
-        identifier = (request.data.get('identifier') or '').strip().lower()
+        identifier = str(request.data.get('identifier') or '').strip().lower()
         try:
             validate_email(identifier)
         except DjangoValidationError:
@@ -606,200 +616,114 @@ class SendOTPView(APIView):
                 {"error": "Email OTP is supported. Phone OTP requires a configured SMS provider."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        user, _ = User.objects.get_or_create(email=identifier)
-        otp_code, stored_otp = _new_otp_value()
-        user.otp_secret = stored_otp
-        user.save(update_fields=['otp_secret'])
-
+        user = User.objects.filter(email__iexact=identifier).first()
+        if user is not None and requires_second_factor(user):
+            return _second_factor_refusal()
         try:
-            _send_email_otp(identifier, otp_code)
-        except Exception:
-            logger.exception('OTP email delivery failed for user %s.', user.pk)
-            user.otp_secret = ''
-            user.save(update_fields=['otp_secret'])
+            enforce_passwordless_limit(identifier)
+        except ChallengeError as exc:
+            return Response({'error': exc.message, 'code': exc.code}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+        if user is not None and not user.is_active:
+            # Same shape as a real send so the response never reveals the account state.
+            return Response({
+                'message': 'OTP sent successfully.',
+                'challenge_id': str(uuid.uuid4()),
+                'sent_to_masked': mask_email(identifier),
+            })
+        try:
+            challenge, code = issue_code_challenge(
+                purpose=LoginChallenge.Purpose.EMAIL_LOGIN, email=identifier, user=user,
+                ip=client_ip_from_request(request),
+            )
+        except ChallengeDeliveryError:
             return Response(
                 {"error": "Unable to send the verification code. Try again later."},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
-
-        # In Sandbox mode, we print to terminal console & return it in the response for dev ease
+        payload = {
+            'message': 'OTP sent successfully.',
+            'challenge_id': str(challenge.pk),
+            'sent_to_masked': mask_email(challenge.sent_to),
+        }
         if settings.DEBUG:
-            print(f"--> [OTP SANDBOX] Sent OTP {otp_code} to {identifier}")
-
-        payload = {"message": "OTP sent successfully."}
-        if settings.DEBUG:
-            payload["otp_preview_for_sandbox"] = otp_code
+            payload['otp_preview_for_sandbox'] = code
         return Response(payload)
 
 
 class VerifyOTPView(APIView):
+    """Exchange an emailed sign-in code for a session, creating the account on first use."""
     permission_classes = [AllowAny]
     throttle_scope = 'otp'
 
     def post(self, request):
-        identifier = (request.data.get('identifier') or '').strip().lower()
-        otp_code = str(request.data.get('otp') or '').strip()
-        
-        if not identifier or not otp_code:
-            return Response({"error": "identifier and otp are required"}, status=status.HTTP_400_BAD_REQUEST)
-
         try:
-            user = User.objects.get(email__iexact=identifier)
-        except User.DoesNotExist:
-            return Response({"error": "Invalid identifier or OTP code"}, status=status.HTTP_400_BAD_REQUEST)
-
-        if _verify_otp_value(user.otp_secret, otp_code):
-            user.otp_secret = "" # Reset OTP
-            user.save()
-            
-            import uuid
-            from django.utils import timezone
-            from apps.audit.recorder import record_audit
-            
-            client_ip = client_ip_from_request(request)
-            user_agent = request.META.get('HTTP_USER_AGENT', 'Unknown')
-            session_id = str(uuid.uuid4())
-            
-            devices = user.current_devices or []
-            new_device = {
-                "id": session_id,
-                "ip": client_ip,
-                "user_agent": user_agent,
-                "last_active": timezone.now().isoformat()
-            }
-            # Keep last 5 devices
-            devices = [new_device] + [d for d in devices if d.get('ip') != client_ip or d.get('user_agent') != user_agent][:4]
-            user.current_devices = devices
-            user.save(update_fields=['current_devices'])
-            
-            record_audit('login.success', actor=user, summary=f'OTP login verified successfully: {user.email}')
-            
-            tokens = get_tokens_for_user(user)
-            tokens['session_id'] = session_id
-            
-            return Response({
-                "user": UserSerializer(user).data,
-                "tokens": tokens,
-                "message": "OTP verified successfully!"
-            })
-            
-        return Response({"error": "Invalid OTP code"}, status=status.HTTP_400_BAD_REQUEST)
-
-
-# --- Magic-link (passwordless click-a-link) login -------------------------- #
-
-MAGIC_LINK_SALT = 'sclero-magic-link'
-MAGIC_LINK_MAX_AGE = 15 * 60  # 15 minutes
-
-
-def _safe_redirect_base(request):
-    """Pick a trusted base URL for the magic link. Only allow origins we own —
-    never echo an attacker-supplied origin (that would leak the token)."""
-    from django.conf import settings
-    origin = (request.data.get('origin') or '').rstrip('/')
-    allowed = set(getattr(settings, 'CSRF_TRUSTED_ORIGINS', []) or [])
-    allowed |= set(getattr(settings, 'CORS_ALLOWED_ORIGINS', []) or [])
-    allowed |= {'http://localhost:3000', 'http://localhost:3100', 'http://127.0.0.1:3000'}
-    if origin and origin in allowed:
-        return origin
-    site = (getattr(settings, 'SITE_URL', '') or '').rstrip('/')
-    return site or 'http://localhost:3000'
+            challenge = verify_code(
+                request.data.get('challenge_id'), request.data.get('otp'),
+                purposes=(LoginChallenge.Purpose.EMAIL_LOGIN,),
+            )
+        except ChallengeError as exc:
+            return Response({'error': exc.message, 'code': exc.code}, status=status.HTTP_400_BAD_REQUEST)
+        user, refusal = _passwordless_user(challenge)
+        if refusal is not None:
+            return refusal
+        tokens = start_session(request, user, method='email_code')
+        return Response({"user": UserSerializer(user).data, "tokens": tokens, "message": "OTP verified successfully!"})
 
 
 class MagicLinkRequestView(APIView):
-    """Email a one-time, time-limited sign-in link. Sandbox returns the link too."""
+    """Email a single-use sign-in link. Never creates an account."""
     permission_classes = [AllowAny]
     throttle_scope = 'auth'
 
     def post(self, request):
-        from django.core import signing
-        email = (request.data.get('email') or '').strip().lower()
+        email = str(request.data.get('email') or '').strip().lower()
         try:
             validate_email(email)
         except DjangoValidationError:
             return Response({"error": "A valid email is required."}, status=status.HTTP_400_BAD_REQUEST)
-
-        user, _ = User.objects.get_or_create(email=email)
-        # Single-use nonce stored on the user; the link is invalid once consumed.
-        nonce = secrets.token_urlsafe(16)
-        user.otp_secret = f"magic:{nonce}"
-        user.save(update_fields=['otp_secret'])
-
-        token = signing.dumps({'email': email, 'nonce': nonce}, salt=MAGIC_LINK_SALT)
-        link = f"{_safe_redirect_base(request)}/auth/magic?token={token}"
-
+        user = User.objects.filter(email__iexact=email).first()
+        if user is not None and requires_second_factor(user):
+            return _second_factor_refusal()
         try:
-            from apps.orders.email_service import send_templated_email
-            sent = send_templated_email(
-                'magic_link', user.home_region if hasattr(user, 'home_region') else None,
-                email, {'magic_link': link, 'customer_name': user.first_name or 'there'},
-                audit_target_type='User', audit_target_id=str(user.id),
+            enforce_passwordless_limit(email)
+        except ChallengeError as exc:
+            return Response({'error': exc.message, 'code': exc.code}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+        payload = {"message": "Check your email for a sign-in link."}
+        if user is not None and not user.is_active:
+            return Response(payload)
+        try:
+            _challenge, link = issue_magic_link(
+                email=email, user=user, link_base=public_link_base(request), ip=client_ip_from_request(request),
             )
-        except Exception:
-            logger.exception('Templated magic-link email failed for user %s.', user.pk)
-            sent = False
-        if not sent:
-            # No template configured / send failed — fall back to a branded
-            # system email so sign-in mail matches the rest of the platform.
-            try:
-                from apps.orders.email_service import send_branded_email
-                send_branded_email(
-                    'Your Sclero Proteins sign-in link',
-                    f'Click to sign in (valid 15 minutes):\n\n{link}\n\nIf you didn\'t request this, ignore this email.',
-                    email,
-                )
-                sent = True
-            except Exception:
-                logger.exception('Fallback magic-link email failed for user %s.', user.pk)
-        if settings.DEBUG:
-            print(f"--> [MAGIC LINK SANDBOX] {email}: {link}")
-
-        payload = {
-            "message": "Check your email for a sign-in link.",
-        }
+        except ChallengeDeliveryError:
+            return Response(
+                {"error": "Unable to send the sign-in link. Try again later."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         if settings.DEBUG:
             payload["magic_link_for_sandbox"] = link
         return Response(payload)
 
 
 class MagicLinkVerifyView(APIView):
-    """Exchange a magic-link token for JWT tokens."""
+    """Exchange a magic-link token for a session, creating the account on first use."""
     permission_classes = [AllowAny]
     throttle_scope = 'auth'
 
     def post(self, request):
-        from django.core import signing
-        token = request.data.get('token') or ''
         try:
-            data = signing.loads(token, salt=MAGIC_LINK_SALT, max_age=MAGIC_LINK_MAX_AGE)
-        except signing.SignatureExpired:
-            return Response({"error": "This sign-in link has expired. Please request a new one."}, status=status.HTTP_400_BAD_REQUEST)
-        except signing.BadSignature:
-            return Response({"error": "Invalid sign-in link."}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            user = User.objects.get(email=data.get('email'))
-        except User.DoesNotExist:
-            return Response({"error": "Invalid sign-in link."}, status=status.HTTP_400_BAD_REQUEST)
-
-        if user.otp_secret != f"magic:{data.get('nonce')}":
-            return Response({"error": "This link has already been used. Please request a new one."}, status=status.HTTP_400_BAD_REQUEST)
-
-        user.otp_secret = ""  # single use
-        user.save(update_fields=['otp_secret'])
-
-        try:
-            from apps.audit.recorder import record_audit
-            record_audit('login.success', actor=user, summary=f'Magic-link login: {user.email}')
-        except Exception:
-            logger.exception('Could not record magic-link login audit for user %s.', user.pk)
-
-        return Response({
-            "user": UserSerializer(user).data,
-            "tokens": get_tokens_for_user(user),
-            "message": "Signed in successfully.",
-        })
+            challenge = verify_magic_token(request.data.get('token'))
+        except ChallengeError as exc:
+            message = (
+                'This sign-in link has expired. Please request a new one.' if exc.code == 'expired'
+                else 'This sign-in link is invalid or has already been used.'
+            )
+            return Response({'error': message, 'code': exc.code}, status=status.HTTP_400_BAD_REQUEST)
+        user, refusal = _passwordless_user(challenge)
+        if refusal is not None:
+            return refusal
+        tokens = start_session(request, user, method='magic_link')
+        return Response({"user": UserSerializer(user).data, "tokens": tokens, "message": "Signed in successfully."})
 
 
 class RoleViewSet(viewsets.ModelViewSet):
@@ -961,34 +885,58 @@ class GoogleLoginView(APIView):
         except requests.RequestException:
             return Response({"error": "Could not verify Google credential."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
-        if claims.get('aud') != client_id or claims.get('email_verified') not in (True, 'true', 'True'):
-            return Response({"error": "Invalid Google credential."}, status=status.HTTP_401_UNAUTHORIZED)
-
         email = (claims.get('email') or '').strip().lower()
         google_id = claims.get('sub') or ''
-        first_name = claims.get('given_name') or ''
-        last_name = claims.get('family_name') or ''
+        if (
+            claims.get('aud') != client_id
+            or claims.get('email_verified') not in (True, 'true', 'True')
+            or not email
+            or not google_id
+        ):
+            return Response({"error": "Invalid Google credential."}, status=status.HTTP_401_UNAUTHORIZED)
 
-        user, created = User.objects.get_or_create(
-            email=email,
-            defaults={
-                'google_id': google_id,
-                'first_name': first_name,
-                'last_name': last_name,
-            }
-        )
+        user = User.objects.filter(google_id=google_id).first() or User.objects.filter(email__iexact=email).first()
+        created = False
+        if user is None:
+            try:
+                with transaction.atomic():
+                    user = User.objects.create_user(
+                        email=email, password=None, google_id=google_id, email_verified=True,
+                        first_name=claims.get('given_name') or '', last_name=claims.get('family_name') or '',
+                    )
+                created = True
+            except IntegrityError:
+                user = User.objects.filter(Q(google_id=google_id) | Q(email__iexact=email)).first()
+        if user is None or not user.is_active:
+            record_audit(
+                'login.failed', summary=f'Google sign-in refused: {email}',
+                changes={'attempted_email': email, 'method': 'google', 'reason': 'inactive_account'},
+            )
+            return Response({"error": "This account is not active."}, status=status.HTTP_403_FORBIDDEN)
+        if requires_second_factor(user):
+            record_audit(
+                'login.failed', actor=user, summary=f'Google sign-in refused for {user.email}: code required',
+                changes={'method': 'google', 'reason': 'second_factor_required'},
+            )
+            return _second_factor_refusal()
 
-        if not created and not user.google_id:
-            # User existed with standard register, link their Google ID now
+        updates = []
+        if not user.google_id:
             user.google_id = google_id
-            user.save()
-
-        tokens = get_tokens_for_user(user)
-        return Response({
-            "user": UserSerializer(user).data,
-            "tokens": tokens,
-            "message": "Google authentication successful!"
-        })
+            updates.append('google_id')
+        # Google vouches only for the address it returned.
+        if not user.email_verified and user.email.lower() == email:
+            user.email_verified = True
+            updates.append('email_verified')
+        if updates:
+            user.save(update_fields=updates)
+        if created:
+            record_audit(
+                'account.registered', actor=user, target_type='User', target_id=user.pk,
+                summary=f'New account registered with Google: {user.email}',
+            )
+        tokens = start_session(request, user, method='google')
+        return Response({"user": UserSerializer(user).data, "tokens": tokens, "message": "Google authentication successful!"})
 
 
 class AdminDashboardPagination(PageNumberPagination):
