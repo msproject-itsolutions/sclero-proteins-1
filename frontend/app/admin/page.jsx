@@ -17,6 +17,7 @@ import { getApiUrl } from '../../lib/api';
 import { authenticatedFetch } from '../../lib/authFetch';
 import { DEFAULT_HOMEPAGE_SETTINGS, normalizeHomepageSettings } from '../../lib/homepageContent';
 import { csvCell } from '../../lib/csv';
+import { firstApiError } from '../../lib/formValidation';
 import ProductEditorPanel from '../../components/admin/ProductEditorPanel';
 import CreateOrderPanel from '../../components/admin/CreateOrderPanel';
 import ShippingZonePanel from '../../components/admin/ShippingZonePanel';
@@ -7766,6 +7767,7 @@ function StaffTab({ authFetch, regions }) {
     last_name: '',
     email: '',
     password: '',
+    verification_email: '',
     roles: [],
     assigned_regions: [],
   });
@@ -7807,6 +7809,7 @@ function StaffTab({ authFetch, regions }) {
         last_name: newStaff.last_name.trim(),
         email: newStaff.email.trim().toLowerCase(),
         password: newStaff.password,
+        verification_email: newStaff.verification_email.trim().toLowerCase(),
         roles: roleIds,
         assigned_regions: newStaff.assigned_regions,
         is_staff: true,
@@ -7814,13 +7817,13 @@ function StaffTab({ authFetch, regions }) {
       })
     })
     .then((r) => {
-      if (!r.ok) return r.json().then(e => { throw new Error(JSON.stringify(e)); });
+      if (!r.ok) return r.json().then(e => { throw new Error(firstApiError(e, 'Could not save your changes.')); });
       return r.json();
     })
     .then(() => {
       setSuccess('Staff member added successfully!');
       setIsAddingStaff(false);
-      setNewStaff({ first_name: '', last_name: '', email: '', password: '', roles: [], assigned_regions: [] });
+      setNewStaff({ first_name: '', last_name: '', email: '', password: '', verification_email: '', roles: [], assigned_regions: [] });
       loadData();
     })
     .catch((e) => setError(e.message));
@@ -7838,11 +7841,11 @@ function StaffTab({ authFetch, regions }) {
         roles: editingStaff.roles,
         assigned_regions: editingStaff.assigned_regions,
         allowed_ip_range: editingStaff.allowed_ip_range || '',
-        two_factor_enabled: editingStaff.two_factor_enabled
+        verification_email: (editingStaff.verification_email || '').trim().toLowerCase()
       })
     })
     .then((r) => {
-      if (!r.ok) return r.json().then(e => { throw new Error(JSON.stringify(e)); });
+      if (!r.ok) return r.json().then(e => { throw new Error(firstApiError(e, 'Could not save your changes.')); });
       return r.json();
     })
     .then(() => { setEditingStaff(null); loadData(); })
@@ -7850,10 +7853,13 @@ function StaffTab({ authFetch, regions }) {
   };
 
   const toggleStaffActive = (s) => {
+    setError('');
     authFetch(`/api/admin/staff/${s.id}/`, {
       method: 'PATCH',
       body: JSON.stringify({ is_active: !s.is_active })
-    }).then(() => loadData());
+    })
+      .then((r) => (r.ok ? null : r.json().then((e) => setError(firstApiError(e, 'Could not change this account.')))))
+      .finally(loadData);
   };
 
   const filteredStaff = staff.filter((s) => {
@@ -7912,6 +7918,9 @@ function StaffTab({ authFetch, regions }) {
           <button onClick={() => setSuccess('')}><X className="h-4 w-4 text-emerald-600" /></button>
         </div>
       )}
+      {error && !isAddingStaff && !editingStaff && (
+        <div className="rounded-lg bg-rose-50 border border-rose-200 p-3 text-sm text-rose-700">{error}</div>
+      )}
 
       {/* Control Bar & Actions */}
       <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 bg-white p-3 rounded-xl border border-edge shadow-sm">
@@ -7952,7 +7961,7 @@ function StaffTab({ authFetch, regions }) {
               <th className="px-4 py-3.5">Member</th>
               <th className="px-4 py-3.5">Assigned Role</th>
               <th className="px-4 py-3.5">Region Scope</th>
-              <th className="px-4 py-3.5">Security &amp; 2FA</th>
+              <th className="px-4 py-3.5">Sign-in codes</th>
               <th className="px-4 py-3.5">Status</th>
               <th className="px-4 py-3.5 text-right">Actions</th>
             </tr>
@@ -7997,13 +8006,9 @@ function StaffTab({ authFetch, regions }) {
                     )}
                   </td>
                   <td className="px-4 py-3.5">
-                    {s.two_factor_enabled ? (
-                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
-                        <ShieldCheck className="h-3 w-3" /> 2FA Active
-                      </span>
-                    ) : (
-                      <span className="text-xs text-brand-muted">Standard Password</span>
-                    )}
+                    <span className="inline-flex items-center gap-1 text-xs font-mono text-ink-secondary">
+                      <ShieldCheck className="h-3 w-3 text-emerald-600" /> {s.verification_email || s.email}
+                    </span>
                   </td>
                   <td className="px-4 py-3.5">
                     <button
@@ -8093,6 +8098,18 @@ function StaffTab({ authFetch, regions }) {
                   className="w-full rounded-lg border border-edge p-2.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ink-primary"
                 />
                 <p className="text-[11px] text-brand-muted mt-1">Required. Use at least 8 characters; the server also checks common-password rules.</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-ink-secondary mb-1">Sign-in code email (optional)</label>
+                <input
+                  type="email"
+                  placeholder="Defaults to the work email"
+                  value={newStaff.verification_email}
+                  onChange={(e) => setNewStaff({ ...newStaff, verification_email: e.target.value })}
+                  className="w-full rounded-lg border border-edge p-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-ink-primary"
+                />
+                <p className="text-[11px] text-brand-muted mt-1">Staff sign in with their password plus a 6-digit code sent to this address.</p>
               </div>
 
               <div>
@@ -8284,16 +8301,15 @@ function StaffTab({ authFetch, regions }) {
               </div>
 
               <div>
-                <p className="text-xs font-semibold text-ink-subtle uppercase mb-1">Security</p>
-                <label className="flex items-center gap-2 font-semibold text-xs text-ink-primary cursor-pointer p-2.5 border border-edge rounded-xl bg-white">
-                  <input
-                    type="checkbox"
-                    checked={editingStaff.two_factor_enabled}
-                    onChange={(e) => setEditingStaff({ ...editingStaff, two_factor_enabled: e.target.checked })}
-                    className="h-4 w-4 accent-ink-primary"
-                  />
-                  Require Two-Factor Authentication (2FA)
-                </label>
+                <p className="text-xs font-semibold text-ink-subtle uppercase mb-1">Sign-in code email</p>
+                <input
+                  type="email"
+                  placeholder={editingStaff.email}
+                  value={editingStaff.verification_email || ''}
+                  onChange={(e) => setEditingStaff({ ...editingStaff, verification_email: e.target.value })}
+                  className="w-full rounded-lg border border-edge p-2.5 text-xs font-mono"
+                />
+                <p className="text-[11px] text-brand-muted mt-1">Staff always sign in with their password and a code emailed here. Leave empty to use their login email. Changing it signs them out.</p>
               </div>
 
               {error && <p className="rounded-lg bg-rose-50 border border-rose-200 p-2.5 text-xs font-semibold text-rose-700">{error}</p>}
@@ -8347,7 +8363,7 @@ function RolesTab({ authFetch }) {
       })
     })
     .then((r) => {
-      if (!r.ok) return r.json().then(e => { throw new Error(JSON.stringify(e)); });
+      if (!r.ok) return r.json().then(e => { throw new Error(firstApiError(e, 'Could not save your changes.')); });
       return r.json();
     })
     .then(() => { setEditingRole(null); loadData(); })
@@ -8742,70 +8758,42 @@ function SecurityCenterTab({ authFetch, user, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
-  
-  const currentSessionId = typeof window !== 'undefined' ? window.localStorage.getItem('sclero_session_id') : '';
 
-  const handleToggle2FA = (e) => {
-    const isEnabled = e.target.checked;
+  const handleSignOutOthers = () => {
     setSaving(true);
     setSuccess('');
     setError('');
-    
-    authFetch('/api/auth/profile/', {
-      method: 'PATCH',
-      body: JSON.stringify({ two_factor_enabled: isEnabled })
-    })
-    .then((r) => {
-      if (!r.ok) throw new Error("Could not update 2FA status.");
-      return r.json();
-    })
-    .then(() => {
-      setSuccess(`Two-Factor Authentication ${isEnabled ? 'enabled' : 'disabled'} successfully.`);
-      onSaved && onSaved();
-    })
-    .catch((e) => setError(e.message))
-    .finally(() => setSaving(false));
-  };
-
-  const handleTerminateSessions = () => {
-    setSaving(true);
-    setSuccess('');
-    setError('');
-    
-    authFetch('/api/auth/profile/terminate-devices/', {
-      method: 'POST',
-      body: JSON.stringify({ session_id: currentSessionId })
-    })
-    .then((r) => {
-      if (!r.ok) throw new Error("Failed to terminate other sessions.");
-      return r.json();
-    })
-    .then(() => {
-      setSuccess("All other active device sessions terminated successfully.");
-      onSaved && onSaved();
-    })
-    .catch((e) => setError(e.message))
-    .finally(() => setSaving(false));
+    authFetch('/api/auth/profile/terminate-devices/', { method: 'POST', body: JSON.stringify({}) })
+      .then((r) => r.json().catch(() => ({})).then((data) => {
+        if (!r.ok) throw new Error(firstApiError(data, 'Could not sign out your other devices.'));
+        return data;
+      }))
+      .then((data) => {
+        setSuccess(data.message || 'Signed out of all other devices.');
+        onSaved && onSaved();
+      })
+      .catch((e) => setError(e.message))
+      .finally(() => setSaving(false));
   };
 
   return (
     <div className="space-y-6 text-sm bg-white rounded-lg border border-edge p-5 shadow-card">
       <div>
         <h3 className="text-sm font-semibold text-ink-primary mb-1 uppercase">Account Security Status</h3>
-        <p className="text-brand-muted mb-3">Manage Two-Factor Authentication and whitelist range settings for your staff profile.</p>
-        
+        <p className="text-brand-muted mb-3">How your staff account signs in and where it may be used from.</p>
+
         {success && <p className="rounded bg-brand-success/10 p-2.5 text-sm text-ink-success font-semibold mb-3">{success}</p>}
         {error && <p className="rounded bg-brand-danger/10 p-2.5 text-sm text-brand-danger font-semibold mb-3">{error}</p>}
-        
+
         <div className="space-y-3">
-          <label className="flex items-start gap-3 rounded-md border border-edge bg-white shadow-card p-4 cursor-pointer">
-            <input type="checkbox" checked={user.two_factor_enabled} disabled={saving} onChange={handleToggle2FA} className="mt-0.5 h-4 w-4 accent-ink-primary" />
+          <div className="flex items-start gap-3 rounded-md border border-edge bg-white shadow-card p-4">
+            <ShieldCheck className="mt-0.5 h-4 w-4 text-ink-accent" />
             <span>
-              <span className="block text-sm font-semibold text-ink-primary">Enable 2-Step OTP Authentication</span>
-              <span className="block text-sm text-brand-muted mt-0.5">Enforces a 6-digit OTP code sent to your registered email ({user.email}) during sign-in.</span>
+              <span className="block text-sm font-semibold text-ink-primary">Password + emailed code</span>
+              <span className="block text-sm text-brand-muted mt-0.5">Every staff sign-in needs your password and a 6-digit code sent to your sign-in code email. An administrator manages that address.</span>
             </span>
-          </label>
-          
+          </div>
+
           {user.allowed_ip_range && (
             <div className="rounded-md border border-edge bg-surface-muted p-4 font-mono">
               <span className="block text-[12px] font-semibold text-ink-subtle uppercase mb-1">Active IP Whitelist restrictions</span>
@@ -8818,33 +8806,30 @@ function SecurityCenterTab({ authFetch, user, onSaved }) {
 
       <div className="border-t border-edge-subtle pt-4">
         <h3 className="text-sm font-semibold text-ink-primary mb-1 uppercase">Active login sessions</h3>
-        <p className="text-brand-muted mb-3">These devices are currently logged in. Terminating other sessions logs out all other browsers.</p>
-        
+        <p className="text-brand-muted mb-3">Recent sign-ins to your account. Signing out other devices ends every session except this one.</p>
+
         <div className="space-y-2 mb-4">
-          {(user.current_devices || []).map((dev, idx) => {
-            const isCurrent = dev.id === currentSessionId;
-            return (
-              <div key={idx} className="flex justify-between items-center p-3 rounded-lg border border-edge-subtle bg-surface-muted font-mono text-[12px]">
-                <div className="space-y-0.5">
-                  <span className="font-semibold text-ink-primary">{dev.ip}</span>
-                  <span className="block text-ink-subtle font-sans">{dev.user_agent.substring(0, 50)}...</span>
-                </div>
-                <div className="text-right">
-                  {isCurrent ? (
-                    <span className="rounded bg-surface-muted text-ink-accent px-1.5 py-0.5 text-[13px] font-semibold font-sans">CURRENT SESSION</span>
-                  ) : (
-                    <span className="text-ink-subtle font-sans">Active: {new Date(dev.last_active).toLocaleDateString()}</span>
-                  )}
-                </div>
+          {(user.current_devices || []).map((dev, idx) => (
+            <div key={dev.id || idx} className="flex justify-between items-center p-3 rounded-lg border border-edge-subtle bg-surface-muted font-mono text-[12px]">
+              <div className="space-y-0.5">
+                <span className="font-semibold text-ink-primary">{dev.ip}</span>
+                <span className="block text-ink-subtle font-sans">{(dev.user_agent || '').substring(0, 50)}...</span>
               </div>
-            );
-          })}
+              <div className="text-right">
+                {idx === 0 ? (
+                  <span className="rounded bg-surface-muted text-ink-accent px-1.5 py-0.5 text-[13px] font-semibold font-sans">LATEST SIGN-IN</span>
+                ) : (
+                  <span className="text-ink-subtle font-sans">Active: {new Date(dev.last_active).toLocaleDateString()}</span>
+                )}
+              </div>
+            </div>
+          ))}
           {(!user.current_devices || user.current_devices.length === 0) && (
-            <p className="text-ink-subtle italic">No device session logging enabled.</p>
+            <p className="text-ink-subtle italic">No sign-ins recorded yet.</p>
           )}
         </div>
-        
-        <button onClick={handleTerminateSessions} disabled={saving || (user.current_devices || []).length <= 1} className="btn-secondary w-full py-2.5 border border-red-200 text-ink-danger hover:bg-red-50 font-semibold rounded-sm uppercase disabled:opacity-50">Log Out of Other Devices</button>
+
+        <button onClick={handleSignOutOthers} disabled={saving} className="btn-secondary w-full py-2.5 border border-red-200 text-ink-danger hover:bg-red-50 font-semibold rounded-sm uppercase disabled:opacity-50">Sign Out of All Other Devices</button>
       </div>
     </div>
   );
