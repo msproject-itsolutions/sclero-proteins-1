@@ -332,9 +332,11 @@ class DataExportView(APIView):
             'postal_code', 'country', 'is_default',
         ))
 
-        orders_qs = Order.objects.filter(
-            Q(user=user) | Q(email__iexact=user.email)
-        ).prefetch_related('items__product').order_by('-created_at')
+        # Records filed under an email address are included only once the
+        # account has proved it owns that address.
+        email_is_proven = user.email_verified
+        owned_orders = (Q(user=user) | Q(email__iexact=user.email)) if email_is_proven else Q(user=user)
+        orders_qs = Order.objects.filter(owned_orders).prefetch_related('items__product').order_by('-created_at')
         orders = []
         for o in orders_qs:
             orders.append({
@@ -371,8 +373,12 @@ class DataExportView(APIView):
                 'created_at': o.created_at.isoformat() if o.created_at else None,
             })
 
+        review_qs = (
+            ProductReview.objects.filter(user_email__iexact=user.email)
+            if email_is_proven else ProductReview.objects.none()
+        )
         reviews = list(
-            ProductReview.objects.filter(user_email__iexact=user.email).values(
+            review_qs.values(
                 'id', 'product_id', 'user_email', 'user_name', 'rating',
                 'comment', 'is_verified_purchase', 'is_approved', 'created_at',
             )
@@ -390,8 +396,12 @@ class DataExportView(APIView):
             if w.get('created_at'):
                 w['created_at'] = w['created_at'].isoformat()
 
+        enquiry_qs = (
+            BulkEnquiry.objects.filter(email__iexact=user.email)
+            if email_is_proven else BulkEnquiry.objects.none()
+        )
         enquiries = list(
-            BulkEnquiry.objects.filter(email__iexact=user.email).values(
+            enquiry_qs.values(
                 'id', 'name', 'company', 'email', 'phone', 'enquiry_type',
                 'product_interest', 'quantity', 'country', 'message',
                 'status', 'created_at',
@@ -447,11 +457,15 @@ class AccountDeleteView(APIView):
         original_email = user.email
         anon_email = f"deleted-user-{user.id}@anon.invalid"
 
+        # Records filed under an email address are touched only once the account
+        # has proved it owns that address; otherwise deleting a fresh account
+        # could erase a stranger's order and enquiry history.
+        email_is_proven = user.email_verified
+
         with transaction.atomic():
-            # Anonymize orders (retain for tax). Match by user FK OR email.
-            orders_qs = Order.objects.filter(
-                Q(user=user) | Q(email__iexact=original_email)
-            )
+            # Anonymize orders (retain for tax).
+            owned_orders = (Q(user=user) | Q(email__iexact=original_email)) if email_is_proven else Q(user=user)
+            orders_qs = Order.objects.filter(owned_orders)
             orders_count = orders_qs.update(
                 shipping_name="Deleted user",
                 shipping_phone="",
@@ -464,21 +478,18 @@ class AccountDeleteView(APIView):
             )
 
             # Anonymize reviews (keep for verified-purchase audit trail).
-            reviews_count = ProductReview.objects.filter(
-                user_email__iexact=original_email
-            ).update(
-                user_email=anon_email,
-                user_name="Deleted user",
+            review_qs = (
+                ProductReview.objects.filter(user_email__iexact=original_email)
+                if email_is_proven else ProductReview.objects.none()
             )
+            reviews_count = review_qs.update(user_email=anon_email, user_name="Deleted user")
 
             # Anonymize bulk enquiries (keep enquiry text + business context).
-            enquiries_count = BulkEnquiry.objects.filter(
-                email__iexact=original_email
-            ).update(
-                name="[redacted]",
-                email=anon_email,
-                phone="",
+            enquiry_qs = (
+                BulkEnquiry.objects.filter(email__iexact=original_email)
+                if email_is_proven else BulkEnquiry.objects.none()
             )
+            enquiries_count = enquiry_qs.update(name="[redacted]", email=anon_email, phone="")
 
             # Hard-delete wishlist items and addresses.
             wishlist_count = WishlistItem.objects.filter(user=user).count()

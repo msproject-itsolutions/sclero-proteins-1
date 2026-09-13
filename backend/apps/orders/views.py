@@ -216,20 +216,25 @@ def _send_order_event_with_logging(event, order_id, *, extra_context=None):
 class MyOrdersView(generics.ListAPIView):
     """Order history for the authenticated customer.
 
-    Matches by linked user OR by the account email (guest checkouts placed with
-    the same email before linking), newest first.
+    Matches orders linked to the account and, once the account has verified
+    its email address, guest checkouts placed with that address, newest first.
     """
     serializer_class = OrderSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         user = self.request.user
+        owned = Q(user=user)
+        # Matching by address before it is verified would let anyone register a
+        # shopper's email and read their guest orders.
+        if user.email_verified:
+            owned |= Q(email__iexact=user.email)
         return (
             # A shopper should only see a completed sale in order history.
             # Unpaid attempts are retained for recovery/reconciliation but are
             # deliberately not presented as an order.
             Order.objects.filter(
-                Q(user=user) | Q(email__iexact=user.email),
+                owned,
                 payment_status__in=['PAID', 'PARTIALLY_CAPTURED', 'REFUNDED'],
             )
             .prefetch_related(
