@@ -22,6 +22,7 @@ from apps.users.views import (
     SendOTPView, VerifyOTPView, GoogleLoginView,
     MagicLinkRequestView, MagicLinkVerifyView,
     RoleViewSet, StaffUserViewSet, WishlistViewSet, WishlistGroupViewSet, PublicWishlistView, AuditedLoginView,
+    LoginVerifyView, LoginResendView,
     CookieTokenRefreshView, LogoutView,
     CustomerProfileViewSet, CustomerSegmentViewSet, CustomerActivityViewSet, SupportTicketViewSet,
     TerminateDevicesView, DataExportView, AccountDeleteView,
@@ -134,6 +135,8 @@ urlpatterns = [
     # Auth Endpoints
     path('api/auth/register/', RegisterView.as_view(), name='auth_register'),
     path('api/auth/login/', AuditedLoginView.as_view(), name='auth_login'),
+    path('api/auth/login/verify/', LoginVerifyView.as_view(), name='auth_login_verify'),
+    path('api/auth/login/resend/', LoginResendView.as_view(), name='auth_login_resend'),
     path('api/auth/token/refresh/', CookieTokenRefreshView.as_view(), name='auth_token_refresh'),
     path('api/auth/logout/', LogoutView.as_view(), name='auth_logout'),
     path('api/auth/profile/', UserProfileView.as_view(), name='auth_profile'),

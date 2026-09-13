@@ -14,24 +14,29 @@ from rest_framework.exceptions import AuthenticationFailed, ValidationError
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.views import TokenRefreshView
 from django.db.models import Q, Sum
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import check_password, make_password
 from django.contrib.auth.password_validation import validate_password
-from .models import UserAddress, Role, Wishlist, WishlistItem, CustomerSegment, CustomerActivity, SupportTicket
+from .models import UserAddress, Role, Wishlist, WishlistItem, CustomerSegment, CustomerActivity, SupportTicket, LoginChallenge
 from .serializers import (
     UserSerializer, RegisterSerializer, UserAddressSerializer,
     RoleSerializer, StaffUserSerializer, WishlistItemSerializer, WishlistSerializer,
     CustomerSegmentSerializer, CustomerActivitySerializer, SupportTicketSerializer,
 )
 from .permissions import (
-    require_permission, ENFORCED_PERMISSION_GROUPS, client_ip_is_allowed,
+    require_permission, ENFORCED_PERMISSION_GROUPS, ip_allowed, is_staff_account,
 )
 from .middleware import clear_auth_cookies
-from .sessions import SESSION_ENDED_MESSAGE, VersionedTokenRefreshSerializer, issue_tokens
+from .challenges import (
+    SECOND_FACTOR_PURPOSES, ChallengeDeliveryError, ChallengeError, challenge_response_data,
+    issue_code_challenge, mask_email, requires_second_factor, resend_code, verify_code,
+)
+from .sessions import SESSION_ENDED_MESSAGE, VersionedTokenRefreshSerializer, issue_tokens, start_session
 from apps.audit.context import client_ip_from_request
+from apps.audit.recorder import record_audit
 from apps.orders.models import Order
 
 User = get_user_model()
@@ -70,154 +75,119 @@ def _send_email_otp(email, code, subject='Your Sclero Proteins sign-in code'):
 def get_tokens_for_user(user):
     return issue_tokens(user)
 
-class AuditedLoginView(TokenObtainPairView):
-    """Password login with audit trail, IP restrictions, and 2FA gating.
+GENERIC_LOGIN_ERROR = 'Invalid email or password.'
+CODE_SEND_FAILED = 'We could not send your sign-in code. Try again in a few minutes.'
 
-    Two flavors of 2FA are supported:
 
-    - **TOTP (authenticator-app, RFC 6238):** Enforced for staff/superuser
-      accounts that have `totp_enabled=True`. If the caller supplies the
-      right password but no `totp_code` we return HTTP 200 with
-      `{otp_required: true}` and DO NOT issue tokens — the frontend then
-      re-posts with the code. Non-staff customers may also enable TOTP, but
-      they are NOT forced through it on login (to avoid locking out
-      non-technical customers).
-    - **Legacy email-OTP (`two_factor_enabled`):** Email-based code, retained
-      as-is for backward compatibility. Only fires if TOTP is not enabled.
+def _network_refusal(request):
+    return Response(
+        {'detail': f'IP address {client_ip_from_request(request)} is not allowed to access this profile.'},
+        status=status.HTTP_403_FORBIDDEN,
+    )
+
+
+class AuditedLoginView(APIView):
+    """Password sign-in.
+
+    Staff accounts, and customers who turned on two-step sign-in, receive an
+    emailed code instead of tokens; LoginVerifyView exchanges it. Every
+    failure returns the same 401 so the response never reveals whether an
+    address is registered or active.
     """
     permission_classes = [AllowAny]
+    authentication_classes = []
     throttle_scope = 'auth'
 
     def post(self, request, *args, **kwargs):
-        from apps.audit.recorder import record_audit
-        import uuid
-        from django.utils import timezone
-        
-        email = (request.data.get('email') or request.data.get('username') or '').strip()
-        password = request.data.get('password') or ''
-        actor = User.objects.filter(email__iexact=email).first() if email else None
+        email = str(request.data.get('email') or request.data.get('username') or '').strip()
+        password = str(request.data.get('password') or '')
+        user = User.objects.filter(email__iexact=email).first() if email else None
+        if user is None:
+            # Hash anyway so an unknown address takes as long as a wrong password.
+            make_password(password)
+            password_ok = False
+        else:
+            password_ok = user.check_password(password)
 
-        if not actor or not actor.is_active:
+        if not password_ok or not user.is_active:
+            if user is None:
+                reason = 'unknown_account'
+            elif not password_ok:
+                reason = 'wrong_password'
+            else:
+                reason = 'inactive_account'
             record_audit(
-                'login.failed',
-                actor=actor if actor and actor.is_active else None,
-                summary=f'Failed login attempt: {email}',
-                changes={'attempted_email': email, 'reason': 'inactive_or_missing_account' if actor and not actor.is_active else 'missing_account'},
+                'login.failed', actor=user if user is not None and user.is_active else None,
+                summary=f'Failed login attempt: {email}', changes={'attempted_email': email, 'reason': reason},
             )
-            if actor and not actor.is_active:
-                return Response(
-                    {"detail": "This account is inactive. Please contact an administrator to reactivate it."},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-            return Response(
-                {"detail": "Invalid email or password."},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
+            return Response({'detail': GENERIC_LOGIN_ERROR}, status=status.HTTP_401_UNAUTHORIZED)
 
-        if not check_password(password, actor.password):
-            record_audit(
-                'login.failed',
-                actor=actor,
-                summary=f'Failed login for {email}: invalid password',
-                changes={'attempted_email': email},
-            )
-            return Response(
-                {"detail": "Invalid email or password."},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
-
-        # Enforce IP restrict logic on login
         client_ip = client_ip_from_request(request)
-        if actor.allowed_ip_range:
-            allowed_ips = [ip.strip() for ip in actor.allowed_ip_range.split(',') if ip.strip()]
-            if allowed_ips and not client_ip_is_allowed(client_ip, allowed_ips):
-                record_audit(
-                    'login.failed',
-                    actor=actor,
-                    summary=f'Failed login for {email}: IP {client_ip} not allowed',
-                    changes={'ip': client_ip},
-                )
-                return Response(
-                    {"detail": f"IP address {client_ip} is not allowed to access this profile."},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
+        if not ip_allowed(user, request):
+            record_audit(
+                'login.failed', actor=user, summary=f'Failed login for {email}: IP {client_ip} not allowed',
+                changes={'ip': client_ip, 'reason': 'ip_not_allowed'},
+            )
+            return _network_refusal(request)
 
-        # --- TOTP gate (staff/superuser only) --------------------------------
-        if actor.totp_enabled and (actor.is_staff or actor.is_superuser):
-            from .totp import verify_totp_or_backup
-            totp_code = (request.data.get('totp_code') or '').strip()
-            if not totp_code:
-                # First leg: creds OK, but we need the authenticator code.
-                return Response(
-                    {
-                        "otp_required": True,
-                        "message": "Enter your authenticator code",
-                    },
-                    status=status.HTTP_200_OK,
-                )
-            if not verify_totp_or_backup(actor, totp_code):
-                record_audit(
-                    'login.totp_failed',
-                    actor=actor,
-                    summary=f'TOTP verification failed for {email}',
-                )
-                return Response(
-                    {"detail": "Invalid authenticator code."},
-                    status=status.HTTP_401_UNAUTHORIZED,
-                )
-            # On backup-code consumption verify_totp_or_backup mutates
-            # totp_backup_codes — persist.
-            actor.save(update_fields=['totp_backup_codes'])
-
-        tokens = get_tokens_for_user(actor)
-        user_agent = request.META.get('HTTP_USER_AGENT', 'Unknown')
-        session_id = str(uuid.uuid4())
-
-        devices = actor.current_devices or []
-        new_device = {
-            "id": session_id,
-            "ip": client_ip,
-            "user_agent": user_agent,
-            "last_active": timezone.now().isoformat()
-        }
-        # Keep last 5 devices
-        devices = [new_device] + [d for d in devices if d.get('ip') != client_ip or d.get('user_agent') != user_agent][:4]
-        actor.current_devices = devices
-        actor.save(update_fields=['current_devices'])
-
-        if actor.two_factor_enabled:
-            otp_code, stored_otp = _new_otp_value()
-            actor.otp_secret = stored_otp
-            actor.save(update_fields=['otp_secret'])
-            if settings.DEBUG:
-                print(f"--> [2FA OTP SANDBOX] Sent OTP {otp_code} to {email}")
+        if requires_second_factor(user):
+            purpose = (
+                LoginChallenge.Purpose.STAFF_2FA if is_staff_account(user) else LoginChallenge.Purpose.CUSTOMER_2FA
+            )
             try:
-                _send_email_otp(email, otp_code, subject='Your Sclero Proteins two-factor code')
-            except Exception:
-                logger.exception('Two-factor email delivery failed for user %s.', actor.pk)
-                actor.otp_secret = ''
-                actor.save(update_fields=['otp_secret'])
-                return Response(
-                    {"detail": "Unable to send the verification code. Try again later."},
-                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
-                )
-            record_audit('login.2fa_required', actor=actor, summary=f'2FA challenge issued for {email}')
-            payload = {
-                "two_factor_required": True,
-                "email": email,
-                "message": "Two-factor authentication is required. An OTP has been sent."
-            }
-            if settings.DEBUG:
-                payload["otp_preview_for_sandbox"] = otp_code
-            return Response(payload, status=status.HTTP_200_OK)
+                challenge, code = issue_code_challenge(purpose=purpose, email=user.email, user=user, ip=client_ip)
+            except ChallengeDeliveryError:
+                return Response({'detail': CODE_SEND_FAILED}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            record_audit(
+                'login.challenge_sent', actor=user, target_type='User', target_id=user.pk,
+                summary=f'Sign-in code sent for {user.email}',
+                changes={'purpose': purpose, 'sent_to': mask_email(challenge.sent_to)},
+            )
+            return Response(challenge_response_data(challenge, code))
 
-        record_audit('login.success', actor=actor, summary=f'Successful login: {email}')
-        return Response({
-            "access": tokens['access'],
-            "refresh": tokens['refresh'],
-            "session_id": session_id,
-            "user": UserSerializer(actor).data,
-        })
+        tokens = start_session(request, user, method='password')
+        return Response({**tokens, 'user': UserSerializer(user).data})
+
+
+class LoginVerifyView(APIView):
+    """Second step of password sign-in: exchange the emailed code for a session."""
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_scope = 'otp'
+
+    def post(self, request):
+        try:
+            challenge = verify_code(
+                request.data.get('challenge_id'), request.data.get('code'), purposes=SECOND_FACTOR_PURPOSES,
+            )
+        except ChallengeError as exc:
+            return Response(exc.as_response_data(), status=status.HTTP_400_BAD_REQUEST)
+        user = challenge.user
+        if user is None or not user.is_active:
+            return Response(ChallengeError('invalid').as_response_data(), status=status.HTTP_400_BAD_REQUEST)
+        if not ip_allowed(user, request):
+            return _network_refusal(request)
+        tokens = start_session(request, user, method=challenge.purpose.lower())
+        return Response({**tokens, 'user': UserSerializer(user).data})
+
+
+class LoginResendView(APIView):
+    """Send a new code for a pending password sign-in (60 s cooldown)."""
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_scope = 'otp'
+
+    def post(self, request):
+        try:
+            challenge, code = resend_code(request.data.get('challenge_id'), purposes=SECOND_FACTOR_PURPOSES)
+        except ChallengeError as exc:
+            status_code = (
+                status.HTTP_429_TOO_MANY_REQUESTS if exc.code == 'cooldown' else status.HTTP_400_BAD_REQUEST
+            )
+            return Response(exc.as_response_data(), status=status_code)
+        except ChallengeDeliveryError:
+            return Response({'detail': CODE_SEND_FAILED}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        return Response(challenge_response_data(challenge, code))
 
 
 class CookieTokenRefreshView(TokenRefreshView):
@@ -277,7 +247,7 @@ class RegisterView(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
-            tokens = get_tokens_for_user(user)
+            tokens = start_session(request, user, method='register')
             from apps.audit.recorder import record_audit
             record_audit('account.registered', actor=user, target_type='User',
                          target_id=user.pk, summary=f'New account registered: {user.email}')
