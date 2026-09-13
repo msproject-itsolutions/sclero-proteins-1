@@ -46,6 +46,9 @@ class ScleroProteinsTests(APITestCase):
         PaymentGateway.objects.create(
             code='RAZORPAY', display_name='Razorpay', region=self.region_in, is_enabled=True, secret_key='test_secret'
         )
+        PaymentGateway.objects.create(
+            code='COD', display_name='Cash on delivery', region=self.region_in, is_enabled=True,
+        )
 
         # Checkout intentionally has no hardcoded shipping fallback; tests must
         # provide the same explicit zone/rate configuration required in admin.
@@ -135,20 +138,18 @@ class ScleroProteinsTests(APITestCase):
             'shipping_state': 'Gujarat',
             'shipping_postal_code': '380015',
             'shipping_country': 'IN',
-            'payment_method': 'Razorpay',
-            'payment_id': 'pay_test_transaction'
+            'payment_method': 'COD',
         }
 
         response = self.client.post(url_checkout, checkout_data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertIn("invoice", response.data['order'])
-        
+
         # Verify inventory was deducted (50 - 2 = 48)
         stock = StockLevel.objects.get(product=self.prod_whey, warehouse=self.wh_in)
         self.assertEqual(stock.available, 48)
 
         # Verify PDF invoice was generated on disk
-        invoice = Invoice.objects.get(order_id=response.data['order']['id'])
+        invoice = Invoice.objects.get(order_id=response.data['order_id'])
         pdf_path = os.path.join(settings.MEDIA_ROOT, invoice.pdf_file.name)
         self.assertTrue(os.path.exists(pdf_path))
         self.assertTrue(pdf_path.endswith('.pdf'))
@@ -191,8 +192,7 @@ class ScleroProteinsTests(APITestCase):
             'shipping_state': 'Gujarat',
             'shipping_postal_code': '380015',
             'shipping_country': 'IN',
-            'payment_method': 'Razorpay',
-            'payment_id': 'pay_multi_warehouse',
+            'payment_method': 'COD',
         }, format='json')
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)

@@ -33,11 +33,12 @@ from apps.users.account_views import (
     VerifyEmailRequestView,
 )
 from apps.orders.views import (
-    CartViewSet, CheckoutView, ApplyCouponView, CreatePaymentIntentView, RefundView, MyOrdersView,
+    CartViewSet, ApplyCouponView, RefundView, MyOrdersView,
     PublicOrderDetailView, OrderAdminViewSet, RefundAdminViewSet, InvoiceAdminViewSet, AbandonedCheckoutsView,
     StripeWebhookView, RazorpayWebhookView, PaypalWebhookView,
     UnifiedPaymentWebhookView, CouponAdminViewSet,
 )
+from apps.orders.checkout_views import CheckoutConfirmView, CheckoutView
 from apps.webhooks.views import (
     WebhookSubscriptionViewSet, WebhookDeliveryViewSet, IncomingWebhookEventViewSet
 )
@@ -166,7 +167,7 @@ urlpatterns = [
     path('api/cart/clear/', CartViewSet.as_view({'post': 'clear_cart'}), name='cart_clear'),
     path('api/checkout/', CheckoutView.as_view(), name='checkout'),
     path('api/checkout/apply-coupon/', ApplyCouponView.as_view(), name='checkout_apply_coupon'),
-    path('api/checkout/payment-intent/', CreatePaymentIntentView.as_view(), name='checkout_payment_intent'),
+    path('api/checkout/confirm/', CheckoutConfirmView.as_view(), name='checkout_confirm'),
     path('api/webhooks/stripe/', StripeWebhookView.as_view(), name='webhook_stripe'),
     path('api/webhooks/razorpay/', RazorpayWebhookView.as_view(), name='webhook_razorpay'),
     path('api/webhooks/paypal/', PaypalWebhookView.as_view(), name='webhook_paypal'),

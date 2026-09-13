@@ -3,7 +3,6 @@ import hashlib
 import json
 import logging
 import os
-import re
 
 from rest_framework import viewsets, status, views, generics
 from rest_framework.pagination import PageNumberPagination
@@ -28,30 +27,24 @@ from .serializers import (
     CouponAdminSerializer,
 )
 from .stock import (
-    StockError, available_for_variant, deduct_region_stock, deduct_variant_stock,
+    available_for_variant,
     restock_region_item, restock_variant_item,
 )
 from .utils import generate_invoice_pdf
-from .payments import resolve_gateway, refund_payment, PaymentError
-from .pricing import PricingError, cart_subtotal, quote_cart
+from .payments import refund_payment, PaymentError
+from .pricing import PricingError, cart_subtotal
 from .cart_identity import attach_cart_cookie, find_cart, get_or_create_cart, shopper_carts
-from .email_service import send_order_email, send_owner_order_notification
+from .email_service import send_order_email
 from apps.admin_dashboard.models import PaymentGateway, SystemSetting
 from apps.audit.recorder import record_audit
 from .payments import get_adapter
 
 
 logger = logging.getLogger(__name__)
-PHONE_PATTERN = re.compile(r'^[+\d][\d\s().-]*$')
 
 
 def _clean_text(value):
     return str(value or '').strip()
-
-
-def _valid_phone(value):
-    digits = re.sub(r'\D', '', value)
-    return bool(PHONE_PATTERN.fullmatch(value)) and 7 <= len(digits) <= 15
 
 
 def _requested_variant(product, data):
@@ -85,32 +78,6 @@ def _select_cart_item(cart, data):
     if queryset.count() > 1:
         return None, 'This product has multiple options in the cart; cart_item_id is required.'
     return queryset.first(), None
-
-
-def _run_checkout_followups(order_id):
-    """Run non-critical work only after the sale transaction has committed."""
-    try:
-        order = Order.objects.select_related('region').get(pk=order_id)
-    except Order.DoesNotExist:
-        logger.error('Committed checkout order %s could not be reloaded.', order_id)
-        return
-
-    try:
-        if not send_order_email('order_confirmation', order):
-            logger.warning('Order confirmation for order %s was queued for retry.', order_id)
-    except Exception:
-        logger.exception('Order confirmation scheduling failed for order %s.', order_id)
-
-    try:
-        send_owner_order_notification(order)
-    except Exception:
-        logger.exception('Owner notification failed for order %s.', order_id)
-
-    try:
-        from .fraud import assess_order
-        assess_order(order)
-    except Exception:
-        logger.exception('Fraud assessment failed for order %s.', order_id)
 
 
 def _send_order_event_with_logging(event, order_id, *, extra_context=None):
@@ -319,69 +286,6 @@ class CartViewSet(viewsets.ViewSet):
         return Response(self._body(find_cart(request, region), region))
 
 
-class CreatePaymentIntentView(views.APIView):
-    """Open a gateway payment for the current cart.
-
-    POST /api/checkout/payment-intent/
-    Body: { region, country?, state?, postal_code?, coupon_code? }
-
-    The amount is always derived server-side from the cart via quote_cart(); a
-    client-supplied amount is never trusted. Returns the data the browser SDK
-    needs to collect payment, after which /api/checkout/ verifies the result.
-    """
-    permission_classes = [AllowAny]
-    throttle_scope = 'checkout'
-
-    def post(self, request):
-        region_code = _clean_text(request.data.get('region')).upper()
-        if not region_code:
-            return Response({"error": "region is required."}, status=status.HTTP_400_BAD_REQUEST)
-
-        region = get_object_or_404(Region, code=region_code, is_active=True)
-        cart = find_cart(request, region)
-        if cart is not None:
-            cart = Cart.objects.prefetch_related('items__product__variants').get(pk=cart.pk)
-        if not cart or not cart.items.exists():
-            return Response({"error": "Cart is empty or invalid."}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            quote = quote_cart(
-                region, cart,
-                country=_clean_text(request.data.get('country')).upper(),
-                state=_clean_text(request.data.get('state')),
-                city=_clean_text(request.data.get('city')),
-                postal_code=_clean_text(request.data.get('postal_code')),
-                coupon_code=_clean_text(request.data.get('coupon_code')),
-                shipping_rate_id=request.data.get('shipping_rate_id'),
-            )
-        except PricingError as exc:
-            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-
-        method = (request.data.get('payment_method') or '').upper()
-        try:
-            adapter = resolve_gateway(region, method)
-        except PaymentError as exc:
-            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            intent = adapter.create_intent(quote['total'], region.currency_code, {
-                'cart_id': cart.pk,
-                'region': region.code,
-            })
-        except NotImplementedError:
-            return Response(
-                {"error": f"{method} does not support browser payment collection."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        except PaymentError as exc:
-            return Response({"error": str(exc)}, status=status.HTTP_402_PAYMENT_REQUIRED)
-
-        # Echo the amount so the UI can show exactly what will be charged.
-        intent['amount'] = str(quote['total'])
-        intent['currency'] = region.currency_code
-        return Response(intent, status=status.HTTP_200_OK)
-
-
 class ApplyCouponView(views.APIView):
     """
     Validate a coupon code and calculate discount.
@@ -444,282 +348,6 @@ class ApplyCouponView(views.APIView):
             "value": float(coupon.value),
             "discount_amount": float(discount_amount)
         })
-
-
-class CheckoutView(views.APIView):
-    permission_classes = [AllowAny]
-    throttle_scope = 'checkout'
-
-    @transaction.atomic
-    def post(self, request):
-        from decimal import Decimal
-        region_code = _clean_text(request.data.get('region', 'UK')).upper()
-        
-        # Contact and Address info
-        email = _clean_text(request.data.get('email')).lower()
-        shipping_name = _clean_text(request.data.get('shipping_name'))
-        shipping_phone = _clean_text(request.data.get('shipping_phone'))
-        address_line1 = _clean_text(request.data.get('shipping_address_line1'))
-        address_line2 = _clean_text(request.data.get('shipping_address_line2', ''))
-        city = _clean_text(request.data.get('shipping_city'))
-        state = _clean_text(request.data.get('shipping_state'))
-        postal_code = _clean_text(request.data.get('shipping_postal_code'))
-        country = _clean_text(request.data.get('shipping_country')).upper()
-        
-        payment_method = _clean_text(request.data.get('payment_method')).upper()
-        payment_id = _clean_text(request.data.get('payment_id', 'sandbox_mock_id'))
-        # Razorpay's browser handshake returns an order id + signature alongside
-        # the payment id; the adapter needs both to verify the callback is genuine.
-        gateway_payload = {
-            "payment_id": payment_id,
-            "razorpay_order_id": request.data.get('razorpay_order_id'),
-            "razorpay_signature": request.data.get('razorpay_signature'),
-        }
-
-        required = {
-            'email': email,
-            'shipping_name': shipping_name,
-            'shipping_phone': shipping_phone,
-            'shipping_address_line1': address_line1,
-            'shipping_city': city,
-            'shipping_state': state,
-            'shipping_postal_code': postal_code,
-            'shipping_country': country,
-            'payment_method': payment_method,
-        }
-        missing = [field for field, value in required.items() if not value]
-        if missing:
-            return Response(
-                {"error": f"Missing required checkout field: {missing[0].replace('_', ' ')}."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        try:
-            validate_email(email)
-        except DjangoValidationError:
-            return Response({"error": "Enter a valid email address."}, status=status.HTTP_400_BAD_REQUEST)
-        if not _valid_phone(shipping_phone):
-            return Response(
-                {"error": "Enter a valid phone number with 7 to 15 digits."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        if len(country) != 2:
-            return Response({"error": "Enter a valid two-letter country code."}, status=status.HTTP_400_BAD_REQUEST)
-
-        from apps.admin_dashboard.store_config import get_guest_checkout_enabled
-
-        if not request.user.is_authenticated and not get_guest_checkout_enabled():
-            return Response(
-                {"error": "Guest checkout is currently disabled. Please sign in to continue."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        # 1. Fetch Region & Cart
-        region = get_object_or_404(Region, code=region_code, is_active=True)
-        # Serialize checkout completion for one cart. This prevents double-clicks
-        # or client retries from deducting stock and creating two orders while
-        # the first payment completion is still committing.
-        cart = find_cart(request, region, for_update=True)
-        if cart is not None:
-            cart = Cart.objects.prefetch_related('items__product__variants').get(pk=cart.pk)
-        if not cart or not cart.items.exists():
-            return Response({"error": "Cart is empty or invalid."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # 1b. Smart gateway routing
-        try:
-            gateway_adapter = resolve_gateway(region, payment_method)
-        except PaymentError as exc:
-            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-
-        # 2. Price the cart. Shared with the payment-intent endpoint so the amount
-        #    authorised by the gateway always equals the amount charged here.
-        coupon_code = request.data.get('coupon_code')
-        try:
-            quote = quote_cart(
-                region, cart,
-                country=country, state=state, city=city, postal_code=postal_code,
-                coupon_code=coupon_code,
-                shipping_rate_id=request.data.get('shipping_rate_id'),
-            )
-        except PricingError as exc:
-            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-
-        subtotal = quote['subtotal']
-        discount_amount = quote['discount_amount']
-        tax_rate = quote['tax_rate']
-        tax_mode = quote['tax_mode']
-        rate_factor = quote['rate_factor']
-        tax_amount = quote['tax_amount']
-        shipping_cost = quote['shipping_cost']
-        shipping_option = quote['shipping_option']
-        total = quote['total']
-        order_items_to_create = quote['items']
-
-        # Lock a limited coupon before stock changes. Without this, two carts
-        # can both observe the final use and exceed its configured usage limit.
-        coupon = None
-        if quote['coupon'] and discount_amount > 0:
-            coupon = Coupon.objects.select_for_update().get(pk=quote['coupon'].pk)
-            if coupon.usage_limit and coupon.usage_count >= coupon.usage_limit:
-                return Response(
-                    {"error": "This coupon has reached its usage limit."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-        # 2b. Verify stock & deduct (side effects kept out of the pricing math).
-        # The nested savepoint guarantees a concurrency failure on a later cart
-        # line cannot commit deductions already made for earlier lines.
-        try:
-            with transaction.atomic():
-                for product, variant, qty, _price in order_items_to_create:
-                    deduct_region_stock(product, region, qty)
-                    deduct_variant_stock(
-                        product,
-                        variant.sku if variant else '',
-                        qty,
-                    )
-        except StockError as exc:
-            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-
-        # 2c. Consume the coupon only once the sale is actually going through.
-        if coupon is not None:
-            coupon.usage_count += 1
-            coupon.save(update_fields=['usage_count'])
-
-        # 4. Create Order
-        user = request.user if request.user.is_authenticated else None
-        order = Order.objects.create(
-            user=user,
-            region=region,
-            status='PROCESSING', # Auto-completed payment in sandbox
-            email=email,
-            shipping_name=shipping_name,
-            shipping_phone=shipping_phone,
-            shipping_address_line1=address_line1,
-            shipping_address_line2=address_line2,
-            shipping_city=city,
-            shipping_state=state,
-            shipping_postal_code=postal_code,
-            shipping_country=country,
-            currency_code=region.currency_code,
-            subtotal=subtotal,
-            tax_rate=tax_rate,
-            tax_amount=tax_amount,
-            shipping_cost=shipping_cost,
-            shipping_method=shipping_option['method'],
-            shipping_rate_name=shipping_option['name'],
-            shipping_estimated_days=shipping_option['estimated_days'],
-            coupon_code=coupon_code if discount_amount > 0 else None,
-            discount_amount=discount_amount,
-            total=total,
-            payment_method=payment_method,
-            payment_id=payment_id
-        )
-
-        # 5. Create Order Items
-        for product, variant, qty, price in order_items_to_create:
-            # Per-line tax portion, consistent with the store tax mode.
-            line_gross = price * qty
-            if tax_mode == 'inclusive':
-                line_net = (line_gross / (Decimal('1') + rate_factor)) if rate_factor else line_gross
-                item_tax = (line_gross - line_net).quantize(Decimal('0.01'))
-            else:
-                item_tax = (line_gross * rate_factor).quantize(Decimal('0.01'))
-            OrderItem.objects.create(
-                order=order,
-                product=product,
-                variant_sku=variant.sku if variant else '',
-                variant_name=variant.name if variant else '',
-                quantity=qty,
-                price=price,
-                tax_amount=item_tax
-            )
-
-        # 6. Charge via the routed gateway adapter (sandbox until live keys are set).
-        try:
-            charge = gateway_adapter.charge(order, gateway_payload)
-        except PaymentError as exc:
-            # Catching the error would normally let the surrounding atomic
-            # block COMMIT the order, stock deduction and coupon use for a
-            # payment that never happened. Explicitly mark the transaction for
-            # rollback so a failed charge leaves no trace.
-            transaction.set_rollback(True)
-            return Response({"error": str(exc)}, status=status.HTTP_402_PAYMENT_REQUIRED)
-
-        order.payment_id = charge.get("transaction_id", payment_id)
-        # COD has no captured payment yet -> keep PENDING; online success -> PROCESSING.
-        order.status = 'PENDING' if charge.get("status") == 'PENDING' else 'PROCESSING'
-        if charge.get("status") == 'PENDING':
-            order.payment_status = 'PENDING'
-            order.payment_captured_amount = Decimal('0.00')
-        else:
-            order.payment_status = 'PAID'
-            order.payment_captured_amount = total
-        order.payment_authorized_amount = total
-        order.payment_capture_mode = 'AUTO'
-        order.save(update_fields=[
-            'payment_id', 'status', 'payment_status', 'payment_captured_amount',
-            'payment_authorized_amount', 'payment_capture_mode',
-        ])
-
-        PaymentLog.objects.create(
-            order=order,
-            transaction_id=charge.get("transaction_id", payment_id),
-            gateway=payment_method,
-            amount=total,
-            status=charge.get("status", "SUCCESS"),
-            raw_response=charge.get("raw", {}),
-        )
-
-        # 7. Generate the invoice. A rendering/font/filesystem problem must not
-        # roll back a payment-confirmed sale; the admin download endpoint can
-        # regenerate a missing PDF later.
-        invoice_number = f"SP-{order.created_at.year}-{order.id:05d}"
-        pdf_relative_path = ''
-        try:
-            pdf_relative_path, invoice_number = generate_invoice_pdf(order)
-        except Exception:
-            logger.exception('Invoice PDF generation failed for order %s.', order.id)
-        
-        # Save invoice record
-        invoice_details = {
-            "tax_reg_number": (
-                f"GSTIN: {settings.IN_GSTIN}"
-                if region_code == 'IN'
-                else f"VAT: {settings.UK_VAT_NUMBER}"
-            ),
-            "invoice_type": "GST Tax Invoice" if region_code == 'IN' else "VAT Receipt",
-            "hsn_summary": [
-                {
-                    "hsn_code": item.product.hsn_code or '',
-                    "quantity": item.quantity,
-                    "tax_amount": str(item.tax_amount),
-                }
-                for item in order.items.select_related('product')
-            ] if region_code == 'IN' else [],
-        }
-        
-        Invoice.objects.create(
-            order=order,
-            invoice_number=invoice_number,
-            invoice_type='GST_INVOICE' if region_code == 'IN' else 'VAT_RECEIPT',
-            pdf_file=pdf_relative_path,
-            details=invoice_details
-        )
-
-        # 8. Clear Cart
-        cart.items.all().delete()
-        
-        # Email and fraud checks must never run against an order that later
-        # rolls back. The callback catches and logs its own failures so a
-        # committed checkout always returns its successful response.
-        transaction.on_commit(
-            lambda order_id=order.id: _run_checkout_followups(order_id)
-        )
-
-        return Response({
-            "message": "Checkout completed successfully!",
-            "order": OrderSerializer(order).data
-        }, status=status.HTTP_201_CREATED)
 
 
 def get_user_refund_limit(user, region_code):

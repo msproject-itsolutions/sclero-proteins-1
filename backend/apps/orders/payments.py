@@ -91,21 +91,6 @@ class BaseGatewayAdapter:
     def _simulated_reference(self, order):
         return f'sim_{(self.code or "gateway").lower()}_{order.pk}'
 
-    # --- charge-first helpers used by the current checkout view -------------
-    def _sandbox_charge(self, order, payload):
-        if not _sandbox_payments_allowed():
-            raise PaymentError('Sandbox payments are disabled outside development.')
-        return {
-            "status": "SUCCESS",
-            "transaction_id": payload.get("payment_id")
-            or f"sandbox_{self.code.lower()}_{order.id}",
-            "raw": {
-                "sandbox_mode": True,
-                "gateway": self.code,
-                "message": "Simulated successful payment",
-            },
-        }
-
     def _sandbox_refund(self, order, amount, reason):
         return {
             "status": "REFUNDED",
@@ -121,15 +106,6 @@ class BaseGatewayAdapter:
     @property
     def _is_live(self):
         return bool(self.gateway and self.gateway.mode == "LIVE" and self.gateway.secret_key)
-
-    def charge(self, order, payload):
-        """Verify/capture a payment for the charge-first checkout."""
-        if self._is_live:
-            raise PaymentError(
-                f'{self.code} live capture is not implemented; disable this gateway '
-                'until a provider-backed adapter is deployed.'
-            )
-        return self._sandbox_charge(order, payload)
 
     # --- order-first collection ---------------------------------------------
     def open_payment(self, order):
@@ -212,15 +188,6 @@ class BaseGatewayAdapter:
             f'{self.code} refunds are not implemented; reconcile this refund in the '
             'provider dashboard.'
         )
-
-    def create_intent(self, amount, currency_code, metadata=None):
-        """Open a payment with the provider so the browser SDK can collect it.
-
-        Returns a dict the frontend hands to the gateway's JS SDK, e.g.
-        {"client_secret": ..., "publishable_key": ...} for Stripe. Amount is
-        always supplied by the server, never by the client.
-        """
-        raise NotImplementedError(f"{self.code} has no browser payment collection.")
 
     def reconcile_payment(self, payment_id, expected_amount, currency_code):
         """Return the authoritative state of a previously opened payment.
@@ -308,110 +275,11 @@ class RazorpayAdapter(BaseGatewayAdapter):
             raise PaymentError(err.get("description") or "Razorpay rejected the payment.")
         return body
 
-    def create_intent(self, amount, currency_code, metadata=None):
-        if not self.gateway or not self.gateway.is_configured:
-            return {"sandbox": True, "razorpay_order_id": None,
-                    "publishable_key": self.gateway.publishable_key or ""}
-
-        data = {
-            "amount": to_minor_units(amount, currency_code),
-            "currency": (currency_code or "").upper(),
-        }
-        for key, value in (metadata or {}).items():
-            data[f"notes[{key}]"] = str(value)
-
-        rzp_order = self._request("POST", "/orders", data=data)
-        return {
-            "razorpay_order_id": rzp_order.get("id"),
-            "publishable_key": self.gateway.publishable_key or "",
-        }
-
     def test_connection(self):
         if not self.gateway.publishable_key or not self.gateway.secret_key:
             raise PaymentError('Razorpay Key ID and Key Secret are required.')
         self._request('GET', '/payments?count=1')
         return {'ok': True, 'message': 'Razorpay credentials verified successfully.'}
-
-    def _verify_handshake(self, payload):
-        """Verify the browser callback really came from Razorpay.
-
-        Signature = HMAC_SHA256("<razorpay_order_id>|<razorpay_payment_id>", key_secret).
-        """
-        rzp_order_id = (payload or {}).get("razorpay_order_id")
-        signature = (payload or {}).get("razorpay_signature")
-        payment_id = (payload or {}).get("payment_id")
-        if not (rzp_order_id and signature):
-            # No handshake supplied — the authoritative API fetch below still
-            # gates the charge, so this is a warning rather than a hard failure.
-            logger.warning("Razorpay charge for %s arrived without an order id/signature", payment_id)
-            return
-        expected_body = f"{rzp_order_id}|{payment_id}".encode()
-        if not verify_razorpay_signature(expected_body, signature, self.gateway.secret_key):
-            logger.error("Razorpay signature mismatch for payment %s", payment_id)
-            raise PaymentError("Payment verification failed. Please contact support before retrying.")
-
-    def charge(self, order, payload):
-        if not self.gateway or not self.gateway.is_configured:
-            return self._sandbox_charge(order, payload)
-
-        payment_id = (payload or {}).get("payment_id") or ""
-        if not payment_id.startswith("pay_"):
-            if not self._is_live:
-                return self._sandbox_charge(order, payload)
-            raise PaymentError("A valid Razorpay payment reference is required.")
-
-        if not self._is_live:
-            try:
-                self._verify_handshake(payload)
-                payment = self._request("GET", f"/payments/{payment_id}")
-            except PaymentError as exc:
-                logger.warning("Razorpay TEST mode live API fetch failed (%s); falling back to sandbox charge.", exc)
-                return self._sandbox_charge(order, payload)
-        else:
-            self._verify_handshake(payload)
-            payment = self._request("GET", f"/payments/{payment_id}")
-
-        expected_minor = to_minor_units(order.total, order.currency_code)
-        paid_minor = int(payment.get("amount") or 0)
-        payment_currency = (payment.get("currency") or "").upper()
-
-        if payment_currency != (order.currency_code or "").upper():
-            logger.error(
-                "Razorpay currency mismatch on order %s: got %s, expected %s",
-                order.id, payment_currency, order.currency_code,
-            )
-            raise PaymentError("The payment currency does not match the order.")
-        if paid_minor != expected_minor:
-            logger.error(
-                "Razorpay amount mismatch on order %s: got %s, expected %s",
-                order.id, paid_minor, expected_minor,
-            )
-            raise PaymentError("The amount paid does not match the order total.")
-
-        state = payment.get("status")
-        if state == "authorized":
-            # Funds are held but not taken; capture or they auto-void.
-            payment = self._request(
-                "POST", f"/payments/{payment_id}/capture",
-                data={"amount": expected_minor, "currency": payment_currency},
-            )
-            state = payment.get("status")
-
-        if state != "captured":
-            logger.warning("Razorpay payment %s not captured (status=%s)", payment_id, state)
-            raise PaymentError(f"Payment was not completed (status: {state}).")
-
-        return {
-            "status": "SUCCESS",
-            "transaction_id": payment_id,
-            "raw": {
-                "gateway": self.code,
-                "mode": "LIVE",
-                "amount": paid_minor,
-                "currency": payment_currency,
-                "method": payment.get("method"),
-            },
-        }
 
     def reconcile_payment(self, payment_id, expected_amount, currency_code):
         if not self._is_live or not (payment_id or '').startswith('pay_'):
@@ -634,93 +502,11 @@ class StripeAdapter(BaseGatewayAdapter):
             raise PaymentError(err.get("message") or "Stripe rejected the payment.")
         return body
 
-    def create_intent(self, amount, currency_code, metadata=None):
-        if not self.gateway or not self.gateway.is_configured:
-            # Keeps the sandbox checkout flow working without Stripe credentials.
-            return {"sandbox": True, "client_secret": None,
-                    "publishable_key": self.gateway.publishable_key or ""}
-
-        data = {
-            "amount": to_minor_units(amount, currency_code),
-            "currency": (currency_code or "").lower(),
-            "automatic_payment_methods[enabled]": "true",
-        }
-        for key, value in (metadata or {}).items():
-            data[f"metadata[{key}]"] = str(value)
-
-        intent = self._request("POST", "/payment_intents", data=data)
-        return {
-            "intent_id": intent.get("id"),
-            "client_secret": intent.get("client_secret"),
-            "publishable_key": self.gateway.publishable_key or "",
-        }
-
     def test_connection(self):
         if not self.gateway.secret_key:
             raise PaymentError('Stripe secret key is required.')
         self._request('GET', '/balance')
         return {'ok': True, 'message': 'Stripe credentials verified successfully.'}
-
-    def charge(self, order, payload):
-        """Verify a PaymentIntent the client already confirmed.
-
-        The client confirms the PaymentIntent in the browser; this only reads it
-        back and checks it really succeeded, for the right amount, in the right
-        currency. Never trust the client's word that payment happened.
-        """
-        if not self.gateway or not self.gateway.is_configured:
-            return self._sandbox_charge(order, payload)
-
-        intent_id = (payload or {}).get("payment_id") or ""
-        if not intent_id.startswith("pi_"):
-            if not self._is_live:
-                return self._sandbox_charge(order, payload)
-            raise PaymentError("A valid Stripe PaymentIntent reference is required.")
-
-        if not self._is_live:
-            try:
-                intent = self._request("GET", f"/payment_intents/{intent_id}")
-            except PaymentError as exc:
-                logger.warning("Stripe TEST mode live API fetch failed (%s); falling back to sandbox charge.", exc)
-                return self._sandbox_charge(order, payload)
-        else:
-            intent = self._request("GET", f"/payment_intents/{intent_id}")
-
-        status_ = intent.get("status")
-        if status_ != "succeeded":
-            logger.warning("Stripe intent %s not succeeded (status=%s)", intent_id, status_)
-            raise PaymentError(f"Payment was not completed (status: {status_}).")
-
-        # Guard against a tampered client confirming a cheap intent for a costly
-        # order, or paying in a weaker currency.
-        expected_minor = to_minor_units(order.total, order.currency_code)
-        received_minor = int(intent.get("amount_received") or 0)
-        if received_minor != expected_minor:
-            logger.error(
-                "Stripe amount mismatch on order %s: got %s, expected %s",
-                order.id, received_minor, expected_minor,
-            )
-            raise PaymentError("The amount paid does not match the order total.")
-
-        intent_currency = (intent.get("currency") or "").upper()
-        if intent_currency != (order.currency_code or "").upper():
-            logger.error(
-                "Stripe currency mismatch on order %s: got %s, expected %s",
-                order.id, intent_currency, order.currency_code,
-            )
-            raise PaymentError("The payment currency does not match the order.")
-
-        return {
-            "status": "SUCCESS",
-            "transaction_id": intent_id,
-            "raw": {
-                "gateway": self.code,
-                "mode": "LIVE",
-                "amount_received": received_minor,
-                "currency": intent_currency,
-                "latest_charge": intent.get("latest_charge"),
-            },
-        }
 
     def reconcile_payment(self, payment_id, expected_amount, currency_code):
         if not self._is_live or not (payment_id or '').startswith('pi_'):
@@ -939,59 +725,6 @@ class PayPalAdapter(BaseGatewayAdapter):
         self._token()
         return {'ok': True, 'message': 'PayPal credentials verified successfully.'}
 
-    def create_intent(self, amount, currency_code, metadata=None):
-        if not self._is_live:
-            return {'sandbox': True, 'paypal_order_id': None,
-                    'client_id': self.gateway.publishable_key or ''}
-        metadata = metadata or {}
-        order = self._request(
-            'POST', '/v2/checkout/orders',
-            {
-                'intent': 'CAPTURE',
-                'purchase_units': [{
-                    'reference_id': str(metadata.get('order_id') or metadata.get('cart_id') or 'checkout'),
-                    'custom_id': str(metadata.get('order_id') or ''),
-                    'amount': {
-                        'currency_code': (currency_code or '').upper(),
-                        'value': f'{Decimal(str(amount)):.2f}',
-                    },
-                }],
-            },
-            idempotency_key=f"paypal_intent_{metadata.get('order_id') or metadata.get('cart_id') or int(time.time())}",
-        )
-        return {
-            'paypal_order_id': order.get('id'),
-            'client_id': self.gateway.publishable_key or '',
-        }
-
-    def charge(self, order, payload):
-        if not self._is_live:
-            return self._sandbox_charge(order, payload)
-        paypal_order_id = (payload or {}).get('payment_id') or ''
-        if not paypal_order_id:
-            raise PaymentError('A PayPal order reference is required.')
-        remote = self._request('GET', f'/v2/checkout/orders/{paypal_order_id}')
-        if remote.get('status') == 'APPROVED':
-            remote = self._request(
-                'POST', f'/v2/checkout/orders/{paypal_order_id}/capture', {},
-                idempotency_key=f'paypal_capture_{order.id}',
-            )
-        if remote.get('status') != 'COMPLETED':
-            raise PaymentError(f"PayPal payment is not complete (status: {remote.get('status', 'unknown')}).")
-        purchase_units = remote.get('purchase_units') or []
-        captures = ((purchase_units[0].get('payments') or {}).get('captures') or []) if purchase_units else []
-        capture = captures[0] if captures else {}
-        amount = capture.get('amount') or (purchase_units[0].get('amount') if purchase_units else {}) or {}
-        if Decimal(str(amount.get('value') or '0')) != Decimal(str(order.total)):
-            raise PaymentError('The PayPal amount does not match the order total.')
-        if (amount.get('currency_code') or '').upper() != (order.currency_code or '').upper():
-            raise PaymentError('The PayPal currency does not match the order.')
-        return {
-            'status': 'SUCCESS',
-            'transaction_id': capture.get('id') or paypal_order_id,
-            'raw': {'gateway': self.code, 'mode': 'LIVE', 'paypal_order_id': paypal_order_id},
-        }
-
     def reconcile_payment(self, payment_id, expected_amount, currency_code):
         if not self._is_live or not payment_id:
             return {'state': 'unavailable'}
@@ -1078,13 +811,6 @@ class CODAdapter(BaseGatewayAdapter):
 
     def _open_provider_payment(self, order):
         raise PaymentError('Cash on delivery takes no online payment.')
-
-    def charge(self, order, payload):
-        return {
-            "status": "PENDING",
-            "transaction_id": f"cod_{order.id}",
-            "raw": {"gateway": "COD", "message": "Cash to be collected on delivery"},
-        }
 
     def refund(self, order, amount, reason="", idempotency_key=None):
         return {
