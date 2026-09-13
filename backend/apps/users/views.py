@@ -1107,7 +1107,7 @@ class CustomerProfileViewSet(viewsets.ModelViewSet):
         customer = self.get_object()
         addresses = UserAddressSerializer(customer.addresses.all(), many=True).data
 
-        orders_qs = Order.objects.filter(email__iexact=customer.email).order_by('-created_at')
+        orders_qs = Order.objects.placed().filter(email__iexact=customer.email).order_by('-created_at')
         orders_count = orders_qs.count()
         total_spent = orders_qs.aggregate(total=Sum('total'))['total'] or 0
         orders_data = [{

@@ -242,3 +242,30 @@ def run_order_followups(order_id):
         assess_order(order)
     except Exception:
         logger.exception('Fraud assessment failed for order %s.', order_id)
+
+
+def record_cod_payment(order_id, *, actor):
+    """Staff record that the cash for a cash-on-delivery order was collected."""
+    with transaction.atomic():
+        order = Order.objects.select_for_update().select_related('region').get(pk=order_id)
+        if order.payment_method != 'COD':
+            raise PaymentError('Only cash-on-delivery orders take a recorded cash payment.')
+        if order.payment_status != 'PENDING' or order.status in ('AWAITING_PAYMENT', 'CANCELLED', 'REFUNDED'):
+            raise PaymentError(
+                f'This order cannot take a cash payment (payment {order.payment_status}, status {order.status}).'
+            )
+        order.payment_status = 'PAID'
+        order.payment_authorized_amount = order.total
+        order.payment_captured_amount = order.total
+        order.save(update_fields=['payment_status', 'payment_authorized_amount', 'payment_captured_amount', 'updated_at'])
+        PaymentLog.objects.create(
+            order=order, transaction_id=order.payment_id or f'cod_{order.pk}', gateway='COD',
+            amount=order.total, status='PAID', raw_response={'recorded_by': getattr(actor, 'email', '')},
+        )
+        log_order_event(
+            order, 'order.cod_payment_recorded', 'Cash on delivery payment recorded',
+            changes={'amount': str(order.total), 'currency': order.currency_code}, actor=actor,
+        )
+        # The invoice PDF shows the payment status, so render it again.
+        transaction.on_commit(lambda: ensure_invoice(order, refresh_pdf=True))
+    return order

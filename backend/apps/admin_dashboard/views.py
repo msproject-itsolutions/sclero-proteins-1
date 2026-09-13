@@ -845,7 +845,7 @@ class ReportAnalyticsView(APIView):
                 return Response({"error": "No active region configured."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Scoped orders query
-        orders = Order.objects.filter(region=region)
+        orders = Order.objects.placed().filter(region=region)
         total_orders = orders.count()
         total_revenue = float(orders.aggregate(s=Sum('total'))['s'] or 0.0)
         aov = total_revenue / total_orders if total_orders > 0 else 0.0

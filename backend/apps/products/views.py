@@ -279,7 +279,7 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
             # Auto-detect verified purchase: did this email actually order this product?
             from apps.orders.models import Order
             email = serializer.validated_data.get('user_email', '')
-            verified = bool(email) and Order.objects.filter(
+            verified = bool(email) and Order.objects.placed().filter(
                 email__iexact=email, items__product=product
             ).exists()
             # Always created unapproved — visible only after moderation.

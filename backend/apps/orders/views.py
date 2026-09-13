@@ -30,6 +30,7 @@ from .stock import (
     restock_region_item, restock_variant_item,
 )
 from .invoices import ensure_invoice
+from . import order_payments
 from .payments import refund_payment, PaymentError
 from .pricing import PricingError, cart_subtotal
 from .cart_identity import attach_cart_cookie, find_cart, get_or_create_cart, shopper_carts
@@ -105,13 +106,9 @@ class MyOrdersView(generics.ListAPIView):
         if user.email_verified:
             owned |= Q(email__iexact=user.email)
         return (
-            # A shopper should only see a completed sale in order history.
-            # Unpaid attempts are retained for recovery/reconciliation but are
-            # deliberately not presented as an order.
-            Order.objects.filter(
-                owned,
-                payment_status__in=['PAID', 'PARTIALLY_CAPTURED', 'REFUNDED'],
-            )
+            # Order history shows placed orders, cash on delivery included;
+            # unpaid online attempts stay out.
+            Order.objects.placed().filter(owned)
             .prefetch_related(
                 Prefetch('items', queryset=OrderItem.objects.select_related('product')),
                 'refunds',
@@ -517,17 +514,11 @@ class OrderAdminViewSet(viewsets.ModelViewSet):
         return [require_permission('orders.manage')()]
 
     def get_queryset(self):
-        queryset = Order.objects.select_related('user', 'region', 'invoice').prefetch_related(
+        queryset = Order.objects.placed().select_related('user', 'region', 'invoice').prefetch_related(
             Prefetch('items', queryset=OrderItem.objects.select_related('product')),
             'refunds', 'payment_logs',
         )
-        # The Orders workspace is for money-received sales only. Pending or
-        # failed attempts remain available to the recovery/reconciliation
-        # workflow, never mixed into fulfilment work.
-        queryset = queryset.filter(
-            payment_status__in=['PAID', 'PARTIALLY_CAPTURED', 'REFUNDED']
-        )
-        
+
         # Enforce Regional Restrictions for Country Managers
         user = self.request.user
         if user and user.is_authenticated and not user.is_superuser:
@@ -670,7 +661,7 @@ class OrderAdminViewSet(viewsets.ModelViewSet):
             )
 
         order_status = (data.get('status') or 'PENDING').upper()
-        if order_status not in dict(Order.ORDER_STATUS):
+        if order_status not in dict(Order.ORDER_STATUS) or order_status == 'AWAITING_PAYMENT':
             return Response({'status': ['Invalid order status.']}, status=status.HTTP_400_BAD_REQUEST)
 
         payment_method = str(data.get('payment_method') or '').upper().strip()
@@ -747,6 +738,11 @@ class OrderAdminViewSet(viewsets.ModelViewSet):
         valid_statuses = [choice[0] for choice in Order.ORDER_STATUS]
         if new_status not in valid_statuses:
             return Response({"error": f"Invalid status. Must be one of {valid_statuses}"}, status=status.HTTP_400_BAD_REQUEST)
+        if new_status == 'AWAITING_PAYMENT':
+            return Response(
+                {"error": "An order returns to awaiting payment only through checkout."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         old_status = order.status
         order.status = new_status
@@ -777,97 +773,13 @@ class OrderAdminViewSet(viewsets.ModelViewSet):
         return Response({"message": "Status updated successfully", "status": order.status})
 
     @action(detail=True, methods=['post'])
-    @transaction.atomic
-    def authorize_payment(self, request, pk=None):
-        """Mark an order payment as authorized without capture."""
+    def record_cod_payment(self, request, pk=None):
+        """Record that the cash for a cash-on-delivery order was collected."""
         order = self.get_object()
-        raw_amount = request.data.get('amount') or order.total
         try:
-            amount = Decimal(str(raw_amount))
-        except (InvalidOperation, TypeError):
-            return Response({"error": "Invalid authorization amount."}, status=status.HTTP_400_BAD_REQUEST)
-        if amount <= 0 or amount > order.total:
-            return Response({"error": "Authorization amount must be positive and cannot exceed the order total."}, status=status.HTTP_400_BAD_REQUEST)
-
-        order.payment_capture_mode = 'MANUAL'
-        order.payment_status = 'AUTHORIZED'
-        order.payment_authorized_amount = amount
-        order.payment_captured_amount = Decimal('0.00')
-        order.status = 'PENDING'
-        order.save(update_fields=[
-            'payment_capture_mode', 'payment_status', 'payment_authorized_amount',
-            'payment_captured_amount', 'status', 'updated_at',
-        ])
-
-        tx_id = request.data.get('transaction_id') or f"auth_{order.id}_{int(timezone.now().timestamp())}"
-        PaymentLog.objects.create(
-            order=order,
-            transaction_id=tx_id,
-            gateway=order.payment_method,
-            amount=amount,
-            status='AUTHORIZED',
-            raw_response={'manual': True, 'created_by': getattr(request.user, 'email', '')},
-        )
-        AuditLog.objects.create(
-            user=request.user if request.user.is_authenticated else None,
-            action='Payment authorized',
-            model_name='Order',
-            object_id=str(order.id),
-            changes={'amount': str(amount), 'currency': order.currency_code, 'transaction_id': tx_id},
-        )
-        return Response(OrderAdminSerializer(order, context={'request': request}).data)
-
-    @action(detail=True, methods=['post'])
-    @transaction.atomic
-    def capture_payment(self, request, pk=None):
-        """Capture a full or partial amount from an existing authorization."""
-        order = self.get_object()
-        authorized = order.payment_authorized_amount or order.total
-        captured = order.payment_captured_amount or Decimal('0.00')
-        remaining = authorized - captured
-        if remaining <= 0:
-            return Response({"error": "No authorized balance remains to capture."}, status=status.HTTP_400_BAD_REQUEST)
-
-        raw_amount = request.data.get('amount') or remaining
-        try:
-            amount = Decimal(str(raw_amount))
-        except (InvalidOperation, TypeError):
-            return Response({"error": "Invalid capture amount."}, status=status.HTTP_400_BAD_REQUEST)
-        if amount <= 0 or amount > remaining:
-            return Response({"error": f"Capture amount must be between 0 and {remaining} {order.currency_code}."}, status=status.HTTP_400_BAD_REQUEST)
-
-        new_captured = captured + amount
-        order.payment_capture_mode = 'MANUAL'
-        order.payment_authorized_amount = authorized
-        order.payment_captured_amount = new_captured
-        order.payment_status = 'PAID' if new_captured >= authorized else 'PARTIALLY_CAPTURED'
-        if order.payment_status == 'PAID' and order.status == 'PENDING':
-            order.status = 'PROCESSING'
-        order.save(update_fields=[
-            'payment_capture_mode', 'payment_authorized_amount', 'payment_captured_amount',
-            'payment_status', 'status', 'updated_at',
-        ])
-
-        tx_id = request.data.get('transaction_id') or f"cap_{order.id}_{int(timezone.now().timestamp())}"
-        PaymentLog.objects.create(
-            order=order,
-            transaction_id=tx_id,
-            gateway=order.payment_method,
-            amount=amount,
-            status='CAPTURED' if order.payment_status == 'PAID' else 'PARTIALLY_CAPTURED',
-            raw_response={'manual': True, 'created_by': getattr(request.user, 'email', '')},
-        )
-        AuditLog.objects.create(
-            user=request.user if request.user.is_authenticated else None,
-            action='Payment captured',
-            model_name='Order',
-            object_id=str(order.id),
-            changes={
-                'amount': str(amount), 'currency': order.currency_code,
-                'captured_total': str(new_captured), 'authorized_total': str(authorized),
-                'transaction_id': tx_id,
-            },
-        )
+            order = order_payments.record_cod_payment(order.pk, actor=request.user)
+        except PaymentError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(OrderAdminSerializer(order, context={'request': request}).data)
 
     @action(detail=True, methods=['post'])
@@ -998,12 +910,11 @@ class AbandonedCheckoutsView(generics.ListAPIView):
     permission_classes = [require_permission('orders.view')]
 
     def list(self, request):
-        # A checkout attempt which reached a gateway but has not received a
-        # confirmed payment is intentionally shown here, not in Orders. The
-        # reconciliation worker and signed webhooks move it to Orders only
-        # after the gateway confirms the full payment.
+        # An order still awaiting a confirmed online payment is shown here,
+        # not in Orders. The reconciliation worker and signed webhooks move it
+        # to Orders only after the gateway confirms the full payment.
         pending_orders = (
-            Order.objects.filter(payment_status__in=['PENDING', 'AUTHORIZED', 'FAILED'])
+            Order.objects.filter(status='AWAITING_PAYMENT')
             .select_related('region').prefetch_related('items__product')
         )
         out = [

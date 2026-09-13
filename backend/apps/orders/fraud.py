@@ -51,7 +51,7 @@ def assess_order(order):
 
             if kind == 'ORDER_VELOCITY_PER_EMAIL':
                 since = timezone.now() - timedelta(minutes=window)
-                count = Order.objects.filter(
+                count = Order.objects.placed().filter(
                     email__iexact=order.email, created_at__gte=since,
                 ).exclude(pk=order.pk).count()
                 if count > rule.threshold:
@@ -70,7 +70,7 @@ def assess_order(order):
                               f"exceeds threshold {rule.threshold}")
 
             elif kind == 'NEW_EMAIL_HIGH_VALUE':
-                prior = Order.objects.filter(email__iexact=order.email).exclude(pk=order.pk).count()
+                prior = Order.objects.placed().filter(email__iexact=order.email).exclude(pk=order.pk).count()
                 if prior == 0 and Decimal(str(order.total or 0)) > Decimal(str(rule.threshold)):
                     detail = (f"First order from {order.email} at {order.currency_code} "
                               f"{order.total} (threshold {rule.threshold})")

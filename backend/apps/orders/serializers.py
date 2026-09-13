@@ -140,6 +140,11 @@ class OrderAdminUpdateSerializer(serializers.ModelSerializer):
             'shipping_carrier', 'tracking_number', 'tracking_url', 'staff_notes'
         ]
 
+    def validate_status(self, value):
+        if value == 'AWAITING_PAYMENT':
+            raise serializers.ValidationError('An order returns to awaiting payment only through checkout.')
+        return value
+
     def update(self, instance, validated_data):
         old_status = instance.status
         old_tracking = instance.tracking_url
