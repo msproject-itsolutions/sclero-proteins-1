@@ -62,6 +62,32 @@ def to_minor_units(amount, currency_code: str) -> int:
     return int((amount * Decimal('100')).to_integral_value(rounding=ROUND_HALF_UP))
 
 
+def from_minor_units(value, currency_code: str) -> Decimal:
+    """Inverse of to_minor_units: a provider's integer amount as a Decimal."""
+    code = (currency_code or '').upper()
+    units = Decimal(int(value))
+    if code in ZERO_DECIMAL_CURRENCIES:
+        return units
+    if code in THREE_DECIMAL_CURRENCIES:
+        return units / Decimal('1000')
+    return units / Decimal('100')
+
+
+def _parsed_event(kind, *, reference='', payment_id='', order_id=None, amount_minor=None,
+                  currency='', status=''):
+    currency = (currency or '').upper()
+    return {
+        'event_type': kind,
+        'payment_reference': reference or '',
+        'payment_id': payment_id or '',
+        'order_id': order_id,
+        'amount_minor': int(amount_minor) if amount_minor is not None else None,
+        'amount': from_minor_units(amount_minor, currency) if amount_minor is not None else None,
+        'currency': currency,
+        'status': status or '',
+    }
+
+
 def _sandbox_payments_allowed() -> bool:
     """Simulated results are for DEBUG and the test suite only (no override)."""
     return bool(settings.ALLOW_SIMULATED_PAYMENTS)
@@ -206,14 +232,35 @@ class BaseGatewayAdapter:
         Normalizes raw webhook payloads into a standardized event dictionary.
         Returns:
             {
-                'event_type': str,  # 'payment.succeeded', 'payment.failed', 'refund.processed', 'unknown'
-                'payment_id': str,  # Gateway transaction ID
-                'order_id': str,    # Optional Sclero Proteins order ID
-                'amount': Decimal,  # Transaction amount (optional)
-                'status': str       # Gateway status
+                'event_type': str,      # 'payment.succeeded', 'payment.failed', 'refund.processed', 'unknown'
+                'payment_reference': str,  # The order-first reference (Stripe pi_..., Razorpay order_...)
+                'payment_id': str,      # Gateway transaction/charge id
+                'order_id': str | None,  # Our order id, if the provider echoed it back
+                'amount_minor': int | None,  # Provider's integer amount, or None when absent
+                'amount': Decimal | None,    # from_minor_units(amount_minor, currency), or None
+                'currency': str,        # Upper case
+                'status': str,          # Gateway status
             }
         """
         raise NotImplementedError("Subclasses must implement parse_webhook_event.")
+
+    def webhook_verification(self, order, parsed):
+        """Payment facts from a signed success event, or from the provider when
+        the event lacks them. mark_order_paid checks them against the order."""
+        amount_minor = parsed.get('amount_minor')
+        currency = str(parsed.get('currency') or '').upper()
+        if amount_minor is None or not currency:
+            result = self.reconcile_order(order)
+            if result.get('state') != 'paid':
+                raise PaymentError(f'The provider does not report order #{order.pk} as paid.')
+            return result
+        return {
+            'state': 'paid',
+            'transaction_id': str(parsed.get('payment_id') or parsed.get('payment_reference') or ''),
+            'amount_minor': int(amount_minor),
+            'currency': currency,
+            'raw': {'source': 'webhook', 'status': parsed.get('status', '')},
+        }
 
     def process_subscription(self, customer, subscription_payload):
         """
@@ -389,37 +436,31 @@ class RazorpayAdapter(BaseGatewayAdapter):
         sig_header = headers.get('HTTP_X_RAZORPAY_SIGNATURE', '')
         return verify_razorpay_signature(raw_body, sig_header, secret)
 
+    WEBHOOK_EVENTS = {
+        'payment.captured': 'payment.succeeded',
+        'order.paid': 'payment.succeeded',
+        'payment.failed': 'payment.failed',
+        'refund.processed': 'refund.processed',
+    }
+
     def parse_webhook_event(self, payload: dict) -> dict:
-        event_type = payload.get('event', '')
-        payload_entities = payload.get('payload', {})
-        payment_entity = payload_entities.get('payment', {}).get('entity', {})
-        refund_entity = payload_entities.get('refund', {}).get('entity', {})
-        entity = payment_entity or refund_entity
-        
-        normalized_event = 'unknown'
-        if event_type in ('payment.captured', 'order.paid'):
-            normalized_event = 'payment.succeeded'
-        elif event_type == 'payment.failed':
-            normalized_event = 'payment.failed'
-        elif event_type == 'refund.processed':
-            normalized_event = 'refund.processed'
-
-        payment_id = payment_entity.get('id') or refund_entity.get('payment_id') or ''
-        notes = entity.get('notes', {})
-        order_id = notes.get('order_id')
-
-        amount = Decimal('0.00')
-        if entity.get('amount'):
-            amount = Decimal(str(entity.get('amount'))) / Decimal('100.00')
-
-        return {
-            'event_type': normalized_event,
-            'payment_id': payment_id,
-            'order_id': order_id,
-            'amount': amount,
-            'status': entity.get('status', ''),
-            'currency': entity.get('currency', ''),
-        }
+        entities = payload.get('payload') or {}
+        payment = (entities.get('payment') or {}).get('entity') or {}
+        refund = (entities.get('refund') or {}).get('entity') or {}
+        rzp_order = (entities.get('order') or {}).get('entity') or {}
+        kind = self.WEBHOOK_EVENTS.get(payload.get('event', ''), 'unknown')
+        # A refund event reports the refunded amount, not the payment's.
+        entity = refund if kind == 'refund.processed' else payment
+        notes = entity.get('notes') or payment.get('notes') or {}
+        return _parsed_event(
+            kind,
+            reference=payment.get('order_id') or rzp_order.get('id'),
+            payment_id=payment.get('id') or refund.get('payment_id'),
+            order_id=notes.get('order_id'),
+            amount_minor=entity.get('amount'),
+            currency=entity.get('currency') or payment.get('currency'),
+            status=entity.get('status'),
+        )
 
 
 class StripeAdapter(BaseGatewayAdapter):
@@ -595,35 +636,33 @@ class StripeAdapter(BaseGatewayAdapter):
         sig_header = headers.get('HTTP_STRIPE_SIGNATURE', '')
         return verify_stripe_signature(raw_body, sig_header, secret)
 
+    WEBHOOK_EVENTS = {
+        'payment_intent.succeeded': 'payment.succeeded',
+        'charge.succeeded': 'payment.succeeded',
+        'payment_intent.payment_failed': 'payment.failed',
+        'charge.failed': 'payment.failed',
+        'charge.refunded': 'refund.processed',
+    }
+
     def parse_webhook_event(self, payload: dict) -> dict:
         event_type = payload.get('type', '')
-        data_obj = payload.get('data', {}).get('object', {})
-        
-        normalized_event = 'unknown'
-        if event_type in ('payment_intent.succeeded', 'charge.succeeded'):
-            normalized_event = 'payment.succeeded'
-        elif event_type in ('payment_intent.payment_failed', 'charge.failed'):
-            normalized_event = 'payment.failed'
-        elif event_type in ('charge.refunded',):
-            normalized_event = 'refund.processed'
-
-        payment_id = data_obj.get('payment_intent') or data_obj.get('id') or ''
-        metadata = data_obj.get('metadata', {})
-        order_id = metadata.get('order_id') or data_obj.get('client_reference_id')
-
-        amount = Decimal('0.00')
-        if data_obj.get('amount_received') or data_obj.get('amount'):
-            amt_val = data_obj.get('amount_received') or data_obj.get('amount')
-            amount = Decimal(str(amt_val)) / Decimal('100.00')
-
-        return {
-            'event_type': normalized_event,
-            'payment_id': payment_id,
-            'order_id': order_id,
-            'amount': amount,
-            'status': data_obj.get('status', ''),
-            'currency': data_obj.get('currency', ''),
-        }
+        obj = (payload.get('data') or {}).get('object') or {}
+        kind = self.WEBHOOK_EVENTS.get(event_type, 'unknown')
+        if event_type.startswith('payment_intent.'):
+            reference = obj.get('id')
+            amount_minor = obj.get('amount_received')
+        else:
+            reference = obj.get('payment_intent')
+            # charge.refunded carries the cumulative refunded amount.
+            amount_minor = (
+                obj.get('amount_refunded') if kind == 'refund.processed'
+                else obj.get('amount_captured') or obj.get('amount')
+            )
+        return _parsed_event(
+            kind, reference=reference, payment_id=reference,
+            order_id=(obj.get('metadata') or {}).get('order_id'),
+            amount_minor=amount_minor, currency=obj.get('currency'), status=obj.get('status'),
+        )
 
 
 class PayPalAdapter(BaseGatewayAdapter):
@@ -711,34 +750,27 @@ class PayPalAdapter(BaseGatewayAdapter):
             headers, raw_body, webhook_id, client_id, client_secret, self.gateway.mode
         )
 
+    WEBHOOK_EVENTS = {
+        'PAYMENT.CAPTURE.COMPLETED': 'payment.succeeded',
+        'PAYMENT.CAPTURE.DENIED': 'payment.failed',
+        'PAYMENT.CAPTURE.DECLINED': 'payment.failed',
+        'PAYMENT.CAPTURE.REFUNDED': 'refund.processed',
+    }
+
     def parse_webhook_event(self, payload: dict) -> dict:
-        event_type = payload.get('event_type', '')
-        resource = payload.get('resource', {})
-        
-        normalized_event = 'unknown'
-        if event_type in ('PAYMENT.CAPTURE.COMPLETED', 'CHECKOUT.ORDER.APPROVED'):
-            normalized_event = 'payment.succeeded'
-        elif event_type in ('PAYMENT.CAPTURE.DENIED', 'PAYMENT.CAPTURE.DECLINED'):
-            normalized_event = 'payment.failed'
-        elif event_type in ('PAYMENT.CAPTURE.REFUNDED',):
-            normalized_event = 'refund.processed'
-
-        payment_id = resource.get('id') or resource.get('parent_payment') or ''
-        order_id = resource.get('custom_id') or resource.get('invoice_number')
-
-        amount = Decimal('0.00')
-        amt_struct = resource.get('amount', {})
-        if amt_struct.get('value'):
-            amount = Decimal(str(amt_struct.get('value')))
-
-        return {
-            'event_type': normalized_event,
-            'payment_id': payment_id,
-            'order_id': order_id,
-            'amount': amount,
-            'status': resource.get('status', ''),
-            'currency': amt_struct.get('currency_code', ''),
-        }
+        # CHECKOUT.ORDER.APPROVED only means the buyer approved; nothing was captured.
+        resource = payload.get('resource') or {}
+        amount = resource.get('amount') or {}
+        currency = amount.get('currency_code') or ''
+        related = ((resource.get('supplementary_data') or {}).get('related_ids') or {})
+        return _parsed_event(
+            self.WEBHOOK_EVENTS.get(payload.get('event_type', ''), 'unknown'),
+            reference=related.get('order_id'),
+            payment_id=resource.get('id') or resource.get('parent_payment'),
+            order_id=resource.get('custom_id') or resource.get('invoice_number'),
+            amount_minor=to_minor_units(amount['value'], currency) if amount.get('value') else None,
+            currency=currency, status=resource.get('status'),
+        )
 
 
 class CODAdapter(BaseGatewayAdapter):
@@ -765,13 +797,7 @@ class CODAdapter(BaseGatewayAdapter):
         return True # COD has no external webhooks
 
     def parse_webhook_event(self, payload: dict) -> dict:
-        return {
-            'event_type': 'unknown',
-            'payment_id': '',
-            'order_id': '',
-            'amount': Decimal('0.00'),
-            'status': ''
-        }
+        return _parsed_event('unknown')
 
 
 _ADAPTERS = {}

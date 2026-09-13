@@ -580,9 +580,10 @@ class ProcessWebhooksCommandTests(TestCase):
         )
 
     def test_payment_succeeded_marks_order_paid_and_records_run(self):
-        order = _make_paid_order(self.region, payment_status='PENDING', payment_id='pi_hook_1')
-        order.status = 'PENDING'
-        order.save(update_fields=['status'])
+        order = _make_paid_order(self.region, payment_status='PENDING', payment_id=None)
+        order.status = 'AWAITING_PAYMENT'
+        order.payment_reference = 'pi_hook_1'
+        order.save(update_fields=['status', 'payment_reference'])
         self._stripe_event('payment_intent.succeeded', {
             'id': 'pi_hook_1', 'amount_received': 2000, 'currency': 'gbp',
             'status': 'succeeded', 'metadata': {},
@@ -603,7 +604,7 @@ class ProcessWebhooksCommandTests(TestCase):
     def test_partial_refund_keeps_order_status(self):
         order = _make_paid_order(self.region, payment_id='pi_hook_2')
         self._stripe_event('charge.refunded', {
-            'id': 'ch_1', 'payment_intent': 'pi_hook_2', 'amount': 500,
+            'id': 'ch_1', 'payment_intent': 'pi_hook_2', 'amount': 2000, 'amount_refunded': 500,
             'currency': 'gbp', 'status': 'succeeded', 'metadata': {},
         }, event_id='evt_partial')
 
@@ -619,7 +620,7 @@ class ProcessWebhooksCommandTests(TestCase):
     def test_full_refund_marks_order_refunded(self):
         order = _make_paid_order(self.region, payment_id='pi_hook_3')
         self._stripe_event('charge.refunded', {
-            'id': 'ch_2', 'payment_intent': 'pi_hook_3', 'amount': 2000,
+            'id': 'ch_2', 'payment_intent': 'pi_hook_3', 'amount': 2000, 'amount_refunded': 2000,
             'currency': 'gbp', 'status': 'succeeded', 'metadata': {},
         }, event_id='evt_full')
 

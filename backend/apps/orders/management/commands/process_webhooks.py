@@ -1,12 +1,16 @@
 from datetime import timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
+
 from django.core.management.base import BaseCommand
-from django.utils import timezone
 from django.db import transaction
 from django.db.models import Q, Sum
+from django.utils import timezone
+
+from apps.admin_dashboard.models import PaymentGateway
 from apps.orders.cron import job_run
-from apps.orders.models import Order, WebhookEvent, PaymentLog, Invoice
-from apps.orders.utils import generate_invoice_pdf
+from apps.orders.models import Order, PaymentLog, WebhookEvent
+from apps.orders.order_payments import mark_order_paid
+from apps.orders.payments import adapter_for_order, from_minor_units, get_adapter
 
 # Backoff schedule: attempts 1 to 7 correspond to these delays
 BACKOFFS = [
@@ -18,6 +22,34 @@ BACKOFFS = [
     timedelta(hours=6),     # 6th retry
     timedelta(hours=24),    # 7th retry
 ]
+ACTIONABLE_EVENTS = ('payment.succeeded', 'payment.failed', 'refund.processed')
+
+
+def find_order_for_event(gateway_code, parsed):
+    """The locked order a provider event is about, or None.
+
+    The gateway object opened for the order decides first; the provider payment
+    id serves refunds of older orders; our own order id is trusted only for an
+    order not yet bound to a different gateway payment.
+    """
+    orders = Order.objects.select_for_update().select_related('region')
+    reference = str(parsed.get('payment_reference') or '')
+    if reference:
+        order = orders.filter(payment_method=gateway_code, payment_reference=reference).first()
+        if order is not None:
+            return order
+    payment_id = str(parsed.get('payment_id') or '')
+    if payment_id:
+        order = orders.filter(payment_method=gateway_code, payment_id=payment_id).first()
+        if order is not None:
+            return order
+    order_id = str(parsed.get('order_id') or '')
+    if order_id.isdigit():
+        order = orders.filter(pk=int(order_id), payment_method=gateway_code).first()
+        if order is not None and order.payment_reference in (None, '', reference):
+            return order
+    return None
+
 
 class Command(BaseCommand):
     help = 'Processes queued webhook events with exponential backoff.'
@@ -33,9 +65,8 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS("Starting Webhook Event Processor..."))
 
         now = timezone.now()
-        # Snapshot ids once (no count()+iterate double query) and bound the
-        # batch, so a backlog cannot hold the single-threaded scheduler past
-        # its lease. Whatever is left is picked up on the next tick.
+        # Snapshot ids once and bound the batch, so a backlog cannot hold the
+        # single-threaded scheduler past its lease.
         event_ids = list(
             WebhookEvent.objects.filter(status__in=['PENDING', 'FAILED'])
             .filter(Q(next_attempt_at__isnull=True) | Q(next_attempt_at__lte=now))
@@ -61,9 +92,8 @@ class Command(BaseCommand):
 
     def process_event_by_pk(self, event_pk):
         """Process one queued event. Returns True on success, False on failure."""
-        # Claim and process one event under a row lock. The scheduler lease is
-        # the normal single-worker guard; this lock also protects against a
-        # manual command overlapping a scheduled run.
+        # Claim and process one event under a row lock; the scheduler lease is
+        # the normal guard, this lock also covers a manual overlapping run.
         with transaction.atomic():
             event = WebhookEvent.objects.select_for_update().filter(pk=event_pk).first()
             if event is None:
@@ -83,7 +113,7 @@ class Command(BaseCommand):
                 # A nested savepoint rolls back partial order/log changes while
                 # allowing the failure state and retry schedule to be recorded.
                 with transaction.atomic():
-                    self.execute_business_logic(event)
+                    outcome = self.execute_business_logic(event)
             except Exception as e:
                 import traceback
                 error_msg = str(e)[:2000]
@@ -103,9 +133,9 @@ class Command(BaseCommand):
                 succeeded = True
                 event.status = 'PROCESSED'
                 event.error_log = ''
-                event.error_message = ''
+                event.error_message = 'ignored' if outcome == 'ignored' else ''
                 event.next_attempt_at = None
-                self.stdout.write(self.style.SUCCESS(f"Event {event.id} processed successfully."))
+                self.stdout.write(self.style.SUCCESS(f"Event {event.id} processed ({outcome})."))
 
             event.save(update_fields=[
                 'attempts', 'last_attempt_at', 'status', 'error_log',
@@ -114,158 +144,50 @@ class Command(BaseCommand):
             return succeeded
 
     def execute_business_logic(self, event):
-        payload = event.payload
-        gateway_code = event.gateway
-
-        # Resolve gateway row
-        from apps.admin_dashboard.models import PaymentGateway
-        gateway_row = PaymentGateway.objects.filter(code=gateway_code).first()
-        if not gateway_row:
-            # Fallback to an unconfigured gateway instance just to load the adapter
-            gateway_row = PaymentGateway(code=gateway_code)
-
-        from apps.orders.payments import get_adapter
-        adapter = get_adapter(gateway_row)
-        
-        parsed_event = adapter.parse_webhook_event(payload)
-        payment_id = parsed_event.get('payment_id')
-        event_type = parsed_event.get('event_type')
-
-        if not payment_id:
-            raise Exception("Could not extract payment_id/transaction reference from webhook payload.")
-
-        # Find matching order by payment_id
-        order = None
-        if payment_id:
-            order = Order.objects.select_for_update().filter(payment_id=payment_id).first()
-        if not order and parsed_event.get('order_id'):
-            order = Order.objects.select_for_update().filter(id=parsed_event.get('order_id')).first()
-        if not order:
-            # Maybe look by order ID stored in metadata (Stripe client_reference_id or Razorpay notes)
-            order_id = self.extract_order_id_from_metadata(event, payload)
-            if order_id:
-                order = Order.objects.select_for_update().filter(id=order_id).first()
-        
-        if not order:
-            raise Exception(f"No matching order found for transaction ID '{payment_id}'. Queued for retry.")
-
-        if event_type == 'payment.succeeded':
-            try:
-                paid_amount = Decimal(str(parsed_event.get('amount') or '0'))
-            except InvalidOperation as exc:
-                raise ValueError('Webhook contained an invalid payment amount.') from exc
-            paid_currency = str(parsed_event.get('currency') or '').upper()
-            if paid_amount and paid_amount != order.total:
-                raise ValueError(
-                    f'Webhook amount {paid_amount} does not match order total {order.total}.'
-                )
-            if paid_currency and paid_currency != order.currency_code.upper():
-                raise ValueError(
-                    f'Webhook currency {paid_currency} does not match order currency {order.currency_code}.'
-                )
-
-        # A duplicate success is a no-op; other event types (notably refunds)
-        # must still be applied to an already-paid order.
-        if event_type == 'payment.succeeded' and order.payment_status == 'PAID':
-            self.stdout.write(f"Order #{order.id} is already marked as PAID.")
-            return
-
-        # Mark order as Paid and status to Processing if the webhook event is a payment success
-        if event_type == 'payment.succeeded':
-            order.payment_status = 'PAID'
-            order.status = 'PROCESSING'
-            order.save(update_fields=['payment_status', 'status', 'updated_at'])
-
-            # Create Payment Log
+        """Apply one provider event; returns 'ignored' for events the store does not act on."""
+        gateway = PaymentGateway.objects.filter(code=event.gateway).first() or PaymentGateway(code=event.gateway)
+        parsed = get_adapter(gateway).parse_webhook_event(event.payload)
+        kind = parsed.get('event_type')
+        if kind not in ACTIONABLE_EVENTS:
+            return 'ignored'
+        order = find_order_for_event(event.gateway, parsed)
+        if order is None:
+            reference = parsed.get('payment_reference') or parsed.get('payment_id') or '(none)'
+            raise ValueError(f'No order matches {event.gateway} payment {reference}; queued for retry.')
+        if kind == 'payment.succeeded':
+            verification = adapter_for_order(order).webhook_verification(order, parsed)
+            mark_order_paid(order, verification, source='webhook')
+        elif kind == 'payment.failed':
+            # The shopper may retry the same payment, so the order keeps waiting.
             PaymentLog.objects.get_or_create(
                 order=order,
-                transaction_id=payment_id,
-                defaults={
-                    'gateway': gateway_code,
-                    'amount': order.total,
-                    'status': 'PAID',
-                    'raw_response': payload,
-                },
-            )
-
-            # Generate Invoice PDF
-            invoice, created = Invoice.objects.get_or_create(
-                order=order,
-                defaults={
-                    'invoice_number': f"SP-{timezone.now().year}-{order.id}",
-                    'invoice_type': 'GST_INVOICE' if order.region.code == 'IN' else 'VAT_RECEIPT'
-                }
-            )
-            try:
-                generate_invoice_pdf(invoice)
-            except Exception as inv_err:
-                # Don't fail the whole transaction if PDF generation has a minor glitch
-                self.stdout.write(self.style.WARNING(f"Invoice generation failed for Order #{order.id}: {str(inv_err)}"))
-        elif event_type == 'payment.failed':
-            # A late/duplicate failure event for another payment attempt must
-            # never downgrade an order that has already been paid or refunded.
-            if order.payment_status in ('PENDING', 'AUTHORIZED', 'FAILED'):
-                order.payment_status = 'FAILED'
-                order.save(update_fields=['payment_status', 'updated_at'])
-            else:
-                self.stdout.write(
-                    f"Ignoring payment.failed for order #{order.id} "
-                    f"(payment status is {order.payment_status})."
-                )
-            PaymentLog.objects.get_or_create(
-                order=order,
-                transaction_id=payment_id,
+                transaction_id=parsed.get('payment_id') or parsed.get('payment_reference') or f'event-{event.pk}',
                 status='FAILED',
-                defaults={
-                    'gateway': gateway_code,
-                    'amount': order.total,
-                    'raw_response': payload,
-                },
+                defaults={'gateway': event.gateway, 'amount': order.total, 'raw_response': event.payload},
             )
-        elif event_type == 'refund.processed':
-            try:
-                refunded_amount = Decimal(str(parsed_event.get('amount') or '0'))
-            except InvalidOperation:
-                refunded_amount = Decimal('0')
+        else:
+            self.apply_refund(order, parsed, event)
+        return 'applied'
 
-            PaymentLog.objects.get_or_create(
-                order=order,
-                transaction_id=payment_id,
-                status='REFUND_PROCESSED',
-                defaults={
-                    'gateway': gateway_code,
-                    'amount': refunded_amount or order.total,
-                    'raw_response': payload,
-                },
-            )
-
-            # Refunds recorded in our own system (admin refunds) plus this
-            # event's amount decide whether the WHOLE order is refunded. A
-            # partial refund must not flip the entire order to REFUNDED.
-            recorded = order.refunds.filter(status='PROCESSED').aggregate(
-                s=Sum('amount')
-            )['s'] or Decimal('0')
-            covered = max(recorded, refunded_amount)
-            if not refunded_amount or covered >= order.total:
-                order.payment_status = 'REFUNDED'
+    def apply_refund(self, order, parsed, event):
+        amount_minor = parsed.get('amount_minor')
+        refunded = from_minor_units(amount_minor, order.currency_code) if amount_minor is not None else None
+        PaymentLog.objects.get_or_create(
+            order=order,
+            transaction_id=parsed.get('payment_id') or f'event-{event.pk}',
+            status='REFUND_PROCESSED',
+            defaults={'gateway': event.gateway, 'amount': refunded or order.total, 'raw_response': event.payload},
+        )
+        # Refunds recorded here plus this event's cumulative amount decide
+        # whether the WHOLE order is refunded; a partial refund must not flip it.
+        recorded = order.refunds.filter(status='PROCESSED').aggregate(total=Sum('amount'))['total'] or Decimal('0')
+        covered = max(recorded, refunded or Decimal('0'))
+        if refunded is None or covered >= order.total:
+            order.payment_status = 'REFUNDED'
+            if order.status != 'CANCELLED':
                 order.status = 'REFUNDED'
-                order.save(update_fields=['payment_status', 'status', 'updated_at'])
-            else:
-                self.stdout.write(
-                    f"Partial refund of {refunded_amount} recorded for order #{order.id}; "
-                    "order remains in its current status."
-                )
-
-    def extract_order_id_from_metadata(self, event, payload):
-        gateway = event.gateway
-        if gateway == 'STRIPE':
-            data_obj = payload.get('data', {}).get('object', {})
-            metadata = data_obj.get('metadata', {})
-            return metadata.get('order_id') or data_obj.get('client_reference_id')
-        elif gateway == 'RAZORPAY':
-            notes = payload.get('payload', {}).get('payment', {}).get('entity', {}).get('notes', {})
-            return notes.get('order_id')
-        elif gateway == 'PAYPAL':
-            # Custom metadata field in PayPal
-            return payload.get('resource', {}).get('custom_id') or payload.get('resource', {}).get('invoice_number')
-        return None
+            order.save(update_fields=['payment_status', 'status', 'updated_at'])
+        else:
+            self.stdout.write(
+                f"Partial refund of {refunded} recorded for order #{order.id}; the order keeps its status."
+            )
