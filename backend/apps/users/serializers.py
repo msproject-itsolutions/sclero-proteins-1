@@ -2,8 +2,9 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 import re
+from apps.audit.recorder import record_audit
 from .models import UserAddress, Role, Wishlist, WishlistItem, CustomerSegment, CustomerActivity, SupportTicket
-from .permissions import get_user_permission_keys, PERMISSIONS
+from .permissions import PERMISSIONS, get_user_permission_keys, is_staff_account
 
 User = get_user_model()
 
@@ -17,23 +18,45 @@ def _validate_phone(value):
         raise serializers.ValidationError('Enter a valid phone number with 7 to 15 digits.')
     return phone
 
+def _request_user(serializer):
+    request = serializer.context.get('request')
+    user = getattr(request, 'user', None)
+    return user if getattr(user, 'is_authenticated', False) else None
+
+
+def _changed_fields(before, instance):
+    """{field: [old, new]} for every field whose value changed (related objects as ids)."""
+    changes = {}
+    for field, old in before.items():
+        new = getattr(instance, field)
+        if old != new:
+            changes[field] = [getattr(old, 'pk', old), getattr(new, 'pk', new)]
+    return changes
+
+
 class UserSerializer(serializers.ModelSerializer):
     permissions = serializers.SerializerMethodField()
     role_names = serializers.SerializerMethodField()
     home_region_code = serializers.CharField(source='home_region.code', read_only=True)
     assigned_regions_codes = serializers.SerializerMethodField(read_only=True)
+    has_password = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = [
-            'id', 'email', 'first_name', 'last_name', 'phone_number',
+            'id', 'email', 'email_verified', 'has_password', 'first_name', 'last_name', 'phone_number',
             'home_region', 'home_region_code',
             'email_order_updates', 'email_marketing', 'email_newsletter', 'sms_marketing',
             'is_staff', 'is_superuser', 'roles', 'role_names', 'permissions',
-            'assigned_regions', 'assigned_regions_codes', 'two_factor_enabled', 
+            'assigned_regions', 'assigned_regions_codes', 'two_factor_enabled',
             'allowed_ip_range', 'current_devices',
         ]
-        read_only_fields = ['is_staff', 'is_superuser', 'roles', 'role_names', 'permissions', 'assigned_regions', 'assigned_regions_codes', 'current_devices']
+        # Email changes go through the confirmed email-change flow and the IP
+        # allow-list is set by an administrator, never by the account itself.
+        read_only_fields = [
+            'email', 'email_verified', 'is_staff', 'is_superuser', 'roles', 'role_names', 'permissions',
+            'assigned_regions', 'assigned_regions_codes', 'allowed_ip_range', 'current_devices',
+        ]
 
     def get_permissions(self, obj):
         return sorted(get_user_permission_keys(obj))
@@ -44,12 +67,84 @@ class UserSerializer(serializers.ModelSerializer):
     def get_assigned_regions_codes(self, obj):
         return list(obj.assigned_regions.values_list('code', flat=True))
 
+    def get_has_password(self, obj):
+        return obj.has_usable_password()
+
     def validate_password(self, value):
         if not self.instance and not value:
             raise serializers.ValidationError('A password is required for new staff accounts.')
         if value:
             validate_password(value)
         return value
+
+    def validate_two_factor_enabled(self, value):
+        if self.instance is None or value == self.instance.two_factor_enabled:
+            return value
+        # Staff always receive a sign-in code; the switch exists only for customers.
+        if is_staff_account(self.instance):
+            raise serializers.ValidationError('Staff accounts always sign in with an emailed code.')
+        if value and not self.instance.has_usable_password():
+            raise serializers.ValidationError('Set a password before turning on two-step sign-in.')
+        return value
+
+    def update(self, instance, validated_data):
+        before = {field: getattr(instance, field) for field in validated_data}
+        instance = super().update(instance, validated_data)
+        changes = _changed_fields(before, instance)
+        if changes:
+            record_audit(
+                'profile.updated', actor=instance, target_type='User', target_id=instance.pk,
+                summary=f'Profile updated: {instance.email}', changes=changes,
+            )
+        return instance
+
+
+class CustomerAdminSerializer(serializers.ModelSerializer):
+    """Staff view of a customer account (users.manage)."""
+    home_region_code = serializers.CharField(source='home_region.code', read_only=True)
+
+    class Meta:
+        model = User
+        fields = [
+            'id', 'email', 'first_name', 'last_name', 'phone_number', 'home_region', 'home_region_code',
+            'email_order_updates', 'email_marketing', 'email_newsletter', 'sms_marketing',
+            'email_verified', 'two_factor_enabled', 'is_staff', 'created_at',
+        ]
+        read_only_fields = ['email_verified', 'two_factor_enabled', 'is_staff', 'created_at']
+
+    def validate_email(self, value):
+        email = value.strip().lower()
+        if self.instance is not None:
+            if email != self.instance.email.lower():
+                raise serializers.ValidationError(
+                    'Customers change their email from their account page; the new address has to be confirmed.'
+                )
+            return self.instance.email
+        if User.objects.filter(email__iexact=email).exists():
+            raise serializers.ValidationError('An account with this email address already exists.')
+        return email
+
+    def validate_phone_number(self, value):
+        return _validate_phone(value) if value else value
+
+    def create(self, validated_data):
+        user = User.objects.create_user(password=None, **validated_data)
+        record_audit(
+            'customer.created', actor=_request_user(self), target_type='User', target_id=user.pk,
+            summary=f'Created customer account {user.email}',
+        )
+        return user
+
+    def update(self, instance, validated_data):
+        before = {field: getattr(instance, field) for field in validated_data}
+        instance = super().update(instance, validated_data)
+        changes = _changed_fields(before, instance)
+        if changes:
+            record_audit(
+                'customer.updated', actor=_request_user(self), target_type='User', target_id=instance.pk,
+                summary=f'Updated customer account {instance.email}', changes=changes,
+            )
+        return instance
 
 
 class RoleSerializer(serializers.ModelSerializer):

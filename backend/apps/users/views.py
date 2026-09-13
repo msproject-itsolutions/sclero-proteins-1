@@ -24,7 +24,7 @@ from django.contrib.auth.hashers import make_password
 from django.contrib.auth.password_validation import validate_password
 from .models import UserAddress, Role, Wishlist, WishlistItem, CustomerSegment, CustomerActivity, SupportTicket, LoginChallenge
 from .serializers import (
-    UserSerializer, RegisterSerializer, UserAddressSerializer,
+    UserSerializer, CustomerAdminSerializer, RegisterSerializer, UserAddressSerializer,
     RoleSerializer, StaffUserSerializer, WishlistItemSerializer, WishlistSerializer,
     CustomerSegmentSerializer, CustomerActivitySerializer, SupportTicketSerializer,
 )
@@ -977,29 +977,31 @@ class AdminDashboardPagination(PageNumberPagination):
 
 
 class CustomerProfileViewSet(viewsets.ModelViewSet):
-    queryset = User.objects.all().order_by('-created_at')
-    serializer_class = UserSerializer
+    """Customer accounts for staff holding users.manage.
+
+    Staff accounts are managed only through StaffUserViewSet (rbac.manage) and
+    are never listed or editable here. Deletion is not offered: customers erase
+    their own account or file an erasure request.
+    """
+    serializer_class = CustomerAdminSerializer
     permission_classes = [require_permission('users.manage')]
     pagination_class = AdminDashboardPagination
+    http_method_names = ['get', 'post', 'put', 'patch', 'head', 'options']
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = User.objects.filter(is_staff=False, is_superuser=False, roles__isnull=True)
         q = self.request.query_params.get('q')
         if q:
             qs = qs.filter(Q(email__icontains=q) | Q(first_name__icontains=q) | Q(last_name__icontains=q) | Q(phone_number__icontains=q))
 
-        # Sort ordering parameter
         ordering = self.request.query_params.get('ordering')
         if ordering == 'oldest':
-            qs = qs.order_by('created_at')
-        elif ordering == 'email':
-            qs = qs.order_by('email')
-        elif ordering == '-email':
-            qs = qs.order_by('-email')
-        else:
-            qs = qs.order_by('-created_at')
-
-        return qs
+            return qs.order_by('created_at')
+        if ordering == 'email':
+            return qs.order_by('email')
+        if ordering == '-email':
+            return qs.order_by('-email')
+        return qs.order_by('-created_at')
 
     @action(detail=True, methods=['get'])
     def details(self, request, pk=None):
@@ -1021,7 +1023,7 @@ class CustomerProfileViewSet(viewsets.ModelViewSet):
         tickets = SupportTicketSerializer(customer.support_tickets.all(), many=True).data
 
         return Response({
-            'profile': UserSerializer(customer).data,
+            'profile': CustomerAdminSerializer(customer).data,
             'addresses': addresses,
             'orders_count': orders_count,
             'total_spent': total_spent,
