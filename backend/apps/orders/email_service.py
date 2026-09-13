@@ -529,37 +529,48 @@ def send_order_email(event, order, extra_context=None):
     )
 
 
+def _owner_recipients(order):
+    """Store owner and administrator addresses that receive order alerts."""
+    recipients = {'support@scleroproteins.co.uk'}
+    company_email = (getattr(order.region, 'company_email', '') or '').strip() if order.region else ''
+    if company_email:
+        recipients.add(company_email)
+    try:
+        setting = SystemSetting.objects.filter(key='COMPANY_INFO').first()
+        if setting and isinstance(setting.value, dict):
+            info_email = (setting.value.get('support') or setting.value.get('email') or '').strip()
+            if info_email:
+                recipients.add(info_email)
+    except Exception:
+        logger.exception('Could not read COMPANY_INFO for order alert recipients.')
+    try:
+        from apps.users.models import User
+        for email in User.objects.filter(is_superuser=True, is_active=True).values_list('email', flat=True):
+            if email and email.strip():
+                recipients.add(email.strip())
+    except Exception:
+        logger.exception('Could not read administrator addresses for order alerts.')
+    return recipients
+
+
+def send_staff_alert(order, subject, message):
+    """Email every owner recipient about a problem with an order. Never raises."""
+    sent = False
+    for recipient in _owner_recipients(order):
+        try:
+            send_branded_email(subject, message, recipient)
+            sent = True
+        except Exception:
+            logger.exception('Failed to send staff alert to %s for order %s', recipient, order.pk)
+    return sent
+
+
 def send_owner_order_notification(order):
     """Send an immediate, comprehensive new order alert email to the store owner & admins."""
     if not order:
         return False
 
-    recipients = set()
-    recipients.add("support@scleroproteins.co.uk")
-
-    if order.region and getattr(order.region, 'company_email', None):
-        email = (order.region.company_email or '').strip()
-        if email:
-            recipients.add(email)
-
-    try:
-        from apps.admin_dashboard.models import SystemSetting
-        setting = SystemSetting.objects.filter(key='COMPANY_INFO').first()
-        if setting and isinstance(setting.value, dict):
-            c_email = (setting.value.get('support') or setting.value.get('email') or '').strip()
-            if c_email:
-                recipients.add(c_email)
-    except Exception:
-        pass
-
-    try:
-        from apps.users.models import User
-        admin_emails = User.objects.filter(is_superuser=True, is_active=True).values_list('email', flat=True)
-        for em in admin_emails:
-            if em and em.strip():
-                recipients.add(em.strip())
-    except Exception:
-        pass
+    recipients = _owner_recipients(order)
 
     symbol = order.region.currency_symbol if (order.region and getattr(order.region, 'currency_symbol', None)) else (
         '₹' if order.currency_code == 'INR' else '£' if order.currency_code == 'GBP' else '$'

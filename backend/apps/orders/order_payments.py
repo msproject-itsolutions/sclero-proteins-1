@@ -10,11 +10,14 @@ import logging
 from django.db import transaction
 from django.db.models import F
 
-from .email_service import send_order_email, send_owner_order_notification
+from apps.audit.recorder import record_audit
+
+from .email_service import send_order_email, send_owner_order_notification, send_staff_alert
 from .invoices import ensure_invoice
 from .models import Cart, Coupon, Order, PaymentLog
 from .payments import PaymentError, adapter_for_order, to_minor_units
-from .stock import release_order_stock
+from .refunds import execute_refund, start_refund
+from .stock import StockError, release_order_stock, reserve_order_stock
 from .timeline import log_order_event
 
 logger = logging.getLogger(__name__)
@@ -41,15 +44,38 @@ def _verified_transaction_id(order, verification):
     return transaction_id
 
 
+EXPIRED_REFUND_REASON = 'Paid after the order expired; the items were no longer available.'
+
+
+def _reserve_again(order):
+    """Take stock and coupon use back for an order paid after it expired."""
+    try:
+        with transaction.atomic():
+            reserve_order_stock(order)
+    except StockError:
+        return False
+    if order.coupon_code and order.discount_amount > 0:
+        Coupon.objects.filter(code__iexact=order.coupon_code).update(usage_count=F('usage_count') + 1)
+    return True
+
+
 def mark_order_paid(order, verification, *, source):
-    """Record a verified payment. Call inside a transaction; safe to repeat."""
+    """Record a verified payment. Call inside a transaction; safe to repeat.
+
+    A payment for an order that already expired (released) revives it when its
+    stock can be reserved again; otherwise the payment is recorded, the order
+    stays cancelled and a full refund goes out after commit.
+    """
     order = Order.objects.select_for_update().select_related('region').get(pk=order.pk)
     if order.payment_status in PAID_STATES:
         return order
-    if order.status != 'AWAITING_PAYMENT':
+    paid_late = order.status == 'CANCELLED' and order.payment_status == 'EXPIRED'
+    if order.status != 'AWAITING_PAYMENT' and not paid_late:
         raise PaymentError(f'Order #{order.pk} is not awaiting payment.')
     transaction_id = _verified_transaction_id(order, verification)
-    order.status = 'PROCESSING'
+    revived = paid_late and _reserve_again(order)
+    if not paid_late or revived:
+        order.status = 'PROCESSING'
     order.payment_status = 'PAID'
     order.payment_id = transaction_id
     order.payment_authorized_amount = order.total
@@ -63,13 +89,53 @@ def mark_order_paid(order, verification, *, source):
         order=order, transaction_id=transaction_id, gateway=order.payment_method,
         amount=order.total, status='PAID', raw_response=verification.get('raw') or {},
     )
-    log_order_event(
-        order, 'order.payment_confirmed', 'Payment confirmed',
-        changes={'source': source, 'transaction_id': transaction_id},
-    )
+    changes = {'source': source, 'transaction_id': transaction_id}
+    if paid_late and not revived:
+        log_order_event(
+            order, 'order.paid_after_expiry', 'Paid after expiry; items no longer available',
+            changes=changes,
+        )
+        transaction.on_commit(lambda order_id=order.pk: refund_expired_payment(order_id))
+        return order
+    if revived:
+        changes['revived'] = True
+    log_order_event(order, 'order.payment_confirmed', 'Payment confirmed', changes=changes)
     ensure_invoice(order)
     transaction.on_commit(lambda order_id=order.pk: run_order_followups(order_id))
     return order
+
+
+def refund_expired_payment(order_id):
+    """Refund a late payment that could not revive its order, and alert staff."""
+    with transaction.atomic():
+        order = Order.objects.select_for_update().select_related('region').get(pk=order_id)
+        if order.status != 'CANCELLED' or order.payment_status != 'PAID' or order.refunds.exists():
+            return None
+        refund = start_refund(order, order.total, EXPIRED_REFUND_REASON)
+    refund = execute_refund(refund.pk)
+    order.refresh_from_db()
+    outcome = {
+        'PROCESSED': 'A full refund has been issued.',
+        'PENDING': 'A full refund was requested; the provider has not confirmed it yet.',
+        'FAILED': f'The automatic refund failed ({refund.failure_reason}). Refund this payment manually.',
+    }[refund.status]
+    send_staff_alert(
+        order, f'Order #{order.pk} was paid after it expired',
+        f'Order #{order.pk} ({order.currency_code} {order.total}, {order.payment_method} payment '
+        f'{order.payment_id}) was paid after its payment window closed, and its items were no '
+        f'longer in stock. The order stays cancelled. {outcome}',
+    )
+    record_audit(
+        'order.expired_payment_refund', target_type='Order', target_id=order.pk,
+        summary=f'Automatic refund for a late payment on order #{order.pk}: {refund.status}',
+        changes={'refund_id': refund.pk, 'status': refund.status},
+    )
+    if refund.status == 'PROCESSED':
+        try:
+            send_order_email('refund_processed', order, extra_context={'refund_amount': str(refund.amount)})
+        except Exception:
+            logger.exception('Refund email failed for order %s.', order.pk)
+    return refund
 
 
 def release_unpaid_order(order_id, *, reason, actor=None):
@@ -99,7 +165,8 @@ def confirm_payment(order_id, client_payload):
     order = Order.objects.select_related('region').get(pk=order_id)
     if order.payment_status in PAID_STATES:
         return order
-    if order.status != 'AWAITING_PAYMENT':
+    # An expired order is still verified: the shopper may have paid late.
+    if order.status != 'AWAITING_PAYMENT' and order.payment_status != 'EXPIRED':
         raise PaymentError('This order is no longer awaiting payment.')
     verification = adapter_for_order(order).verify_payment(order, client_payload or {})
     if verification.get('state') != 'paid':
