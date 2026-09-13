@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from apps.products.serializers import ProductListSerializer
+from .access import invoice_path
 from .models import Cart, CartItem, Order, OrderItem, Invoice, Refund, Coupon
 
 class CartItemSerializer(serializers.ModelSerializer):
@@ -37,16 +38,9 @@ class OrderItemSerializer(serializers.ModelSerializer):
 
 
 class InvoiceSerializer(serializers.ModelSerializer):
-    pdf_url = serializers.SerializerMethodField()
-
     class Meta:
         model = Invoice
-        fields = ['invoice_number', 'invoice_type', 'pdf_url', 'details', 'generated_at']
-
-    def get_pdf_url(self, obj):
-        if obj.pdf_file:
-            return obj.pdf_file.url
-        return None
+        fields = ['invoice_number', 'invoice_type', 'details', 'generated_at']
 
 
 class RefundSerializer(serializers.ModelSerializer):
@@ -63,6 +57,7 @@ class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
     invoice = InvoiceSerializer(read_only=True)
     refunds = RefundSerializer(many=True, read_only=True)
+    invoice_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
@@ -76,8 +71,13 @@ class OrderSerializer(serializers.ModelSerializer):
             'total', 'payment_method', 'payment_id',
             'payment_status', 'payment_capture_mode', 'payment_authorized_amount',
             'payment_captured_amount',
-            'items', 'invoice', 'refunds', 'created_at'
+            'items', 'invoice', 'invoice_url', 'refunds', 'created_at'
         ]
+
+    def get_invoice_url(self, obj):
+        if obj.status == 'AWAITING_PAYMENT' or obj.payment_status in ('EXPIRED', 'FAILED'):
+            return None
+        return invoice_path(obj)
 
 
 # --- Admin Serializers for Regional CRUD Operations --- #
@@ -91,6 +91,7 @@ class OrderAdminSerializer(serializers.ModelSerializer):
     region_name = serializers.CharField(source='region.name', read_only=True)
     user_email = serializers.CharField(source='user.email', read_only=True, allow_null=True)
     payment_logs = serializers.SerializerMethodField()
+    invoice_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
@@ -105,9 +106,12 @@ class OrderAdminSerializer(serializers.ModelSerializer):
             'staff_notes', 'total', 'payment_method', 'payment_id',
             'payment_status', 'payment_capture_mode', 'payment_authorized_amount',
             'payment_captured_amount',
-            'items', 'invoice', 'refunds', 'payment_logs', 'created_at', 'updated_at'
+            'items', 'invoice', 'invoice_url', 'refunds', 'payment_logs', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_invoice_url(self, obj):
+        return f'/api/admin/orders/{obj.pk}/invoice/'
 
     def get_payment_logs(self, obj):
         logs = sorted(
@@ -173,20 +177,18 @@ class RefundAdminSerializer(serializers.ModelSerializer):
 class InvoiceAdminSerializer(serializers.ModelSerializer):
     """Admin serializer for invoice management."""
     order_id = serializers.IntegerField(source='order.id', read_only=True)
-    pdf_url = serializers.SerializerMethodField()
+    invoice_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Invoice
         fields = [
             'id', 'order', 'order_id', 'invoice_number', 'invoice_type',
-            'pdf_url', 'details', 'generated_at'
+            'invoice_url', 'details', 'generated_at'
         ]
         read_only_fields = ['id', 'generated_at']
 
-    def get_pdf_url(self, obj):
-        if obj.pdf_file:
-            return obj.pdf_file.url
-        return None
+    def get_invoice_url(self, obj):
+        return f'/api/admin/orders/{obj.order_id}/invoice/'
 
 
 class CouponAdminSerializer(serializers.ModelSerializer):

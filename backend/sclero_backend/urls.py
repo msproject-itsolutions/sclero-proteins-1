@@ -1,7 +1,7 @@
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import include, path, re_path
 from django.conf import settings
-from django.conf.urls.static import static
+from django.views.static import serve
 from rest_framework.routers import DefaultRouter
 from sclero_backend.health import live, ready
 
@@ -34,11 +34,13 @@ from apps.users.account_views import (
 )
 from apps.orders.views import (
     CartViewSet, ApplyCouponView, RefundView, MyOrdersView,
-    PublicOrderDetailView, OrderAdminViewSet, RefundAdminViewSet, InvoiceAdminViewSet, AbandonedCheckoutsView,
+    OrderAdminViewSet, RefundAdminViewSet, InvoiceAdminViewSet, AbandonedCheckoutsView,
     StripeWebhookView, RazorpayWebhookView, PaypalWebhookView,
     UnifiedPaymentWebhookView, CouponAdminViewSet,
 )
-from apps.orders.checkout_views import CheckoutConfirmView, CheckoutView
+from apps.orders.checkout_views import (
+    CheckoutConfirmView, CheckoutView, CustomerInvoiceView, OrderAccessLinkView, PublicOrderDetailView,
+)
 from apps.webhooks.views import (
     WebhookSubscriptionViewSet, WebhookDeliveryViewSet, IncomingWebhookEventViewSet
 )
@@ -174,6 +176,8 @@ urlpatterns = [
     path('api/webhooks/payment/<str:gateway_code>/', UnifiedPaymentWebhookView.as_view(), name='webhook_payment_unified'),
     path('api/orders/mine/', MyOrdersView.as_view(), name='my_orders'),
     path('api/orders/lookup/', PublicOrderDetailView.as_view(), name='public_order_detail'),
+    path('api/orders/access-link/', OrderAccessLinkView.as_view(), name='order_access_link'),
+    path('api/orders/invoice/', CustomerInvoiceView.as_view(), name='order_invoice'),
     path('api/admin/abandoned-checkouts/', AbandonedCheckoutsView.as_view(), name='abandoned_checkouts'),
     path('api/orders/<int:order_id>/refund/', RefundView.as_view(), name='order_refund'),
 
@@ -189,5 +193,8 @@ urlpatterns = [
 # Django's built-in admin bypasses the staff console's sign-in rules, IP
 # restrictions and audit trail, so it is only mounted for local development.
 if settings.DEBUG:
-    urlpatterns += [path('admin/', admin.site.urls)]
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    urlpatterns += [
+        path('admin/', admin.site.urls),
+        # Invoices are served only through the permission-checked endpoints.
+        re_path(r'^media/(?!invoices/)(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
+    ]

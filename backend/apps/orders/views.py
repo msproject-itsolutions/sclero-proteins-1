@@ -12,7 +12,6 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.db import IntegrityError, transaction
 from django.db.models import Sum, Q, Prefetch
-from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import validate_email
 from django.utils import timezone
@@ -30,7 +29,7 @@ from .stock import (
     available_for_variant,
     restock_region_item, restock_variant_item,
 )
-from .utils import generate_invoice_pdf
+from .invoices import ensure_invoice
 from .payments import refund_payment, PaymentError
 from .pricing import PricingError, cart_subtotal
 from .cart_identity import attach_cart_cookie, find_cart, get_or_create_cart, shopper_carts
@@ -121,35 +120,6 @@ class MyOrdersView(generics.ListAPIView):
             .order_by('-created_at')
             .distinct()
         )
-
-
-class PublicOrderDetailView(views.APIView):
-    """Public lookup endpoint for order confirmation screen.
-
-    Allows fetching order details by ID and matching email for guest or registered shoppers.
-    """
-    permission_classes = [AllowAny]
-
-    def get(self, request):
-        order_id = request.query_params.get('id')
-        email = (request.query_params.get('email') or '').strip()
-
-        if not order_id:
-            return Response({'error': 'Order ID is required.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        qs = Order.objects.filter(pk=order_id).prefetch_related(
-            Prefetch('items', queryset=OrderItem.objects.select_related('product')),
-            'refunds'
-        ).select_related('invoice', 'region')
-
-        if email:
-            qs = qs.filter(email__iexact=email)
-
-        order = qs.first()
-        if not order:
-            return Response({'error': 'Order not found.'}, status=status.HTTP_404_NOT_FOUND)
-
-        return Response(OrderSerializer(order).data, status=status.HTTP_200_OK)
 
 
 class CartViewSet(viewsets.ViewSet):
@@ -921,41 +891,18 @@ class OrderAdminViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['get', 'post'])
     def invoice(self, request, pk=None):
-        """Generate and download PDF invoice for the order."""
-        import os
+        """Regenerate and download the order's invoice PDF."""
         from django.http import HttpResponse
-        from .models import Invoice
+
         order = self.get_object()
-
-        # Check or create Invoice record
-        reg_code = order.region.code if order.region else (getattr(order, 'region_code', 'GLOBAL') or 'GLOBAL')
-        invoice_obj, _ = Invoice.objects.get_or_create(
-            order=order,
-            defaults={
-                'invoice_number': f"INV-{reg_code}-{order.id:06d}",
-                'invoice_type': 'VAT_RECEIPT' if reg_code == 'UK' else 'GST_INVOICE',
-                'details': {
-                    'currency': order.currency_code,
-                    'region': reg_code,
-                }
-            }
-        )
-
-        pdf_rel_path, inv_num = generate_invoice_pdf(order)
-        if pdf_rel_path:
-            invoice_obj.pdf_file = pdf_rel_path
-            invoice_obj.invoice_number = inv_num
-            invoice_obj.save(update_fields=['pdf_file', 'invoice_number'])
-        full_path = os.path.join(settings.MEDIA_ROOT, pdf_rel_path)
-
-        if os.path.exists(full_path):
-            with open(full_path, 'rb') as f:
-                pdf_bytes = f.read()
-            resp = HttpResponse(pdf_bytes, content_type='application/pdf')
-            resp['Content-Disposition'] = f'attachment; filename="Invoice_Order_{order.id}_{inv_num}.pdf"'
-            return resp
-        else:
+        invoice = ensure_invoice(order, refresh_pdf=True)
+        path = invoice.pdf_file.path if invoice.pdf_file else ''
+        if not path or not os.path.exists(path):
             return Response({"error": "Failed to generate invoice PDF file."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        with open(path, 'rb') as handle:
+            response = HttpResponse(handle.read(), content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="Invoice_Order_{order.id}_{invoice.invoice_number}.pdf"'
+        return response
 
     @action(detail=False, methods=['get'])
     def by_region(self, request):
@@ -1237,7 +1184,7 @@ class InvoiceAdminViewSet(viewsets.ReadOnlyModelViewSet):
         """Regenerate invoice PDF."""
         invoice = self.get_object()
         try:
-            generate_invoice_pdf(invoice)
+            ensure_invoice(invoice.order, refresh_pdf=True)
             return Response({"message": "Invoice regenerated successfully"})
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

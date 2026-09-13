@@ -18,7 +18,7 @@ left in-place rather than crashing):
     {total}             {currency}          {currency_symbol}
     {items_table}       {tax_name}          {tax_amount}
     {shipping_cost}     {region_name}       {invoice_url}
-    {tracking_url}
+    {tracking_url}       {order_url}
 """
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives, get_connection
@@ -153,16 +153,10 @@ def _build_order_context(order, extra_context=None):
 
     tax_name = 'GST' if region_code == 'IN' else 'VAT'
 
-    # Invoice URL — absolute if SITE_URL is configured, else the relative media path.
-    invoice_url = ''
-    invoice = getattr(order, 'invoice', None)
-    if invoice and getattr(invoice, 'pdf_file', None):
-        try:
-            site_url = getattr(settings, 'SITE_URL', '').rstrip('/')
-            rel = invoice.pdf_file.url
-            invoice_url = f"{site_url}{rel}" if site_url else rel
-        except Exception:
-            invoice_url = ''
+    # Links carry a signed order token, never the customer's email address.
+    from .access import invoice_url as order_invoice_url, order_url
+    order_link = order_url(order)
+    invoice_url = order_invoice_url(order) if getattr(order, 'invoice', None) else ''
 
     tracking_url = getattr(order, 'tracking_url', '') or ''
 
@@ -180,6 +174,7 @@ def _build_order_context(order, extra_context=None):
         'shipping_cost': order.shipping_cost,
         'region_name': region_name,
         'invoice_url': invoice_url,
+        'order_url': order_link,
         'tracking_url': tracking_url,
     }
     if extra_context:
@@ -315,7 +310,7 @@ DEFAULT_TEMPLATES = {
         "{tax_name}: {currency_symbol}{tax_amount}\n"
         "Shipping: {currency_symbol}{shipping_cost}\n"
         "Total: {currency_symbol}{total} {currency}\n\n"
-        "Invoice: {invoice_url}\n\n"
+        "View your order: {order_url}\nInvoice: {invoice_url}\n\n"
         "We will send you a tracking link as soon as your parcel ships.\n\n"
         "— The Sclero Proteins team"
     ),
