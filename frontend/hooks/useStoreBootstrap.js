@@ -19,7 +19,7 @@ let activeTrackingSettings = { ...trackingSettings };
 
 // Pages opened from emailed links carry a secret token in the URL. No
 // third-party tracking script may load on them, so it can never read the URL.
-const TOKEN_LINK_PATHS = new Set(['/account/reset', '/auth/magic', '/auth/verify-email', '/auth/confirm-email-change']);
+const TOKEN_LINK_PATHS = new Set(['/account/reset', '/auth/magic', '/auth/verify-email', '/auth/confirm-email-change', '/checkout/success']);
 
 function onTokenLinkPage() {
   if (typeof window === 'undefined') return false;

@@ -751,9 +751,9 @@ function OrdersTab({ authFetch }) {
 
             <div className="flex flex-wrap items-center justify-between border-t border-edge-subtle pt-3 text-xs">
               <span className="font-bold text-sm text-ink-primary">{o.currency_code} {o.total}</span>
-              {o.invoice?.pdf_url && (
+              {o.invoice_url && (
                 <a
-                  href={getApiUrl(o.invoice.pdf_url)}
+                  href={getApiUrl(o.invoice_url)}
                   target="_blank"
                   rel="noreferrer"
                   className="btn-primary py-1.5 px-3 text-xs font-semibold"
