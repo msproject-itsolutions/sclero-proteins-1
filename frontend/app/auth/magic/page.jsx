@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, Suspense } from 'react';
+import React, { useEffect, useRef, useState, Suspense } from 'react';
 import { useDispatch } from 'react-redux';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -14,8 +14,12 @@ function MagicLinkContent() {
   const params = useSearchParams();
   const [status, setStatus] = useState('verifying'); // verifying | success | error
   const [message, setMessage] = useState('');
+  const started = useRef(false);
 
   useEffect(() => {
+    // Strict Mode runs effects twice in development; a sign-in link works once.
+    if (started.current) return;
+    started.current = true;
     const token = params.get('token');
     if (!token) {
       setStatus('error');

@@ -15,7 +15,7 @@ import {
 import StoreShell from '../../components/StoreShell';
 import {
   login, register, fetchProfile, logout, clearAuthError, sendOtp, verifyOtp,
-  completeLogin, fetch2faStatus, setup2fa, verify2fa, disable2fa, requestMagicLink,
+  verifyLoginCode, resendLoginCode, cancelChallenge, requestMagicLink,
 } from '../../store/authSlice';
 import { getApiUrl } from '../../lib/api';
 import { authenticatedFetch } from '../../lib/authFetch';
@@ -28,6 +28,7 @@ function OtpLogin() {
   const { status, error } = useSelector((s) => s.auth);
   const [stage, setStage] = useState('request'); // request | verify
   const [identifier, setIdentifier] = useState('');
+  const [challengeId, setChallengeId] = useState('');
   const [otp, setOtp] = useState('');
   const [sandboxCode, setSandboxCode] = useState('');
   const [formError, setFormError] = useState('');
@@ -42,9 +43,10 @@ function OtpLogin() {
     }
     setIdentifier(cleanedIdentifier);
     dispatch(sendOtp({ identifier: cleanedIdentifier })).unwrap().then((d) => {
+      setChallengeId(d.challenge_id || '');
+      setSandboxCode(d.otp_preview_for_sandbox || '');
       setStage('verify');
-      if (d.otp_preview_for_sandbox) setSandboxCode(d.otp_preview_for_sandbox);
-    }).catch(() => {});
+    }).catch((message) => setFormError(typeof message === 'string' ? message : 'Could not send the code.'));
   };
   const verify = (e) => {
     e.preventDefault();
@@ -55,7 +57,14 @@ function OtpLogin() {
       return;
     }
     setOtp(cleanedOtp);
-    dispatch(verifyOtp({ identifier, otp: cleanedOtp }));
+    dispatch(verifyOtp({ challengeId, otp: cleanedOtp }));
+  };
+  const restart = () => {
+    setStage('request');
+    setFormError('');
+    setOtp('');
+    setChallengeId('');
+    setSandboxCode('');
   };
 
   return stage === 'request' ? (
@@ -95,7 +104,7 @@ function OtpLogin() {
         className="btn-primary w-full py-3 text-sm uppercase tracking-wider disabled:opacity-60">
         {status === 'loading' ? 'Verifying…' : 'Verify & log in'}
       </button>
-      <button type="button" onClick={() => { setStage('request'); setFormError(''); setOtp(''); }}
+      <button type="button" onClick={restart}
         className="w-full text-xs font-semibold text-ink-secondary hover:text-ink-primary">
         Use a different email
       </button>
@@ -163,16 +172,88 @@ function MagicLinkLogin() {
   );
 }
 
+function LoginChallengeStep() {
+  const dispatch = useDispatch();
+  const { status, error, challengeSentTo, challengeSentAt, challengeResendIn, sandboxOtp } = useSelector((s) => s.auth);
+  const [code, setCode] = useState('');
+  const [formError, setFormError] = useState('');
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const waitSeconds = Math.max(0, Math.ceil((challengeSentAt + challengeResendIn * 1000 - now) / 1000));
+
+  const submit = (e) => {
+    e.preventDefault();
+    const cleaned = code.replace(/\s/g, '');
+    if (!/^\d{6}$/.test(cleaned)) {
+      setFormError('Please enter the complete 6-digit code.');
+      return;
+    }
+    setFormError('');
+    dispatch(verifyLoginCode({ code: cleaned }));
+  };
+
+  const resend = () => {
+    setFormError('');
+    setCode('');
+    dispatch(resendLoginCode());
+  };
+
+  return (
+    <div className="mx-auto max-w-md">
+      <div className="rounded-lg border border-edge bg-surface p-6 shadow-card sm:p-8">
+        <div className="mb-8 text-center">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-surface-muted">
+            <ShieldCheck className="h-6 w-6 text-brand-accent" />
+          </div>
+          <h1 className="text-heading-2">Check your email</h1>
+          <p className="mt-1 text-sm text-ink-secondary">
+            Enter the 6-digit code we sent to <span className="font-semibold text-ink-primary">{challengeSentTo}</span>. It expires in 10 minutes.
+          </p>
+        </div>
+        <form onSubmit={submit} className="space-y-3">
+          {sandboxOtp && (
+            <p className="rounded-lg bg-amber-50 px-3 py-2 text-center text-xs text-amber-700">
+              Sandbox code: <span className="font-mono font-bold">{sandboxOtp}</span>
+            </p>
+          )}
+          <label htmlFor="login-code" className="sr-only">6-digit code</label>
+          <input
+            id="login-code"
+            type="text" inputMode="numeric" autoComplete="one-time-code" required placeholder="6-digit code" value={code}
+            onChange={(e) => setCode(e.target.value)}
+            className="w-full rounded-sm border border-edge bg-surface p-3 text-center text-lg tracking-[0.4em] focus:border-ink-primary focus:outline-none"
+          />
+          {(formError || error) && <p className="rounded-sm bg-surface-muted px-3 py-2 text-xs font-semibold text-ink-danger">{formError || error}</p>}
+          <button type="submit" disabled={status === 'loading'}
+            className="btn-primary w-full py-3 text-sm uppercase tracking-wider disabled:opacity-60">
+            {status === 'loading' ? 'Verifying…' : 'Verify & log in'}
+          </button>
+          <button type="button" onClick={resend} disabled={waitSeconds > 0 || status === 'loading'}
+            className="w-full text-xs font-semibold text-ink-accent hover:underline disabled:text-ink-muted disabled:no-underline">
+            {waitSeconds > 0 ? `Send a new code in ${waitSeconds}s` : 'Send a new code'}
+          </button>
+          <button type="button" onClick={() => dispatch(cancelChallenge())}
+            className="w-full text-xs font-semibold text-ink-secondary hover:text-ink-primary">
+            Cancel &amp; return to login
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function AuthForms() {
   const dispatch = useDispatch();
-  const { status, error, twoFactorRequired, sandboxOtp, twoFactorEmail, requiresTotp, pendingEmail } = useSelector((s) => s.auth);
+  const { status, error, challengeId } = useSelector((s) => s.auth);
   const [mode, setMode] = useState('login');
   const [form, setForm] = useState({
     email: '', password: '', first_name: '', last_name: '',
   });
-  const [otp, setOtp] = useState('');
-  const [totpCode, setTotpCode] = useState('');
-  const [useBackup, setUseBackup] = useState(false);
   const [showMoreSignIn, setShowMoreSignIn] = useState(false);
   const [formError, setFormError] = useState('');
 
@@ -204,32 +285,17 @@ function AuthForms() {
       return;
     }
     setForm(cleaned);
-    if (mode === 'login') dispatch(login({ email: cleaned.email, password: cleaned.password }));
-    else dispatch(register(cleaned));
-  };
-
-  const submit2fa = (e) => {
-    e.preventDefault();
-    const cleanedOtp = otp.trim();
-    if (!/^\d{6}$/.test(cleanedOtp)) {
-      setFormError('Please enter the complete 6-digit code.');
+    if (mode === 'register') {
+      dispatch(register(cleaned));
       return;
     }
-    setFormError('');
-    setOtp(cleanedOtp);
-    dispatch(verifyOtp({ identifier: twoFactorEmail, otp: cleanedOtp }));
-  };
-
-  const submitTotp = (e) => {
-    e.preventDefault();
-    const cleanedCode = totpCode.trim();
-    if (!cleanedCode || (!useBackup && !/^\d{6}$/.test(cleanedCode))) {
-      setFormError(useBackup ? 'Please enter a backup code.' : 'Please enter the complete 6-digit code.');
-      return;
-    }
-    setFormError('');
-    setTotpCode(cleanedCode);
-    dispatch(completeLogin({ totpCode: cleanedCode }));
+    dispatch(login({ email: cleaned.email, password: cleaned.password }))
+      .unwrap()
+      .then((result) => {
+        // The code step never needs the password again, so drop it now.
+        if (result.challenge) setForm((f) => ({ ...f, password: '' }));
+      })
+      .catch(() => {});
   };
 
   const switchMode = (m) => {
@@ -239,88 +305,7 @@ function AuthForms() {
     dispatch(clearAuthError());
   };
 
-  if (requiresTotp) {
-    return (
-      <div className="mx-auto max-w-md">
-        <div className="mb-8 text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-surface-muted">
-            <ShieldCheck className="h-6 w-6 text-brand-accent" />
-          </div>
-          <h1 className="text-heading-2">Authenticator code</h1>
-          <p className="mt-1 text-sm text-ink-secondary">
-            Enter the {useBackup ? 'backup' : '6-digit'} code for <span className="font-semibold text-ink-primary">{pendingEmail}</span>.
-          </p>
-        </div>
-        <form onSubmit={submitTotp} className="space-y-3">
-          <label htmlFor="totp-code" className="sr-only">{useBackup ? 'Backup code' : 'Authenticator code'}</label>
-          <input
-            id="totp-code"
-            type="text"
-            inputMode={useBackup ? 'text' : 'numeric'}
-            autoComplete="one-time-code"
-            required
-            placeholder={useBackup ? 'Backup code' : '6-digit code'}
-            value={totpCode}
-            onChange={(e) => setTotpCode(e.target.value)}
-            className="w-full rounded-sm border border-edge bg-surface p-3 text-center text-lg tracking-[0.4em] focus:border-ink-primary focus:outline-none"
-          />
-          {(formError || error) && <p className="rounded-sm bg-surface-muted px-3 py-2 text-xs font-semibold text-ink-danger">{formError || error}</p>}
-          <button type="submit" disabled={status === 'loading'}
-            className="btn-primary w-full py-3 text-sm uppercase tracking-wider disabled:opacity-60">
-            {status === 'loading' ? 'Verifying…' : 'Verify code'}
-          </button>
-          <button type="button" onClick={() => { setUseBackup((v) => !v); setTotpCode(''); }}
-            className="w-full text-xs font-semibold text-ink-accent hover:underline">
-            {useBackup ? 'Use authenticator code instead' : 'Use a backup code instead'}
-          </button>
-          <button type="button" onClick={() => dispatch(logout())}
-            className="w-full text-xs font-semibold text-ink-secondary hover:text-ink-primary">
-            Cancel &amp; return to login
-          </button>
-        </form>
-      </div>
-    );
-  }
-
-  if (twoFactorRequired) {
-    return (
-      <div className="mx-auto max-w-md">
-        <div className="mb-8 text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-surface-muted">
-            <ShieldCheck className="h-6 w-6 text-brand-accent" />
-          </div>
-          <h1 className="text-heading-2">Two-Factor Authentication</h1>
-          <p className="mt-1 text-sm text-ink-secondary">
-            For security, please enter the 6-digit verification code sent to <span className="font-semibold text-ink-primary">{twoFactorEmail}</span>.
-          </p>
-        </div>
-
-        <form onSubmit={submit2fa} className="space-y-3">
-          {sandboxOtp && (
-            <p className="rounded-lg bg-amber-50 px-3 py-2 text-center text-xs text-amber-700">
-              Sandbox code: <span className="font-mono font-bold">{sandboxOtp}</span>
-            </p>
-          )}
-          <label htmlFor="2fa-code" className="sr-only">2FA Verification Code</label>
-          <input
-            id="2fa-code"
-            type="text" inputMode="numeric" autoComplete="one-time-code" required placeholder="6-digit code" value={otp}
-            onChange={(e) => setOtp(e.target.value)}
-            className="w-full rounded-sm border border-edge bg-surface p-3 text-center text-lg tracking-[0.4em] focus:border-ink-primary focus:outline-none"
-          />
-          {(formError || error) && <p className="rounded-sm bg-surface-muted px-3 py-2 text-xs font-semibold text-ink-danger">{formError || error}</p>}
-          <button type="submit" disabled={status === 'loading'}
-            className="btn-primary w-full py-3 text-sm uppercase tracking-wider disabled:opacity-60">
-            {status === 'loading' ? 'Verifying…' : 'Verify & log in'}
-          </button>
-          <button type="button" onClick={() => dispatch(logout())}
-            className="w-full text-xs font-semibold text-ink-secondary hover:text-ink-primary">
-            Cancel &amp; return to login
-          </button>
-        </form>
-      </div>
-    );
-  }
+  if (challengeId) return <LoginChallengeStep />;
 
   return (
     <div className="mx-auto max-w-md">

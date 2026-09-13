@@ -11,176 +11,135 @@ const authRequest = (path, options = {}) => fetch(getApiUrl(path), {
   },
 });
 
-// Register a new customer. Backend returns { user, tokens }.
+async function postAuth(path, payload) {
+  const res = await authRequest(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  return { res, data };
+}
+
+const cleanEmail = (value) => String(value || '').trim().toLowerCase();
+// Challenge errors after which only a fresh password sign-in can help.
+const RESTART_CODES = ['invalid', 'expired', 'locked', 'send_limit'];
+
+// Register a new customer. Backend returns { user, tokens } (tokens become cookies).
 export const register = createAsyncThunk(
   'auth/register',
   async ({ email, password, first_name, last_name, phone_number }, { rejectWithValue }) => {
-    const cleanedEmail = String(email || '').trim().toLowerCase();
-    const res = await authRequest('/api/auth/register/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: cleanedEmail,
-        password,
-        first_name: String(first_name || '').trim(),
-        last_name: String(last_name || '').trim(),
-        phone_number: String(phone_number || '').trim(),
-      }),
+    const { res, data } = await postAuth('/api/auth/register/', {
+      email: cleanEmail(email),
+      password,
+      first_name: String(first_name || '').trim(),
+      last_name: String(last_name || '').trim(),
+      phone_number: String(phone_number || '').trim(),
     });
-    const data = await res.json();
     if (!res.ok) {
       // DRF returns field-keyed error arrays — surface the first readable message.
-      const msg =
-        data.email?.[0] || data.password?.[0] || data.detail || 'Registration failed';
-      return rejectWithValue(msg);
+      return rejectWithValue(data.email?.[0] || data.password?.[0] || data.detail || 'Registration failed');
     }
     return data;
   }
 );
 
-// Password login via simplejwt TokenObtainPair → { access, refresh }.
-// If the backend returns `{ otp_required: true }` (staff TOTP gate), we set
-// `requiresTotp` and stash the creds so `completeLogin(code)` can resubmit.
+// Password sign-in. Staff, and customers who turned on two-step sign-in, get
+// an emailed code instead of a session. The password is never stored: the
+// second step only needs the challenge id and the code.
 export const login = createAsyncThunk(
   'auth/login',
   async ({ email, password }, { dispatch, rejectWithValue }) => {
-    const cleanedEmail = String(email || '').trim().toLowerCase();
-    const res = await authRequest('/api/auth/login/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: cleanedEmail, password }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      return rejectWithValue(data.detail || 'Invalid email or password');
+    const { res, data } = await postAuth('/api/auth/login/', { email: cleanEmail(email), password });
+    if (!res.ok) return rejectWithValue(data.detail || 'Invalid email or password');
+    if (data.challenge_required) {
+      return {
+        challenge: {
+          id: data.challenge_id,
+          sentTo: data.sent_to_masked || '',
+          resendIn: data.resend_available_in || 60,
+          sentAt: Date.now(),
+          sandboxCode: data.otp_preview_for_sandbox || '',
+        },
+      };
     }
-    // Staff TOTP challenge — do NOT persist tokens.
-    if (data.otp_required) {
-      return { otpRequired: true, email: cleanedEmail, password };
-    }
-    // Legacy email-OTP path (kept for backward compat).
-    if (data.two_factor_required) {
-      return { tokens: data, user: null };
-    }
-    const profile = data.user || await dispatch(fetchProfile()).unwrap().catch(() => null);
-    return { tokens: data, user: profile };
+    const user = data.user || await dispatch(fetchProfile()).unwrap().catch(() => null);
+    return { user };
   }
 );
 
-// Google sign-in. Takes the decoded Google profile (email + sub id) and
-// exchanges it with the backend for our own JWT pair. Only ever called by the
-// env-gated GoogleSignInButton, so it's inert unless Google is configured.
+// Second step of password sign-in: exchange the emailed code for a session.
+export const verifyLoginCode = createAsyncThunk(
+  'auth/verifyLoginCode',
+  async ({ code }, { getState, dispatch, rejectWithValue }) => {
+    const { challengeId } = getState().auth;
+    if (!challengeId) {
+      return rejectWithValue({ message: 'Your sign-in expired. Please enter your password again.', restart: true });
+    }
+    const { res, data } = await postAuth('/api/auth/login/verify/', { challenge_id: challengeId, code });
+    if (!res.ok) {
+      return rejectWithValue({
+        message: data.detail || 'That code is not correct.',
+        restart: RESTART_CODES.includes(data.code),
+      });
+    }
+    const user = data.user || await dispatch(fetchProfile()).unwrap().catch(() => null);
+    return { user };
+  }
+);
+
+export const resendLoginCode = createAsyncThunk(
+  'auth/resendLoginCode',
+  async (_, { getState, rejectWithValue }) => {
+    const { challengeId } = getState().auth;
+    const { res, data } = await postAuth('/api/auth/login/resend/', { challenge_id: challengeId });
+    if (!res.ok) {
+      return rejectWithValue({
+        message: data.detail || 'Could not send a new code.',
+        restart: RESTART_CODES.includes(data.code),
+      });
+    }
+    return {
+      sentTo: data.sent_to_masked || '',
+      resendIn: data.resend_available_in || 60,
+      sentAt: Date.now(),
+      sandboxCode: data.otp_preview_for_sandbox || '',
+    };
+  }
+);
+
+// Google sign-in. Only the Google ID token is sent; the backend verifies it.
+// Only ever called by the env-gated GoogleSignInButton.
 export const googleLogin = createAsyncThunk(
   'auth/googleLogin',
-  async ({ credential, email, googleId, firstName, lastName }, { rejectWithValue }) => {
-    const res = await authRequest('/api/auth/google/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ credential, email, googleId, firstName, lastName }),
-    });
-    const data = await res.json();
+  async ({ credential }, { rejectWithValue }) => {
+    const { res, data } = await postAuth('/api/auth/google/', { credential });
     if (!res.ok) return rejectWithValue(data.error || 'Google sign-in failed');
     return data;
   }
 );
 
-// Resubmit login with the TOTP code stashed from the first leg.
-export const completeLogin = createAsyncThunk(
-  'auth/completeLogin',
-  async ({ totpCode }, { getState, dispatch, rejectWithValue }) => {
-    const { pendingEmail, pendingPassword } = getState().auth;
-    if (!pendingEmail || !pendingPassword) {
-      return rejectWithValue('Login session expired. Please log in again.');
-    }
-    const res = await authRequest('/api/auth/login/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: pendingEmail,
-        password: pendingPassword,
-        totp_code: totpCode,
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      return rejectWithValue(data.detail || 'Invalid authenticator code');
-    }
-    if (data.otp_required) {
-      return rejectWithValue('Authenticator code required.');
-    }
-    const profile = data.user || await dispatch(fetchProfile()).unwrap().catch(() => null);
-    return { tokens: data, user: profile };
-  }
-);
-
-// --- TOTP (authenticator app) management ----------------------------------
-export const fetch2faStatus = createAsyncThunk(
-  'auth/fetch2faStatus',
-  async (_, { rejectWithValue }) => {
-    const res = await authenticatedFetch(
-      '/api/auth/2fa/status/',
-      {},
-    );
-    if (!res.ok) return rejectWithValue('Could not load 2FA status');
-    return res.json();
-  }
-);
-
-export const setup2fa = createAsyncThunk(
-  'auth/setup2fa',
-  async (_, { rejectWithValue }) => {
-    const res = await authenticatedFetch('/api/auth/2fa/setup/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-    });
-    const data = await res.json();
-    if (!res.ok) return rejectWithValue(data.detail || 'Could not start 2FA setup');
-    return data; // { secret, provisioning_uri, qr_data_url }
-  }
-);
-
-export const verify2fa = createAsyncThunk(
-  'auth/verify2fa',
-  async ({ code }, { rejectWithValue }) => {
-    const res = await authenticatedFetch('/api/auth/2fa/verify/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code }),
-    });
-    const data = await res.json();
-    if (!res.ok) return rejectWithValue(data.detail || 'Invalid code');
-    return data; // { enabled, backup_codes: [...] }
-  }
-);
-
-export const disable2fa = createAsyncThunk(
-  'auth/disable2fa',
-  async ({ password, code }, { rejectWithValue }) => {
-    const res = await authenticatedFetch('/api/auth/2fa/disable/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password, code }),
-    });
-    const data = await res.json();
-    if (!res.ok) return rejectWithValue(data.detail || 'Could not disable 2FA');
+// Request a one-time sign-in code by email. In sandbox the backend also
+// returns the code in `otp_preview_for_sandbox`.
+export const sendOtp = createAsyncThunk(
+  'auth/sendOtp',
+  async ({ identifier }, { rejectWithValue }) => {
+    const { res, data } = await postAuth('/api/auth/otp/send/', { identifier: cleanEmail(identifier) });
+    if (!res.ok) return rejectWithValue(data.error || 'Could not send code');
     return data;
   }
 );
 
-// Request a one-time passcode for an email (or phone). In sandbox the backend
-// returns the code in `otp_preview_for_sandbox` for easy testing.
-export const sendOtp = createAsyncThunk(
-  'auth/sendOtp',
-  async ({ identifier }, { rejectWithValue }) => {
-    const cleanedIdentifier = String(identifier || '').trim().toLowerCase();
-    const res = await authRequest('/api/auth/otp/send/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ identifier: cleanedIdentifier }),
+// Verify the emailed code for the challenge returned by sendOtp.
+export const verifyOtp = createAsyncThunk(
+  'auth/verifyOtp',
+  async ({ challengeId, otp }, { rejectWithValue }) => {
+    const { res, data } = await postAuth('/api/auth/otp/verify/', {
+      challenge_id: challengeId,
+      otp: String(otp || '').trim(),
     });
-    const data = await res.json();
-    if (!res.ok) return rejectWithValue(data.error || 'Could not send code');
-    return data; // { message, otp_preview_for_sandbox }
+    if (!res.ok) return rejectWithValue(data.error || 'Invalid code');
+    return data;
   }
 );
 
@@ -188,55 +147,25 @@ export const sendOtp = createAsyncThunk(
 export const requestMagicLink = createAsyncThunk(
   'auth/requestMagicLink',
   async ({ email }, { rejectWithValue }) => {
-    const cleanedEmail = String(email || '').trim().toLowerCase();
-    const res = await authRequest('/api/auth/magic-link/request/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: cleanedEmail,
-        origin: typeof window !== 'undefined' ? window.location.origin : '',
-      }),
+    const { res, data } = await postAuth('/api/auth/magic-link/request/', {
+      email: cleanEmail(email),
+      origin: typeof window !== 'undefined' ? window.location.origin : '',
     });
-    const data = await res.json();
     if (!res.ok) return rejectWithValue(data.error || 'Could not send the link');
-    return data; // { message, magic_link_for_sandbox }
+    return data;
   }
 );
 
-// Exchange a magic-link token for JWT → { user, tokens }.
 export const verifyMagicLink = createAsyncThunk(
   'auth/verifyMagicLink',
   async ({ token }, { rejectWithValue }) => {
-    const res = await authRequest('/api/auth/magic-link/verify/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token }),
-    });
-    const data = await res.json();
+    const { res, data } = await postAuth('/api/auth/magic-link/verify/', { token });
     if (!res.ok) return rejectWithValue(data.error || 'Invalid sign-in link');
     return data;
   }
 );
 
-// Verify the OTP → returns { user, tokens }.
-export const verifyOtp = createAsyncThunk(
-  'auth/verifyOtp',
-  async ({ identifier, otp }, { rejectWithValue }) => {
-    const res = await authRequest('/api/auth/otp/verify/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        identifier: String(identifier || '').trim().toLowerCase(),
-        otp: String(otp || '').trim(),
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) return rejectWithValue(data.error || 'Invalid code');
-    return data;
-  }
-);
-
-// Fetch the authenticated user's profile using the stored access token.
+// Fetch the signed-in user's profile using the HttpOnly session cookie.
 export const fetchProfile = createAsyncThunk(
   'auth/fetchProfile',
   async (_, { rejectWithValue }) => {
@@ -246,6 +175,14 @@ export const fetchProfile = createAsyncThunk(
   }
 );
 
+const noChallenge = {
+  challengeId: '',
+  challengeSentTo: '',
+  challengeSentAt: 0,
+  challengeResendIn: 0,
+  sandboxOtp: '',
+};
+
 const authSlice = createSlice({
   name: 'auth',
   initialState: {
@@ -254,29 +191,24 @@ const authSlice = createSlice({
     sessionChecked: false,
     status: 'idle', // idle | loading | succeeded | failed
     error: null,
-    twoFactorRequired: false,
-    twoFactorEmail: '',
-    sandboxOtp: '',
-    // Staff TOTP gate (authenticator app)
-    requiresTotp: false,
-    pendingEmail: '',
-    pendingPassword: '',
+    // A password sign-in waiting for its emailed code.
+    ...noChallenge,
   },
   reducers: {
     clearSession(state) {
+      Object.assign(state, noChallenge);
       state.user = null;
       state.isAuthenticated = false;
       state.sessionChecked = true;
       state.status = 'idle';
       state.error = null;
-      state.twoFactorRequired = false;
-      state.twoFactorEmail = '';
-      state.sandboxOtp = '';
-      state.requiresTotp = false;
-      state.pendingEmail = '';
-      state.pendingPassword = '';
     },
     clearAuthError(state) {
+      state.error = null;
+    },
+    cancelChallenge(state) {
+      Object.assign(state, noChallenge);
+      state.status = 'idle';
       state.error = null;
     },
   },
@@ -289,82 +221,64 @@ const authSlice = createSlice({
       state.status = 'failed';
       state.error = action.payload || 'Something went wrong';
     };
+    const challengeRejected = (state, action) => {
+      state.status = 'failed';
+      state.error = action.payload?.message || 'Something went wrong';
+      if (action.payload?.restart) Object.assign(state, noChallenge);
+    };
+    const signedIn = (state, user) => {
+      state.status = 'succeeded';
+      if (user) state.user = user;
+      state.isAuthenticated = true;
+      state.sessionChecked = true;
+      Object.assign(state, noChallenge);
+    };
 
     builder
       .addCase(register.pending, pending)
-      .addCase(register.fulfilled, (state, action) => {
-        state.status = 'succeeded';
-        state.user = action.payload.user;
-        state.isAuthenticated = true;
-        state.sessionChecked = true;
-      })
+      .addCase(register.fulfilled, (state, action) => signedIn(state, action.payload.user))
       .addCase(register.rejected, rejected)
 
       .addCase(login.pending, pending)
       .addCase(login.fulfilled, (state, action) => {
-        state.status = 'succeeded';
-        if (action.payload.otpRequired) {
-          // Staff TOTP gate — stash creds for completeLogin.
-          state.requiresTotp = true;
-          state.pendingEmail = action.payload.email;
-          state.pendingPassword = action.payload.password;
+        const { challenge } = action.payload;
+        if (!challenge) {
+          signedIn(state, action.payload.user);
           return;
         }
-        if (action.payload.tokens && action.payload.tokens.two_factor_required) {
-          state.twoFactorRequired = true;
-          state.twoFactorEmail = action.payload.tokens.email;
-          state.sandboxOtp = action.payload.tokens.otp_preview_for_sandbox || '';
-        } else if (action.payload.tokens) {
-          if (action.payload.user) state.user = action.payload.user;
-          state.isAuthenticated = true;
-          state.sessionChecked = true;
-          state.twoFactorRequired = false;
-          state.twoFactorEmail = '';
-          state.sandboxOtp = '';
-        }
+        state.status = 'succeeded';
+        state.challengeId = challenge.id;
+        state.challengeSentTo = challenge.sentTo;
+        state.challengeSentAt = challenge.sentAt;
+        state.challengeResendIn = challenge.resendIn;
+        state.sandboxOtp = challenge.sandboxCode;
       })
       .addCase(login.rejected, rejected)
 
-      .addCase(googleLogin.pending, pending)
-      .addCase(googleLogin.fulfilled, (state, action) => {
+      .addCase(verifyLoginCode.pending, pending)
+      .addCase(verifyLoginCode.fulfilled, (state, action) => signedIn(state, action.payload.user))
+      .addCase(verifyLoginCode.rejected, challengeRejected)
+
+      .addCase(resendLoginCode.pending, pending)
+      .addCase(resendLoginCode.fulfilled, (state, action) => {
         state.status = 'succeeded';
-        state.user = action.payload.user;
-        state.isAuthenticated = true;
-        state.sessionChecked = true;
+        state.challengeSentTo = action.payload.sentTo || state.challengeSentTo;
+        state.challengeSentAt = action.payload.sentAt;
+        state.challengeResendIn = action.payload.resendIn;
+        state.sandboxOtp = action.payload.sandboxCode;
       })
+      .addCase(resendLoginCode.rejected, challengeRejected)
+
+      .addCase(googleLogin.pending, pending)
+      .addCase(googleLogin.fulfilled, (state, action) => signedIn(state, action.payload.user))
       .addCase(googleLogin.rejected, rejected)
 
-      .addCase(completeLogin.pending, pending)
-      .addCase(completeLogin.fulfilled, (state, action) => {
-        state.status = 'succeeded';
-        if (action.payload.user) state.user = action.payload.user;
-        state.isAuthenticated = true;
-        state.sessionChecked = true;
-        state.requiresTotp = false;
-        state.pendingEmail = '';
-        state.pendingPassword = '';
-      })
-      .addCase(completeLogin.rejected, rejected)
-
       .addCase(verifyOtp.pending, pending)
-      .addCase(verifyOtp.fulfilled, (state, action) => {
-        state.status = 'succeeded';
-        state.user = action.payload.user;
-        state.isAuthenticated = true;
-        state.sessionChecked = true;
-        state.twoFactorRequired = false;
-        state.twoFactorEmail = '';
-        state.sandboxOtp = '';
-      })
+      .addCase(verifyOtp.fulfilled, (state, action) => signedIn(state, action.payload.user))
       .addCase(verifyOtp.rejected, rejected)
 
       .addCase(verifyMagicLink.pending, pending)
-      .addCase(verifyMagicLink.fulfilled, (state, action) => {
-        state.status = 'succeeded';
-        state.user = action.payload.user;
-        state.isAuthenticated = true;
-        state.sessionChecked = true;
-      })
+      .addCase(verifyMagicLink.fulfilled, (state, action) => signedIn(state, action.payload.user))
       .addCase(verifyMagicLink.rejected, rejected)
 
       .addCase(fetchProfile.fulfilled, (state, action) => {
@@ -380,7 +294,7 @@ const authSlice = createSlice({
   },
 });
 
-export const { clearSession, clearAuthError } = authSlice.actions;
+export const { clearSession, clearAuthError, cancelChallenge } = authSlice.actions;
 export const logout = () => (dispatch) => {
   authRequest('/api/auth/logout/', { method: 'POST' }).catch(() => {});
   dispatch(clearSession());
