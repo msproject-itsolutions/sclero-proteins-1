@@ -1,35 +1,30 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { getApiUrl, postJson } from '../lib/api';
+import { postJson } from '../lib/api';
 import { authenticatedFetch } from '../lib/authFetch';
 
-function resolveActiveSessionId(passedSessionId, state) {
-  let sid = passedSessionId || state?.region?.session_id;
-  if (!sid && typeof window !== 'undefined') {
-    sid = localStorage.getItem('sclero_session_id');
-    if (!sid) {
-      sid = 'session_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
-      localStorage.setItem('sclero_session_id', sid);
-    }
+// The server identifies the cart by its HttpOnly cookie (or the signed-in
+// account); the browser never chooses, stores or sends a cart id.
+const regionFor = (region, getState) => region || getState()?.region?.currentRegion || 'UK';
+
+async function postCart(path, payload, fallbackMessage) {
+  const { response, data } = await postJson(path, payload);
+  if (!response.ok) {
+    throw new Error(data.error || fallbackMessage);
   }
-  return sid || 'session_fallback';
+  return data;
 }
 
 export const fetchCart = createAsyncThunk(
   'cart/fetchCart',
-  async ({ session_id, region }, { rejectWithValue, getState }) => {
+  async ({ region } = {}, { rejectWithValue, getState }) => {
     try {
-      const state = getState();
-      const activeSessionId = resolveActiveSessionId(session_id, state);
-      const activeRegion = region || state?.region?.currentRegion || 'UK';
-
       const response = await authenticatedFetch(
-        `/api/cart/?session_id=${encodeURIComponent(activeSessionId)}&region=${encodeURIComponent(activeRegion)}`
+        `/api/cart/?region=${encodeURIComponent(regionFor(region, getState))}`
       );
       if (!response.ok) {
         throw new Error('Failed to fetch cart');
       }
-      const data = await response.json();
-      return data;
+      return await response.json();
     } catch (err) {
       return rejectWithValue(err.message);
     }
@@ -38,24 +33,15 @@ export const fetchCart = createAsyncThunk(
 
 export const addToCart = createAsyncThunk(
   'cart/addToCart',
-  async ({ session_id, region, product_id, quantity, metadata, variant_sku }, { rejectWithValue, getState }) => {
+  async ({ region, product_id, quantity, metadata, variant_sku }, { rejectWithValue, getState }) => {
     try {
-      const state = getState();
-      const activeSessionId = resolveActiveSessionId(session_id, state);
-      const activeRegion = region || state?.region?.currentRegion || 'UK';
-
-      const { response, data } = await postJson('/api/cart/add/', {
-        session_id: activeSessionId,
-        region: activeRegion,
+      return await postCart('/api/cart/add/', {
+        region: regionFor(region, getState),
         product_id,
         quantity: quantity || 1,
         metadata,
         variant_sku,
-      });
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to add item to cart');
-      }
-      return data;
+      }, 'Failed to add item to cart');
     } catch (err) {
       return rejectWithValue(err.message);
     }
@@ -64,24 +50,15 @@ export const addToCart = createAsyncThunk(
 
 export const updateCartItem = createAsyncThunk(
   'cart/updateCartItem',
-  async ({ session_id, region, cart_item_id, product_id, variant_sku, quantity }, { rejectWithValue, getState }) => {
+  async ({ region, cart_item_id, product_id, variant_sku, quantity }, { rejectWithValue, getState }) => {
     try {
-      const state = getState();
-      const activeSessionId = resolveActiveSessionId(session_id, state);
-      const activeRegion = region || state?.region?.currentRegion || 'UK';
-
-      const { response, data } = await postJson('/api/cart/update/', {
-        session_id: activeSessionId,
-        region: activeRegion,
+      return await postCart('/api/cart/update/', {
+        region: regionFor(region, getState),
         cart_item_id,
         product_id,
         variant_sku,
         quantity,
-      });
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to update item quantity');
-      }
-      return data;
+      }, 'Failed to update item quantity');
     } catch (err) {
       return rejectWithValue(err.message);
     }
@@ -90,23 +67,14 @@ export const updateCartItem = createAsyncThunk(
 
 export const removeFromCart = createAsyncThunk(
   'cart/removeFromCart',
-  async ({ session_id, region, cart_item_id, product_id, variant_sku }, { rejectWithValue, getState }) => {
+  async ({ region, cart_item_id, product_id, variant_sku }, { rejectWithValue, getState }) => {
     try {
-      const state = getState();
-      const activeSessionId = resolveActiveSessionId(session_id, state);
-      const activeRegion = region || state?.region?.currentRegion || 'UK';
-
-      const { response, data } = await postJson('/api/cart/remove/', {
-        session_id: activeSessionId,
-        region: activeRegion,
+      return await postCart('/api/cart/remove/', {
+        region: regionFor(region, getState),
         cart_item_id,
         product_id,
         variant_sku,
-      });
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to remove item');
-      }
-      return data;
+      }, 'Failed to remove item');
     } catch (err) {
       return rejectWithValue(err.message);
     }
@@ -115,20 +83,9 @@ export const removeFromCart = createAsyncThunk(
 
 export const clearCart = createAsyncThunk(
   'cart/clearCart',
-  async ({ session_id, region }, { rejectWithValue, getState }) => {
+  async ({ region } = {}, { rejectWithValue, getState }) => {
     try {
-      const state = getState();
-      const activeSessionId = resolveActiveSessionId(session_id, state);
-      const activeRegion = region || state?.region?.currentRegion || 'UK';
-
-      const { response, data } = await postJson('/api/cart/clear/', {
-        session_id: activeSessionId,
-        region: activeRegion,
-      });
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to clear cart');
-      }
-      return data;
+      return await postCart('/api/cart/clear/', { region: regionFor(region, getState) }, 'Failed to clear cart');
     } catch (err) {
       return rejectWithValue(err.message);
     }

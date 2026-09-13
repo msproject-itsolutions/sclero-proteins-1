@@ -6,7 +6,7 @@ import { getApiUrl } from '../lib/api';
 
 export default function CartDrawer({ onClose, onOpenCheckout }) {
   const dispatch = useDispatch();
-  const { currentRegion, currencySymbol, taxName, taxRate, taxMode, session_id } = useSelector((state) => state.region);
+  const { currentRegion, currencySymbol, taxName, taxRate, taxMode } = useSelector((state) => state.region);
   const { items } = useSelector((state) => state.cart);
   const cartError = useSelector((state) => state.cart.error);
 
@@ -53,7 +53,6 @@ export default function CartDrawer({ onClose, onOpenCheckout }) {
   const handleQtyChange = (item, newQty) => {
     if (newQty < 1) return;
     dispatch(updateCartItem({
-      session_id,
       region: currentRegion,
       cart_item_id: item.id,
       quantity: newQty,
@@ -62,7 +61,6 @@ export default function CartDrawer({ onClose, onOpenCheckout }) {
 
   const handleRemove = (item) => {
     dispatch(removeFromCart({
-      session_id,
       region: currentRegion,
       cart_item_id: item.id,
     }));
@@ -71,7 +69,6 @@ export default function CartDrawer({ onClose, onOpenCheckout }) {
   const handleQuickAdd = (product) => {
     dispatch(
       addToCart({
-        session_id,
         region: currentRegion,
         product_id: product.id,
         quantity: 1,

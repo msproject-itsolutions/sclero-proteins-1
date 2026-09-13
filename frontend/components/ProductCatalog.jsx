@@ -75,7 +75,7 @@ export default function ProductCatalog({
 }) {
   const dispatch = useDispatch();
   const router = useRouter();
-  const { currentRegion, currencySymbol, session_id } = useSelector((state) => state.region);
+  const { currentRegion, currencySymbol } = useSelector((state) => state.region);
 
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -252,7 +252,6 @@ export default function ProductCatalog({
   const handleAddToCart = (product) => {
     dispatch(
       addToCart({
-        session_id,
         region: currentRegion,
         product_id: product.id,
         quantity: 1,

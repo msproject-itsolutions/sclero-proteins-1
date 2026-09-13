@@ -54,7 +54,7 @@ const BENEFIT_ICONS = [Sparkles, HeartHandshake, Leaf, ShieldCheck];
 export default function ProductDetailClient({ sku }) {
   const router = useRouter();
   const dispatch = useDispatch();
-  const { currentRegion, currencySymbol, session_id } = useSelector((s) => s.region);
+  const { currentRegion, currencySymbol } = useSelector((s) => s.region);
   const isAuthenticated = useSelector((s) => s.auth?.isAuthenticated);
 
   const [product, setProduct] = useState(null);
@@ -189,7 +189,6 @@ export default function ProductDetailClient({ sku }) {
 
     await dispatch(
       addToCart({
-        session_id,
         region: currentRegion,
         product_id: product.id,
         quantity,
@@ -217,7 +216,6 @@ export default function ProductDetailClient({ sku }) {
     const price = p.promotional_price ? parseFloat(p.promotional_price) : parseFloat(p.price);
     dispatch(
       addToCart({
-        session_id,
         region: currentRegion,
         product_id: p.id,
         quantity: 1,

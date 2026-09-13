@@ -23,7 +23,6 @@ export default function SubpageOrProduct() {
 
   const currentRegion = useSelector((state) => state.region.currentRegion);
   const currencySymbol = useSelector((state) => state.region.currencySymbol);
-  const { session_id } = useSelector((state) => state.region);
 
   const [product, setProduct] = useState(null);
   const [cmsPage, setCmsPage] = useState(null);
@@ -85,7 +84,6 @@ export default function SubpageOrProduct() {
     if (!product) return;
     dispatch(
       addToCart({
-        session_id,
         region: currentRegion,
         product_id: product.id,
         quantity: 1,

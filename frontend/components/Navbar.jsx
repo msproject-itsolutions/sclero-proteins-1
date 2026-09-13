@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useSelector, useDispatch } from 'react-redux';
 import { setRegion } from '../store/regionSlice';
-import { fetchCart, clearCartLocal, clearCart } from '../store/cartSlice';
+import { fetchCart, clearCart } from '../store/cartSlice';
 import { getApiUrl, postJson } from '../lib/api';
 import { isProdHost, crossDomainUrl } from '../lib/region';
 import { safePublicHref } from '../lib/safeUrl';
@@ -100,7 +100,6 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
   const dispatch = useDispatch();
   const { currentRegion } = useSelector((state) => state.region);
   const cartItems = useSelector((state) => state.cart.items);
-  const session_id = useSelector((state) => state.region.session_id);
   const authUser = useSelector((state) => state.auth?.user);
 
   const pathname = usePathname();
@@ -200,9 +199,7 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
       return;
     }
     dispatch(setRegion(country));
-    if (session_id) {
-      dispatch(fetchCart({ session_id, region: country.code }));
-    }
+    dispatch(fetchCart({ region: country.code }));
   };
 
   const handleCountrySwitch = (country) => {
@@ -619,11 +616,7 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
                 type="button"
                 onClick={() => {
                   if (pendingRegion) {
-                    if (session_id) {
-                      dispatch(clearCart({ session_id, region: pendingRegion.code }));
-                    } else {
-                      dispatch(clearCartLocal());
-                    }
+                    dispatch(clearCart({ region: pendingRegion.code }));
                     applyRegion(pendingRegion);
                   }
                   setShowClearCartModal(false);

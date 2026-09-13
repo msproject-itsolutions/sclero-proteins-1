@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { setRegion, setSessionId, setTaxMode, setGuestCheckoutEnabled, setBranding } from '../store/regionSlice';
+import { setRegion, setTaxMode, setGuestCheckoutEnabled, setBranding } from '../store/regionSlice';
 import { fetchCart } from '../store/cartSlice';
 import { getApiUrl } from '../lib/api';
 import { regionFromHost, normalizeHost, hostForRegion, COM_HOST } from '../lib/region';
@@ -44,7 +44,6 @@ function readCookieConsent() {
 
 export default function useStoreBootstrap() {
   const dispatch = useDispatch();
-  const session_id = useSelector((state) => state.region.session_id);
   const currentRegion = useSelector((state) => state.region.currentRegion);
   const [ready, setReady] = useState(false);
 
@@ -67,12 +66,12 @@ export default function useStoreBootstrap() {
       return;
     }
 
-    let sid = localStorage.getItem('sclero_session_id');
-    if (!sid) {
-      sid = `session_${Math.random().toString(36).substring(2, 15)}`;
-      localStorage.setItem('sclero_session_id', sid);
+    // Carts are identified by an HttpOnly cookie now; drop the old guessable id.
+    try {
+      localStorage.removeItem('sclero_session_id');
+    } catch {
+      /* storage unavailable */
     }
-    dispatch(setSessionId(sid));
 
     const consent = readCookieConsent();
     if (consent) loadTracking(activeTrackingSettings, consent);
@@ -139,11 +138,11 @@ export default function useStoreBootstrap() {
         .then((res) => res.json())
         .then((data) => {
           dispatch(setRegion(data.region));
-          dispatch(fetchCart({ session_id: sid, region: data.region.code }));
+          dispatch(fetchCart({ region: data.region.code }));
           setReady(true);
         })
         .catch(() => {
-          dispatch(fetchCart({ session_id: sid, region: hostRegion }));
+          dispatch(fetchCart({ region: hostRegion }));
           setReady(true);
         });
 
@@ -187,7 +186,7 @@ export default function useStoreBootstrap() {
       .then((res) => res.json())
       .then((data) => {
         dispatch(setRegion(data.region));
-        dispatch(fetchCart({ session_id: sid, region: data.region.code }));
+        dispatch(fetchCart({ region: data.region.code }));
         setReady(true);
 
         // First-load-only server-side geo refinement (Cloudflare / Vercel / MaxMind).
@@ -210,18 +209,18 @@ export default function useStoreBootstrap() {
               .then((d) => {
                 if (!d || !d.region) return;
                 dispatch(setRegion(d.region));
-                dispatch(fetchCart({ session_id: sid, region: d.region.code }));
+                dispatch(fetchCart({ region: d.region.code }));
               });
           })
           .catch(() => {});
       })
       .catch(() => {
-        dispatch(fetchCart({ session_id: sid, region: 'UK' }));
+        dispatch(fetchCart({ region: 'UK' }));
         setReady(true);
       });
 
     return () => window.removeEventListener('cookie-consent-updated', onConsentUpdated);
   }, [dispatch]);
 
-  return { session_id, currentRegion, ready };
+  return { currentRegion, ready };
 }

@@ -28,7 +28,7 @@ const COUNTRIES = [
 
 export default function Footer() {
   const dispatch = useDispatch();
-  const { currentRegion, session_id } = useSelector((state) => state.region);
+  const { currentRegion } = useSelector((state) => state.region);
   const branding = useSelector((state) => state.region.branding);
   const companyInfo = branding?.companyInfo || {};
   const socialLinks = branding?.socialLinks || {};
@@ -85,9 +85,7 @@ export default function Footer() {
       return;
     }
     dispatch(setRegion(country));
-    if (session_id) {
-      dispatch(fetchCart({ session_id, region: country.code }));
-    }
+    dispatch(fetchCart({ region: country.code }));
   };
 
   const shopLinks = [

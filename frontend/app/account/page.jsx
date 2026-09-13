@@ -774,7 +774,7 @@ function OrdersTab({ authFetch }) {
 // PREMIUM ADDITION: Wishlist Tab
 function WishlistTab() {
   const dispatch = useDispatch();
-  const { currentRegion, currencySymbol, session_id } = useSelector((state) => state.region);
+  const { currentRegion, currencySymbol } = useSelector((state) => state.region);
   const isAuthenticated = useSelector((state) => state.auth?.isAuthenticated);
   const [wishlist, setWishlist] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -809,7 +809,6 @@ function WishlistTab() {
   const handleAdd = (item) => {
     dispatch(
       addToCart({
-        session_id,
         region: currentRegion,
         product_id: item.product_id,
         quantity: 1,
