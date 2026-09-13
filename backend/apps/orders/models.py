@@ -53,9 +53,17 @@ class CartItem(models.Model):
         return f"{self.quantity} x {self.product.name} in Cart {self.cart.id}"
 
 
+class OrderQuerySet(models.QuerySet):
+    def placed(self):
+        """Real orders: excludes online attempts that are unpaid, failed or released."""
+        return self.exclude(status='AWAITING_PAYMENT').exclude(payment_status__in=['EXPIRED', 'FAILED'])
+
+
 class Order(models.Model):
     ORDER_STATUS = [
         ('PENDING', 'Pending'),
+        # Order exists, stock is reserved, the online payment is not verified yet.
+        ('AWAITING_PAYMENT', 'Awaiting payment'),
         ('PROCESSING', 'Processing'),
         ('SHIPPED', 'Shipped'),
         ('DELIVERED', 'Delivered'),
@@ -70,6 +78,9 @@ class Order(models.Model):
         ('PAID', 'Paid'),
         ('FAILED', 'Failed'),
         ('REFUNDED', 'Refunded'),
+        ('PARTIALLY_REFUNDED', 'Partially refunded'),
+        # The payment window closed before payment; stock and coupon went back.
+        ('EXPIRED', 'Expired'),
     ]
     CAPTURE_MODE = [
         ('AUTO', 'Automatic capture'),
@@ -124,7 +135,19 @@ class Order(models.Model):
     payment_capture_mode = models.CharField(max_length=20, choices=CAPTURE_MODE, default='AUTO')
     payment_authorized_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     payment_captured_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    
+    # Order-first checkout: the gateway object opened for this order (Stripe
+    # PaymentIntent pi_..., Razorpay order order_...). Unique per gateway, so a
+    # provider payment can never complete two orders.
+    payment_reference = models.CharField(max_length=255, null=True, blank=True)
+    payment_expires_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    source_cart = models.ForeignKey(
+        Cart, on_delete=models.SET_NULL, null=True, blank=True, related_name='orders',
+    )
+    # SHA-256 of everything that was priced, so an unchanged retry reuses the order.
+    quote_fingerprint = models.CharField(max_length=64, blank=True, default='')
+
+    objects = OrderQuerySet.as_manager()
+
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -133,6 +156,13 @@ class Order(models.Model):
         indexes = [
             models.Index(fields=['region', 'status']),
             models.Index(fields=['user', 'status']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['payment_method', 'payment_reference'],
+                condition=models.Q(payment_reference__isnull=False),
+                name='unique_gateway_payment_reference',
+            ),
         ]
 
     def __str__(self):
@@ -201,6 +231,7 @@ class Refund(models.Model):
     reason = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=REFUND_STATUS, default='PENDING', db_index=True)
     refund_transaction_id = models.CharField(max_length=255, blank=True)
+    failure_reason = models.TextField(blank=True, default='')
     is_partial = models.BooleanField(default=False)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
