@@ -68,11 +68,18 @@ export default function StripePaymentRequest({
     if (!paymentRequest) return undefined;
 
     const handler = async (ev) => {
+      let settled = false;
+      const complete = (status) => {
+        if (!settled) {
+          settled = true;
+          ev.complete(status);
+        }
+      };
       try {
-        await Promise.resolve(onSuccess?.(ev.paymentMethod.id));
-        ev.complete('success');
+        await Promise.resolve(onSuccess?.(ev.paymentMethod.id, stripe, complete));
+        complete('success');
       } catch (err) {
-        ev.complete('fail');
+        complete('fail');
         onError?.(err);
       }
     };
@@ -81,7 +88,7 @@ export default function StripePaymentRequest({
     return () => {
       try { paymentRequest.off('paymentmethod', handler); } catch {}
     };
-  }, [paymentRequest, onSuccess, onError]);
+  }, [paymentRequest, onSuccess, onError, stripe]);
 
   if (!publishableKey || !paymentRequest) return null;
 

@@ -2,10 +2,11 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { clearCartLocal, removeFromCart } from '../../store/cartSlice';
-import { Trash2, X, CheckCircle, Download, CreditCard, Banknote, Wallet, ShieldCheck, ChevronDown, ChevronUp, ShoppingCart, ArrowLeft, HelpCircle } from 'lucide-react';
+import { fetchCart, removeFromCart } from '../../store/cartSlice';
+import { Trash2, X, CreditCard, Banknote, Wallet, ShieldCheck, ChevronDown, ChevronUp, ShoppingCart, ArrowLeft, HelpCircle } from 'lucide-react';
 import { trackEvent } from '../../utils/analytics';
-import { getApiUrl } from '../../lib/api';
+import { getApiUrl, postJson } from '../../lib/api';
+import { authenticatedFetch } from '../../lib/authFetch';
 import { validateCheckout } from '../../lib/formValidation';
 import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
@@ -79,15 +80,29 @@ function StripeCardSection({ onReady }) {
   );
 }
 
+const PHASE_COPY = {
+  creating: {
+    title: 'Securing your order',
+    body: 'We are reserving your items and preparing a secure payment.',
+  },
+  paying: {
+    title: 'Complete your payment',
+    body: 'Follow the steps from your bank or payment app in the payment window.',
+  },
+  confirming: {
+    title: 'Confirming your payment',
+    body: 'We are confirming the payment with the provider. Please do not refresh or close this window.',
+  },
+};
+
 function CheckoutPageInner({ gateways, gatewayError, fetchGateways, stripeReady }) {
   const router = useRouter();
   const dispatch = useDispatch();
-  const { currentRegion, currencyCode, currencySymbol, taxName, taxRate, taxMode, session_id, branding } = useSelector((state) => state.region);
+  const { currentRegion, currencyCode, currencySymbol, taxName, taxRate, taxMode, branding } = useSelector((state) => state.region);
   const cartItems = useSelector((state) => state.cart.items);
   const authUser = useSelector((state) => state.auth?.user);
   const guestCheckoutEnabled = useSelector((state) => state.region.guestCheckoutEnabled);
   const storeName = branding?.companyInfo?.name || 'Online store';
-  const googleMerchantId = process.env.NEXT_PUBLIC_GOOGLE_MERCHANT_ID || '';
 
   // Form Fields
   const [email, setEmail] = useState('');
@@ -107,10 +122,11 @@ function CheckoutPageInner({ gateways, gatewayError, fetchGateways, stripeReady 
   const confirmCardRef = useRef(null);
   const handleCardReady = useCallback((fn) => { confirmCardRef.current = fn; }, []);
 
-  // Checkout statuses
-  const [loading, setLoading] = useState(false);
-  const [completedOrder, setCompletedOrder] = useState(null);
+  // idle → creating → paying → confirming. A failed or expired payment keeps
+  // the cart (and the order), so the shopper can simply try again.
+  const [phase, setPhase] = useState('idle');
   const [errorMsg, setErrorMsg] = useState('');
+  const loading = phase === 'creating' || phase === 'paying' || phase === 'confirming';
 
   // Shipping address lookup + live fee calculation
   const [pinLookup, setPinLookup] = useState({ status: 'idle', msg: '' });
@@ -136,10 +152,8 @@ function CheckoutPageInner({ gateways, gatewayError, fetchGateways, stripeReady 
   }, [authUser]);
 
   const handleRemoveItem = (item) => {
-    if (!session_id) return;
     dispatch(
       removeFromCart({
-        session_id,
         region: currentRegion,
         cart_item_id: item.id,
         product_id: item.product?.id || item.product,
@@ -147,51 +161,6 @@ function CheckoutPageInner({ gateways, gatewayError, fetchGateways, stripeReady 
       })
     );
   };
-
-  // Google Customer Reviews Opt-In Integration
-  useEffect(() => {
-    if (!completedOrder || !googleMerchantId) return;
-
-    const deliveryNumbers = String(completedOrder.shipping_estimated_days || '').match(/\d+/g);
-    if (!deliveryNumbers?.length) return;
-    const deliveryDays = Math.max(...deliveryNumbers.map(Number));
-
-    const loadGoogleSurvey = () => {
-      const estDate = new Date();
-      estDate.setDate(estDate.getDate() + deliveryDays);
-      const yyyy = estDate.getFullYear();
-      const mm = String(estDate.getMonth() + 1).padStart(2, '0');
-      const dd = String(estDate.getDate()).padStart(2, '0');
-      const formattedEstDate = `${yyyy}-${mm}-${dd}`;
-
-      const renderOptIn = () => {
-        if (window.gapi && window.gapi.surveyoptin) {
-          window.gapi.surveyoptin.render({
-            "merchant_id": Number(googleMerchantId),
-            "order_id": String(completedOrder.id),
-            "email": completedOrder.email || email,
-            "delivery_country": currentRegion === 'IN' ? 'IN' : 'GB',
-            "estimated_delivery_date": formattedEstDate
-          });
-        }
-      };
-
-      if (window.gapi && window.gapi.load) {
-        window.gapi.load('surveyoptin', renderOptIn);
-      } else {
-        window.renderOptIn = () => {
-          window.gapi.load('surveyoptin', renderOptIn);
-        };
-        const script = document.createElement('script');
-        script.src = 'https://apis.google.com/js/platform.js?onload=renderOptIn';
-        script.async = true;
-        script.defer = true;
-        document.body.appendChild(script);
-      }
-    };
-
-    loadGoogleSurvey();
-  }, [completedOrder, email, currentRegion, googleMerchantId]);
 
   useEffect(() => {
     setPaymentMethod((prev) =>
@@ -216,16 +185,11 @@ function CheckoutPageInner({ gateways, gatewayError, fetchGateways, stripeReady 
     if (!couponCode.trim()) return;
 
     try {
-      const response = await fetch(getApiUrl('/api/checkout/apply-coupon/'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          code: couponCode.trim(),
-          region: currentRegion,
-          subtotal: subtotal
-        })
+      // The server prices the coupon against the cart it holds for this shopper.
+      const { response, data } = await postJson('/api/checkout/apply-coupon/', {
+        code: couponCode.trim(),
+        region: currentRegion,
       });
-      const data = await response.json();
       if (!response.ok) {
         throw new Error(data.error || 'Failed to apply coupon');
       }
@@ -285,11 +249,12 @@ function CheckoutPageInner({ gateways, gatewayError, fetchGateways, stripeReady 
     }
     const t = setTimeout(() => {
       setShippingLoading(true);
-      fetch(getApiUrl('/api/shipping/calculate/'), {
+      // Credentials go with the request so the server can weigh this shopper's cart.
+      authenticatedFetch('/api/shipping/calculate/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          session_id, region: currentRegion, country: destCountry, state: stateVal,
+          region: currentRegion, country: destCountry, state: stateVal,
           city, postcode: zip, subtotal: taxableSubtotal,
         }),
       })
@@ -318,39 +283,83 @@ function CheckoutPageInner({ gateways, gatewayError, fetchGateways, stripeReady 
         .finally(() => setShippingLoading(false));
     }, 400);
     return () => clearTimeout(t);
-  }, [zip, stateVal, city, currentRegion, destCountry, taxableSubtotal, session_id, shippingAddressReady]);
+  }, [zip, stateVal, city, currentRegion, destCountry, taxableSubtotal, shippingAddressReady]);
 
-  const createPaymentIntent = async (methodCode) => {
-    const { cleaned, error } = validateCheckout({ email, name, phone, address, city, state: stateVal, zip });
-    if (error) throw new Error(error);
-    const response = await fetch(getApiUrl('/api/checkout/payment-intent/'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        session_id,
-        region: currentRegion,
-        payment_method: methodCode,
-        country: destCountry,
-        state: cleaned.state,
-        city: cleaned.city,
-        postal_code: cleaned.zip,
-        coupon_code: activeCoupon ? activeCoupon.code : null,
-        shipping_rate_id: selectedShippingRateId,
-      }),
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Could not start the payment.');
+  const orderDetails = (cleaned, methodCode) => ({
+    region: currentRegion,
+    email: cleaned.email,
+    shipping_name: cleaned.name,
+    shipping_phone: cleaned.phone,
+    shipping_address_line1: cleaned.address,
+    shipping_city: cleaned.city,
+    shipping_state: cleaned.state,
+    shipping_postal_code: cleaned.zip,
+    shipping_country: destCountry,
+    payment_method: methodCode,
+    coupon_code: activeCoupon ? activeCoupon.code : null,
+    shipping_rate_id: selectedShippingRateId,
+  });
+
+  const requestError = (response, data, fallback) => {
+    const error = new Error(data?.error || fallback);
+    error.status = response.status;
+    return error;
+  };
+
+  // 1. Create (or resume) the order; the server reserves stock and coupon use.
+  const createOrder = async (cleaned, methodCode) => {
+    const { response, data } = await postJson('/api/checkout/', orderDetails(cleaned, methodCode), { timeoutMs: 30000 });
+    if (!response.ok) throw requestError(response, data, 'We could not create your order. Please try again.');
     return data;
   };
 
-  const payWithRazorpay = (intent) => new Promise((resolve, reject) => {
+  // 3. The server verifies the payment with the provider before recording it.
+  const confirmOrder = async (order, extra = {}) => {
+    const { response, data } = await postJson('/api/checkout/confirm/', {
+      order_id: order.order_id,
+      order_token: order.order_token,
+      ...extra,
+    }, { timeoutMs: 30000 });
+    if (!response.ok) throw requestError(response, data, 'We could not confirm your payment.');
+    return data;
+  };
+
+  const finishOrder = (order) => {
+    // The order token stays in this tab; it never goes into a URL that
+    // third-party scripts could read.
+    try {
+      sessionStorage.setItem(`sclero_order_token_${order.order_id}`, order.order_token);
+    } catch {
+      /* storage unavailable: the confirmation email still carries the link */
+    }
+    trackEvent('Purchase', {
+      transaction_id: order.order_id,
+      value: parseFloat(order.amount),
+      currency: order.currency,
+    });
+    dispatch(fetchCart({ region: currentRegion }));
+    router.push(`/checkout/success?order=${encodeURIComponent(order.order_id)}`);
+  };
+
+  const failPayment = (err) => {
+    if (err?.status === 410) {
+      setPhase('expired');
+      setErrorMsg('This checkout expired before the payment was completed. Please review your cart and place the order again.');
+      return;
+    }
+    setPhase('failed');
+    setErrorMsg(`${err?.message || 'The payment was not completed.'} Your cart is saved, so you can try again.`);
+  };
+
+  const payWithRazorpay = (payment, cleaned) => new Promise((resolve, reject) => {
     const rzp = new window.Razorpay({
-      key: intent.publishable_key,
-      order_id: intent.razorpay_order_id,
-      currency: intent.currency,
+      key: payment.key_id,
+      order_id: payment.razorpay_order_id,
+      amount: payment.amount,
+      currency: payment.currency,
       name: storeName,
       description: `Order · ${cartItems.length} item${cartItems.length === 1 ? '' : 's'}`,
-      prefill: { name, email, contact: phone },
+      prefill: { name: cleaned.name, email: cleaned.email, contact: cleaned.phone },
       handler: (response) => resolve(response),
       modal: {
         ondismiss: () => reject(new Error('Payment was cancelled.')),
@@ -362,78 +371,96 @@ function CheckoutPageInner({ gateways, gatewayError, fetchGateways, stripeReady 
     rzp.open();
   });
 
-  const submitCheckout = async ({ paymentMethodCode, paymentId, extra } = {}) => {
-    const { cleaned, error } = validateCheckout({ email, name, phone, address, city, state: stateVal, zip });
-    if (error) throw new Error(error);
-    if (!selectedShippingRateId || calcShipping == null) {
-      throw new Error('Please select an available shipping method.');
+  // 2. Collect the payment for that order in the browser.
+  const payOnline = async (order, cleaned) => {
+    const payment = order.payment || {};
+    if (payment.simulated) {
+      setPhase('confirming');
+      return confirmOrder(order, { simulated: true });
     }
-    const response = await fetch(getApiUrl('/api/checkout/'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        session_id,
-        region: currentRegion,
-        email: cleaned.email,
-        shipping_name: cleaned.name,
-        shipping_phone: cleaned.phone,
-        shipping_address_line1: cleaned.address,
-        shipping_city: cleaned.city,
-        shipping_state: cleaned.state,
-        shipping_postal_code: cleaned.zip,
-        shipping_country: currentRegion === 'IN' ? 'IN' : 'GB',
-        payment_method: paymentMethodCode || paymentMethod,
-        payment_id: paymentId || ('ch_' + Math.random().toString(36).substring(2, 12)),
-        coupon_code: activeCoupon ? activeCoupon.code : null,
-        shipping_rate_id: selectedShippingRateId,
-        ...(extra || {}),
-      })
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.error || 'Checkout transaction failed');
+    if (order.payment_method === 'STRIPE') {
+      if (!payment.client_secret) throw new Error('Card payment is not available right now. Please choose another method.');
+      if (!confirmCardRef.current) throw new Error('Card form is still loading. Please try again.');
+      setPhase('paying');
+      await confirmCardRef.current(payment.client_secret, {
+        name: cleaned.name, email: cleaned.email, phone: cleaned.phone,
+      });
+      setPhase('confirming');
+      return confirmOrder(order);
     }
-    return data;
+    if (order.payment_method === 'RAZORPAY') {
+      const ready = await loadRazorpayScript();
+      if (!ready) throw new Error('Could not load Razorpay. Check your connection and try again.');
+      setPhase('paying');
+      const result = await payWithRazorpay(payment, cleaned);
+      setPhase('confirming');
+      return confirmOrder(order, {
+        razorpay_payment_id: result.razorpay_payment_id,
+        razorpay_order_id: result.razorpay_order_id,
+        razorpay_signature: result.razorpay_signature,
+      });
+    }
+    throw new Error('This payment method is not available.');
   };
 
-  const handleWalletSuccess = async (paymentMethodId) => {
-    setLoading(true);
+  const readyToOrder = () => {
+    if (guestCheckoutBlocked) throw new Error('Guest checkout is currently disabled. Please sign in to continue.');
+    const { cleaned, error } = validateCheckout({ email, name, phone, address, city, state: stateVal, zip });
+    if (error) throw new Error(error);
+    if (!selectedShippingRateId || calcShipping == null) throw new Error('Please select an available shipping method.');
+    return cleaned;
+  };
+
+  // Apple Pay / Google Pay follow the same order-first flow.
+  const handleWalletPayment = async (paymentMethodId, stripe, complete) => {
+    if (loading) throw new Error('A payment is already in progress.');
     setErrorMsg('');
+    const cleaned = readyToOrder();
+    setPhase('creating');
     try {
-      const data = await submitCheckout({
-        paymentMethodCode: 'STRIPE',
-        paymentId: paymentMethodId,
-      });
-      setCompletedOrder(data.order);
-      trackEvent('Purchase', {
-        transaction_id: data.order.id,
-        value: parseFloat(data.order.total),
-        currency: data.order.currency_code,
-      });
-      dispatch(clearCartLocal());
-      router.push(`/checkout/success?order_id=${data.order.id}&email=${encodeURIComponent(data.order.email || email)}`);
+      const order = await createOrder(cleaned, 'STRIPE');
+      if (order.payment_status === 'PAID') {
+        complete('success');
+        finishOrder(order);
+        return;
+      }
+      const payment = order.payment || {};
+      if (payment.simulated) {
+        complete('success');
+        setPhase('confirming');
+        await confirmOrder(order, { simulated: true });
+        finishOrder(order);
+        return;
+      }
+      if (!payment.client_secret) throw new Error('Wallet payment is not available right now.');
+      setPhase('paying');
+      const first = await stripe.confirmCardPayment(
+        payment.client_secret, { payment_method: paymentMethodId }, { handleActions: false },
+      );
+      if (first.error) throw new Error(first.error.message || 'Your wallet payment was declined.');
+      complete('success');
+      if (first.paymentIntent?.status === 'requires_action') {
+        const next = await stripe.confirmCardPayment(payment.client_secret);
+        if (next.error) throw new Error(next.error.message || 'Your bank did not approve the payment.');
+      }
+      setPhase('confirming');
+      await confirmOrder(order);
+      finishOrder(order);
     } catch (err) {
-      setErrorMsg(err.message);
+      failPayment(err);
       throw err;
-    } finally {
-      setLoading(false);
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (guestCheckoutBlocked) {
-      setErrorMsg('Guest checkout is currently disabled. Please sign in to continue.');
-      return;
-    }
+    if (loading) return;
     setErrorMsg('');
-    const { cleaned, error } = validateCheckout({ email, name, phone, address, city, state: stateVal, zip });
-    if (error) {
-      setErrorMsg(error);
-      return;
-    }
-    if (!selectedShippingRateId || calcShipping == null) {
-      setErrorMsg('Please select an available shipping method.');
+    let cleaned;
+    try {
+      cleaned = readyToOrder();
+    } catch (err) {
+      setErrorMsg(err.message);
       return;
     }
     setEmail(cleaned.email);
@@ -443,241 +470,28 @@ function CheckoutPageInner({ gateways, gatewayError, fetchGateways, stripeReady 
     setCity(cleaned.city);
     setStateVal(cleaned.state);
     setZip(cleaned.zip);
-    setLoading(true);
 
+    setPhase('creating');
+    let order;
     try {
-      let data;
-      if (paymentMethod === 'STRIPE' && stripeReady) {
-        const intent = await createPaymentIntent('STRIPE');
-        if (intent.client_secret) {
-          if (!confirmCardRef.current) throw new Error('Card form is still loading. Please try again.');
-          const paymentIntent = await confirmCardRef.current(intent.client_secret, {
-            name: cleaned.name, email: cleaned.email, phone: cleaned.phone,
-          });
-          data = await submitCheckout({ paymentMethodCode: 'STRIPE', paymentId: paymentIntent.id });
-        } else {
-          data = await submitCheckout();
-        }
-      } else if (paymentMethod === 'RAZORPAY') {
-        const intent = await createPaymentIntent('RAZORPAY');
-        if (intent.razorpay_order_id) {
-          const ready = await loadRazorpayScript();
-          if (!ready) throw new Error('Could not load Razorpay. Check your connection and try again.');
-          const response = await payWithRazorpay(intent);
-          data = await submitCheckout({
-            paymentMethodCode: 'RAZORPAY',
-            paymentId: response.razorpay_payment_id,
-            extra: {
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_signature: response.razorpay_signature,
-            },
-          });
-        } else {
-          data = await submitCheckout();
-        }
-      } else {
-        data = await submitCheckout();
-      }
-      setCompletedOrder(data.order);
-
-      trackEvent('Purchase', {
-        transaction_id: data.order.id,
-        value: parseFloat(data.order.total),
-        currency: data.order.currency_code
-      });
-
-      dispatch(clearCartLocal());
-      router.push(`/checkout/success?order_id=${data.order.id}&email=${encodeURIComponent(data.order.email || cleaned.email)}`);
+      order = await createOrder(cleaned, paymentMethod);
     } catch (err) {
+      setPhase(err.status === 410 ? 'expired' : 'idle');
       setErrorMsg(err.message);
-    } finally {
-      setLoading(false);
+      return;
+    }
+    // Cash on delivery is placed at once; a resumed order may already be paid.
+    if (order.payment_method === 'COD' || order.payment_status === 'PAID') {
+      finishOrder(order);
+      return;
+    }
+    try {
+      await payOnline(order, cleaned);
+      finishOrder(order);
+    } catch (err) {
+      failPayment(err);
     }
   };
-
-  if (completedOrder) {
-    const invoice = completedOrder.invoice;
-    const pdfUrl = invoice && invoice.pdf_url ? getApiUrl(invoice.pdf_url) : '#';
-    const invoiceNum = invoice ? invoice.invoice_number : `Order #${completedOrder.id}`;
-    const orderItems = Array.isArray(completedOrder.items) ? completedOrder.items : [];
-
-    const orderStages = [
-      { key: 'confirmed', label: 'Order Confirmed' },
-      { key: 'processing', label: 'Processing' },
-      { key: 'shipped', label: 'Shipped' },
-      { key: 'out_for_delivery', label: 'Out for Delivery' },
-      { key: 'delivered', label: 'Delivered' },
-    ];
-    const currentStatus = String(completedOrder.status || 'CONFIRMED').toUpperCase();
-    const activeStageIndex = ['DELIVERED', 'COMPLETED'].includes(currentStatus)
-      ? 4
-      : ['OUT_FOR_DELIVERY', 'OUT FOR DELIVERY'].includes(currentStatus)
-      ? 3
-      : currentStatus === 'SHIPPED'
-      ? 2
-      : currentStatus === 'PROCESSING'
-      ? 1
-      : 0;
-
-    return (
-      <div className="min-h-screen flex flex-col bg-brand-bg text-brand-text">
-        <header className="border-b border-edge bg-white/90 backdrop-blur-md py-4 shadow-sm">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-center sm:justify-start items-center">
-            <Link href="/" className="hover:opacity-90 transition">
-              <LogoLockup markClass="h-9 w-9" wordClass="h-5" />
-            </Link>
-          </div>
-        </header>
-
-        <main className="flex-1 max-w-2xl mx-auto px-4 py-12 sm:px-6 lg:px-8 flex flex-col items-center text-center">
-          <div className="h-16 w-16 bg-emerald-50 border border-emerald-200 rounded-full flex items-center justify-center mb-5 shadow-sm">
-            <CheckCircle className="h-10 w-10 text-emerald-600 animate-bounce" />
-          </div>
-
-          <div className="flex flex-wrap items-center justify-center gap-2 mb-3">
-            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-600"></span>
-              Payment Successful
-            </span>
-            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200">
-              Order Confirmed
-            </span>
-          </div>
-
-          <h1 className="font-display text-[26px] sm:text-[34px] font-extrabold text-ink-primary tracking-tight mb-3 leading-snug">
-            Thank you! We have successfully received your payment, and your order has been confirmed.
-          </h1>
-
-          <p className="text-xs sm:text-sm text-ink-secondary max-w-lg leading-[1.6] mb-8 bg-surface-muted/60 p-4 rounded-xl border border-edge">
-            Your order is being processed. A confirmation email has been sent to <span className="font-bold text-ink-primary">{completedOrder.email || email}</span> along with your official tax invoice.
-          </p>
-
-          {/* Visual Order Progress Tracker */}
-          <div className="w-full bg-white border border-edge rounded-2xl p-6 shadow-card mb-8 text-left">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-ink-muted mb-4">Order Progress Status</h3>
-            <div className="relative flex items-center justify-between">
-              <div className="absolute top-1/2 left-0 right-0 h-1 bg-edge -translate-y-1/2 z-0" />
-              <div
-                className="absolute top-1/2 left-0 h-1 bg-brand-accent -translate-y-1/2 z-0 transition-all duration-500"
-                style={{ width: `${(activeStageIndex / (orderStages.length - 1)) * 100}%` }}
-              />
-              {orderStages.map((stage, idx) => {
-                const isPassed = idx <= activeStageIndex;
-                const isCurrent = idx === activeStageIndex;
-                return (
-                  <div key={stage.key} className="relative z-10 flex flex-col items-center">
-                    <div
-                      className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 ${
-                        isPassed
-                          ? 'bg-ink-primary text-white ring-4 ring-ink-primary/10'
-                          : 'bg-white border-2 border-edge text-ink-muted'
-                      }`}
-                    >
-                      {isPassed ? '✓' : idx + 1}
-                    </div>
-                    <span
-                      className={`mt-2 text-[10px] font-semibold text-center hidden sm:block max-w-[70px] ${
-                        isCurrent ? 'text-ink-primary font-bold' : isPassed ? 'text-ink-secondary' : 'text-ink-muted'
-                      }`}
-                    >
-                      {stage.label}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="mt-4 flex items-center justify-between border-t border-edge-subtle pt-3 text-xs">
-              <span className="text-ink-secondary font-medium">Current Status: <span className="font-bold text-ink-accent uppercase">{completedOrder.status || 'CONFIRMED'}</span></span>
-              {completedOrder.shipping_estimated_days && (
-                <span className="text-ink-muted">Estimated Delivery: <span className="font-semibold text-ink-primary">{completedOrder.shipping_estimated_days}</span></span>
-              )}
-            </div>
-          </div>
-
-          <div className="w-full bg-white border border-edge rounded-2xl p-6 sm:p-8 text-left space-y-4 shadow-card mb-8">
-            <h3 className="font-display text-[18px] font-bold text-ink-primary border-b border-edge pb-2">Order Information</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-              <div className="space-y-1">
-                <span className="text-ink-muted block uppercase tracking-wider text-[10px] font-bold">Order ID</span>
-                <span className="font-semibold text-ink-primary text-sm">#{completedOrder.id}</span>
-              </div>
-              <div className="space-y-1">
-                <span className="text-ink-muted block uppercase tracking-wider text-[10px] font-bold">Invoice Number</span>
-                <span className="font-semibold text-ink-primary text-sm font-mono">{invoiceNum}</span>
-              </div>
-              <div className="space-y-1">
-                <span className="text-ink-muted block uppercase tracking-wider text-[10px] font-bold">Amount Paid</span>
-                <span className="font-semibold text-ink-primary text-sm font-display">{currencySymbol}{parseFloat(completedOrder.total).toFixed(2)}</span>
-              </div>
-              <div className="space-y-1">
-                <span className="text-ink-muted block uppercase tracking-wider text-[10px] font-bold">Region Store</span>
-                <span className="font-semibold text-ink-primary text-sm uppercase">{currentRegion} ({currencySymbol})</span>
-              </div>
-            </div>
-
-            {/* Items Summary if available */}
-            {orderItems.length > 0 && (
-              <div className="border-t border-edge pt-4 space-y-2">
-                <span className="text-ink-muted block uppercase tracking-wider text-[10px] font-bold">Ordered Items</span>
-                <ul className="divide-y divide-edge-subtle text-xs">
-                  {orderItems.map((it, idx) => (
-                    <li key={it.id || idx} className="py-1.5 flex justify-between items-center text-ink-primary">
-                      <span><span className="font-bold">{it.quantity}×</span> {it.product_name || it.name}</span>
-                      {it.price && <span className="font-semibold">{currencySymbol}{parseFloat(it.price).toFixed(2)}</span>}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {completedOrder.shipping_address_line1 && (
-              <div className="border-t border-edge pt-4 space-y-1.5 text-xs">
-                <span className="text-ink-muted block uppercase tracking-wider text-[10px] font-bold">Shipping Address</span>
-                <p className="text-ink-primary font-medium leading-[1.6]">
-                  {completedOrder.shipping_name}<br />
-                  {completedOrder.shipping_address_line1}, {completedOrder.shipping_city}<br />
-                  {completedOrder.shipping_state}, {completedOrder.shipping_postal_code}, {completedOrder.shipping_country}
-                </p>
-                {completedOrder.shipping_method && (
-                  <p className="text-ink-secondary">
-                    {completedOrder.shipping_method}{completedOrder.shipping_estimated_days ? ` · ${completedOrder.shipping_estimated_days}` : ''}
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-3 w-full justify-center">
-            <a
-              href={pdfUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="btn-primary py-3.5 px-6 text-sm shrink-0 flex items-center justify-center gap-2"
-            >
-              <Download className="h-4 w-4" />
-              Download {taxName} Invoice PDF
-            </a>
-            <Link
-              href="/"
-              className="btn-ghost py-3.5 px-6 text-sm shrink-0 border border-edge-strong bg-white text-ink-primary hover:border-ink-primary flex items-center justify-center transition-all duration-200"
-            >
-              Back to Storefront
-            </Link>
-          </div>
-        </main>
-
-        <footer className="border-t border-edge bg-surface-muted/50 py-8 text-center text-xs text-ink-muted mt-auto">
-          <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center gap-4">
-            <FooterCredit />
-            <div className="flex gap-4">
-              <Link href="/policies/privacy" className="hover:text-ink-primary transition">Privacy Policy</Link>
-              <Link href="/policies/terms" className="hover:text-ink-primary transition">Terms of Service</Link>
-            </div>
-          </div>
-        </footer>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen flex flex-col bg-brand-bg text-brand-text">
@@ -692,10 +506,10 @@ function CheckoutPageInner({ gateways, gatewayError, fetchGateways, stripeReady 
 
             <div>
               <h3 className="text-xl font-bold font-display text-ink-primary mb-1">
-                Verifying Payment & Finalizing Order
+                {(PHASE_COPY[phase] || PHASE_COPY.creating).title}
               </h3>
               <p className="text-xs text-ink-secondary leading-relaxed">
-                Please wait while we secure your transaction, deduct stock, and generate your order confirmation.
+                {(PHASE_COPY[phase] || PHASE_COPY.creating).body}
               </p>
             </div>
 
@@ -1066,7 +880,7 @@ function CheckoutPageInner({ gateways, gatewayError, fetchGateways, stripeReady 
                     amount={grandTotal}
                     currency={currencyCode}
                     label={`Sclero Proteins (${currencySymbol}${grandTotal.toFixed(2)})`}
-                    onSuccess={handleWalletSuccess}
+                    onSuccess={handleWalletPayment}
                     onError={(err) => setErrorMsg(err?.message || 'Wallet payment failed')}
                   />
                   <div className="relative flex py-4 items-center">
@@ -1139,7 +953,13 @@ function CheckoutPageInner({ gateways, gatewayError, fetchGateways, stripeReady 
                 disabled={loading || shippingLoading || !shippingAddressReady || !selectedShippingRateId || calcShipping == null || !paymentMethod || guestCheckoutBlocked || Boolean(shippingError)}
                 className="btn-primary w-full py-4 text-sm font-semibold rounded-xl shadow-lg disabled:opacity-60 transition"
               >
-                {loading ? 'Processing Order...' : `Pay & Finalize Order (${currencySymbol}${grandTotal.toFixed(2)})`}
+                {loading
+                  ? 'Processing…'
+                  : paymentMethod === 'COD'
+                  ? `Place Order (${currencySymbol}${grandTotal.toFixed(2)})`
+                  : phase === 'failed'
+                  ? `Try Payment Again (${currencySymbol}${grandTotal.toFixed(2)})`
+                  : `Pay & Finalize Order (${currencySymbol}${grandTotal.toFixed(2)})`}
               </button>
 
               <div className="flex justify-center items-center gap-1.5 text-xs text-ink-muted font-medium">
