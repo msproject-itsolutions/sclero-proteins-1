@@ -32,9 +32,6 @@ from apps.users.account_views import (
     EmailChangeConfirmView, EmailChangeRequestView, PasswordChangeView, VerifyEmailConfirmView,
     VerifyEmailRequestView,
 )
-from apps.users.totp import (
-    TOTPSetupView, TOTPVerifyView, TOTPDisableView, TOTPStatusView,
-)
 from apps.orders.views import (
     CartViewSet, CheckoutView, ApplyCouponView, CreatePaymentIntentView, RefundView, MyOrdersView,
     PublicOrderDetailView, OrderAdminViewSet, RefundAdminViewSet, InvoiceAdminViewSet, AbandonedCheckoutsView,
@@ -156,11 +153,6 @@ urlpatterns = [
     path('api/auth/otp/verify/', VerifyOTPView.as_view(), name='auth_otp_verify'),
     path('api/auth/magic-link/request/', MagicLinkRequestView.as_view(), name='auth_magic_request'),
     path('api/auth/magic-link/verify/', MagicLinkVerifyView.as_view(), name='auth_magic_verify'),
-    # TOTP (authenticator-app) 2FA
-    path('api/auth/2fa/setup/', TOTPSetupView.as_view(), name='auth_2fa_setup'),
-    path('api/auth/2fa/verify/', TOTPVerifyView.as_view(), name='auth_2fa_verify'),
-    path('api/auth/2fa/disable/', TOTPDisableView.as_view(), name='auth_2fa_disable'),
-    path('api/auth/2fa/status/', TOTPStatusView.as_view(), name='auth_2fa_status'),
     path('api/auth/google/', GoogleLoginView.as_view(), name='auth_google'),
     path('api/auth/password/reset/request/', PasswordResetRequestView.as_view(), name='auth_password_reset_request'),
     path('api/auth/password/reset/confirm/', PasswordResetConfirmView.as_view(), name='auth_password_reset_confirm'),

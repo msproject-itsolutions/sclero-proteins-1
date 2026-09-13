@@ -509,10 +509,6 @@ class AccountDeleteView(APIView):
             user.last_name = "User"
             user.phone_number = ""
             user.google_id = None
-            user.otp_secret = ""
-            user.totp_secret = ""
-            user.totp_backup_codes = []
-            user.totp_enabled = False
             user.password_reset_token = ""
             user.password_reset_token_expires = None
             user.allowed_ip_range = ""

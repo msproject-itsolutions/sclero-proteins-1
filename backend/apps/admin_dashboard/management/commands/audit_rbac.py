@@ -15,9 +15,9 @@ from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 
 from apps.users.permissions import ENFORCED_PERMISSION_KEYS, HasPermission
 
-SENSITIVE_PREFIXES = ('api/admin/', 'api/auth/2fa/', 'api/auth/me/')
+SENSITIVE_PREFIXES = ('api/admin/', 'api/auth/me/', 'api/auth/profile/', 'api/auth/password/change/')
 # Signed-in users acting on their own account; IsAuthenticated is the right gate.
-SELF_SERVICE_PREFIXES = ('api/auth/2fa/', 'api/auth/me/')
+SELF_SERVICE_PREFIXES = ('api/auth/me/', 'api/auth/profile/', 'api/auth/password/change/')
 # Storefront reads that live under /api/admin/ for historical reasons and
 # expose no staff data. Anything else public under /api/admin/ is a finding.
 PUBLIC_ADMIN_ACTIONS = {

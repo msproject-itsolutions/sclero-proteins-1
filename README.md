@@ -15,7 +15,7 @@ This repository is a production release candidate. Before public launch, complet
 - Stripe and Razorpay collection paths, PayPal webhook verification, and cash on delivery. See the gateway limitations below.
 - Durable incoming and outgoing webhooks with signatures, idempotency, retries, destination validation, and a dead-letter state.
 - Admin-managed homepage, banners, navigation, footer, branding, pages, blog, email templates, cookies, analytics, and SEO settings.
-- Staff roles, granular permissions, TOTP, IP restrictions, approval requests, and audit logs.
+- Staff roles, granular permissions, password plus emailed-code staff sign-in, IP restrictions, approval requests, and audit logs.
 - Durable transactional-email retries, scheduled inbox sync, abandoned-cart reminders, review requests, and webhook processing.
 - Checkout follow-up isolation: invoice rendering, email, and fraud-service failures cannot roll back a payment-confirmed order.
 - Browser push campaigns with subscription renewal, retry handling, and scheduler delivery.

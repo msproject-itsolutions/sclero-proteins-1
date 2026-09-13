@@ -51,9 +51,6 @@ class User(AbstractBaseUser, PermissionsMixin):
     phone_number = models.CharField(max_length=30, blank=True, null=True, db_index=True)
     loyalty_points = models.PositiveIntegerField(default=0)
     google_id = models.CharField(max_length=255, blank=True, null=True, unique=True, db_index=True)
-    # Stores purpose-prefixed, expiring password hashes for email OTP or a
-    # signed magic-link nonce. It never stores a live OTP in plaintext.
-    otp_secret = models.CharField(max_length=255, blank=True, null=True)
 
     # Single-identity, multi-region: "home region" is where the user lives / is
     # billed; they may still browse in a different "session region" (handled
@@ -74,17 +71,14 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_staff = models.BooleanField(default=False)
     roles = models.ManyToManyField(Role, blank=True, related_name="users")
     assigned_regions = models.ManyToManyField('regions.Region', blank=True, related_name="restricted_users")
+    # Customer opt-in: password sign-in also needs an emailed code. Staff
+    # accounts always need one, whatever this says.
     two_factor_enabled = models.BooleanField(default=False)
     # Bumped to end every session at once; JWTs carry it as the `av` claim.
     auth_version = models.PositiveIntegerField(default=0)
     email_verified = models.BooleanField(default=False)
     # Staff sign-in codes go here instead of `email`. Only administrators set it.
     verification_email = models.EmailField(blank=True, default='')
-    # TOTP (RFC 6238) — staff-grade authenticator-app 2FA. Separate from
-    # `two_factor_enabled` (legacy email-OTP gate).
-    totp_secret = models.CharField(max_length=64, blank=True, default='')
-    totp_enabled = models.BooleanField(default=False, db_index=True)
-    totp_backup_codes = models.JSONField(default=list, blank=True)
     allowed_ip_range = models.CharField(max_length=255, blank=True, default='')
     current_devices = models.JSONField(default=list, blank=True)
     # Password reset (request → email link → confirm) — token is a uuid4 hex.
@@ -129,7 +123,7 @@ class LoginChallenge(models.Model):
     user = models.ForeignKey(
         User, on_delete=models.CASCADE, null=True, blank=True, related_name='login_challenges',
     )
-    email = models.EmailField(db_index=True)
+    email = models.EmailField()
     purpose = models.CharField(max_length=20, choices=Purpose.choices)
     code_hash = models.CharField(max_length=128)
     sent_to = models.EmailField()

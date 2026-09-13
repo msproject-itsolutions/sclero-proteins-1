@@ -1108,7 +1108,6 @@ class ApprovalRequestViewSet(viewsets.ModelViewSet):
             user_to_delete.last_name = "User"
             user_to_delete.phone_number = None
             user_to_delete.google_id = None
-            user_to_delete.otp_secret = None
             user_to_delete.loyalty_points = 0
             user_to_delete.is_active = False
             user_to_delete.set_unusable_password()
