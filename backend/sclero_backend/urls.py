@@ -28,6 +28,9 @@ from apps.users.views import (
     TerminateDevicesView, DataExportView, AccountDeleteView,
     PasswordResetRequestView, PasswordResetConfirmView,
 )
+from apps.users.account_views import (
+    EmailChangeConfirmView, EmailChangeRequestView, VerifyEmailConfirmView, VerifyEmailRequestView,
+)
 from apps.users.totp import (
     TOTPSetupView, TOTPVerifyView, TOTPDisableView, TOTPStatusView,
 )
@@ -144,6 +147,10 @@ urlpatterns = [
     path('api/auth/me/export/', DataExportView.as_view(), name='auth_data_export'),
     path('api/auth/me/', AccountDeleteView.as_view(), name='auth_account_delete'),
     path('api/auth/profile/terminate-devices/', TerminateDevicesView.as_view(), name='auth_terminate_devices'),
+    path('api/auth/verify-email/', VerifyEmailRequestView.as_view(), name='auth_verify_email'),
+    path('api/auth/verify-email/confirm/', VerifyEmailConfirmView.as_view(), name='auth_verify_email_confirm'),
+    path('api/auth/email-change/', EmailChangeRequestView.as_view(), name='auth_email_change'),
+    path('api/auth/email-change/confirm/', EmailChangeConfirmView.as_view(), name='auth_email_change_confirm'),
     path('api/auth/otp/send/', SendOTPView.as_view(), name='auth_otp_send'),
     path('api/auth/otp/verify/', VerifyOTPView.as_view(), name='auth_otp_verify'),
     path('api/auth/magic-link/request/', MagicLinkRequestView.as_view(), name='auth_magic_request'),

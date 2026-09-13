@@ -62,3 +62,31 @@ def send_magic_link_email(to, link):
         'If you did not request it, ignore this email.',
         to,
     )
+
+
+def send_verify_email_link(to, link):
+    _send(
+        'Confirm your email address',
+        f'Confirm this email address for your Sclero Proteins account:\n\n{link}\n\n'
+        'The link expires in 24 hours.',
+        to,
+    )
+
+
+def send_email_change_link(to, link):
+    _send(
+        'Confirm your new email address',
+        f'Confirm that you want to use this address for your Sclero Proteins account:\n\n{link}\n\n'
+        'The link expires in 24 hours. If you did not ask for this, ignore this email.',
+        to,
+    )
+
+
+def send_email_change_notice(old_address, new_address):
+    _send(
+        'Your email address is being changed',
+        f'Someone asked to change the email address on your Sclero Proteins account to {new_address}. '
+        'The change only happens after the new address is confirmed.\n\n'
+        'If this was not you, change your password now and contact support.',
+        old_address,
+    )
