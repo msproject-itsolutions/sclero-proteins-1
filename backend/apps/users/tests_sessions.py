@@ -154,3 +154,18 @@ class LegacyTokenRefreshTests(SessionTestCase):
         self.client.cookies[settings.AUTH_COOKIE_REFRESH_NAME] = str(legacy)
         response = self.client.post('/api/auth/token/refresh/', {}, format='json', **BROWSER)
         self.assertEqual(response.status_code, 200)
+
+
+class AuthCookieBodyTests(SessionTestCase):
+    """AuthCookieMiddleware must redact the bytes actually sent, not just the
+    in-memory `response.data` DRF had already serialized before the
+    middleware ran."""
+
+    def test_password_login_body_carries_no_tokens(self):
+        response = self.cookie_login()
+        body = response.json()
+        self.assertNotIn('access', body)
+        self.assertNotIn('refresh', body)
+        self.assertTrue(body['authenticated'])
+        self.assertIn('sclero_access', response.cookies)
+        self.assertIn('sclero_refresh', response.cookies)

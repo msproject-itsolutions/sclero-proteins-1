@@ -21,6 +21,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from apps.audit.context import client_ip_from_request
 from apps.audit.recorder import record_audit
 
+from .models import LoginChallenge
 from .permissions import ip_allowed
 
 AUTH_VERSION_CLAIM = 'av'
@@ -74,10 +75,22 @@ def start_session(request, user, *, method):
 
 
 def revoke_sessions(user, *, reason, actor=None):
-    """End every session of `user`: bump auth_version and blacklist refresh tokens."""
+    """End every session of `user`: bump auth_version, blacklist refresh
+    tokens, and kill anything else that could otherwise sign them back in —
+    a pending password-reset link and any open sign-in challenge (2FA code
+    or passwordless code/link)."""
     with transaction.atomic():
-        get_user_model().objects.filter(pk=user.pk).update(auth_version=F('auth_version') + 1)
-        user.refresh_from_db(fields=['auth_version'])
+        get_user_model().objects.filter(pk=user.pk).update(
+            auth_version=F('auth_version') + 1,
+            password_reset_token='',
+            password_reset_token_expires=None,
+        )
+        # Refreshed here so a later full save() of this in-memory instance
+        # can't write the old reset token (or auth_version) back over the row.
+        user.refresh_from_db(fields=['auth_version', 'password_reset_token', 'password_reset_token_expires'])
+        # Consumed rows are left alone: some callers still hold the consumed
+        # challenge object after using it to complete a sign-in.
+        LoginChallenge.objects.filter(user=user, consumed_at__isnull=True).delete()
         outstanding = OutstandingToken.objects.filter(
             user_id=user.pk, expires_at__gt=timezone.now(), blacklistedtoken__isnull=True,
         )

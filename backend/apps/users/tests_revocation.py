@@ -1,4 +1,5 @@
 import hashlib
+import re
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
@@ -17,6 +18,7 @@ User = get_user_model()
 PASSWORD = 'Str0ng-pass-123'
 NEW_PASSWORD = 'N3w-strong-pass!'
 BROWSER = {'HTTP_X_SCLERO_CLIENT': 'storefront'}
+CODE_RE = re.compile(r'\b(\d{6})\b')
 
 
 def bearer_client(access):
@@ -27,6 +29,10 @@ def bearer_client(access):
 
 def refresh_status(refresh):
     return APIClient().post('/api/auth/token/refresh/', {'refresh': refresh}, format='json').status_code
+
+
+def last_code():
+    return CODE_RE.search(mail.outbox[-1].body).group(1)
 
 
 class RevocationTestCase(APITestCase):
@@ -59,7 +65,9 @@ class PasswordChangeTests(RevocationTestCase):
         }, format='json', **BROWSER)
         self.assertEqual(response.status_code, 200)
         self.assertIn('sclero_access', response.cookies)
-        self.assertNotIn('access', response.data)
+        body = response.json()
+        self.assertNotIn('access', body)
+        self.assertNotIn('refresh', body)
         self.assertEqual(self.client.get('/api/auth/profile/').status_code, 200)
         with self.assertLogs('django.request', 'WARNING'):
             self.assertEqual(bearer_client(other_device['access']).get('/api/auth/profile/').status_code, 401)
@@ -75,6 +83,22 @@ class PasswordChangeTests(RevocationTestCase):
         self.assertEqual(response.status_code, 200)
         passwordless.refresh_from_db()
         self.assertTrue(passwordless.check_password(NEW_PASSWORD))
+
+    def test_change_invalidates_a_pending_reset_link(self):
+        self.cookie_login()
+        raw = 'reset-token-value'
+        self.user.password_reset_token = hashlib.sha256(raw.encode()).hexdigest()
+        self.user.password_reset_token_expires = timezone.now() + timedelta(hours=1)
+        self.user.save(update_fields=['password_reset_token', 'password_reset_token_expires'])
+        response = self.client.post('/api/auth/password/change/', {
+            'current_password': PASSWORD, 'new_password': NEW_PASSWORD,
+        }, format='json', **BROWSER)
+        self.assertEqual(response.status_code, 200)
+        with self.assertLogs('django.request', 'WARNING'):
+            confirm = APIClient().post('/api/auth/password/reset/confirm/', {
+                'token': raw, 'new_password': 'Another-strong-1!',
+            }, format='json')
+        self.assertEqual(confirm.status_code, 400)
 
 
 class PasswordResetTests(RevocationTestCase):
@@ -114,6 +138,38 @@ class SignOutEverywhereTests(RevocationTestCase):
             self.assertEqual(bearer_client(other_device['access']).get('/api/auth/profile/').status_code, 401)
         with self.assertLogs('django.request', 'WARNING'):
             self.assertEqual(refresh_status(other_device['refresh']), 401)
+
+    def test_terminate_devices_invalidates_a_pending_reset_link(self):
+        self.cookie_login()
+        raw = 'reset-token-value'
+        self.user.password_reset_token = hashlib.sha256(raw.encode()).hexdigest()
+        self.user.password_reset_token_expires = timezone.now() + timedelta(hours=1)
+        self.user.save(update_fields=['password_reset_token', 'password_reset_token_expires'])
+        response = self.client.post('/api/auth/profile/terminate-devices/', {}, format='json', **BROWSER)
+        self.assertEqual(response.status_code, 200)
+        with self.assertLogs('django.request', 'WARNING'):
+            confirm = APIClient().post('/api/auth/password/reset/confirm/', {
+                'token': raw, 'new_password': 'Another-strong-1!',
+            }, format='json')
+        self.assertEqual(confirm.status_code, 400)
+
+    def test_open_second_factor_challenge_cannot_complete_afterwards(self):
+        self.user.two_factor_enabled = True
+        self.user.save(update_fields=['two_factor_enabled'])
+        login = self.client.post(
+            '/api/auth/login/', {'email': self.user.email, 'password': PASSWORD}, format='json', **BROWSER,
+        )
+        self.assertTrue(login.data['challenge_required'])
+        challenge_id = login.data['challenge_id']
+        code = last_code()
+
+        bearer_client(issue_tokens(self.user)['access']).post('/api/auth/profile/terminate-devices/', {}, format='json')
+
+        with self.assertLogs('django.request', 'WARNING'):
+            verify = self.client.post(
+                '/api/auth/login/verify/', {'challenge_id': challenge_id, 'code': code}, format='json', **BROWSER,
+            )
+        self.assertEqual(verify.status_code, 400)
 
 
 class DeactivationTests(RevocationTestCase):

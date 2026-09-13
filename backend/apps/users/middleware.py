@@ -47,6 +47,19 @@ class AuthCookieMiddleware:
         if container is not data and not container:
             data.pop('tokens', None)
         data['authenticated'] = True
+
+        # DRF already rendered this response to bytes inside the view dispatch,
+        # before it reached this middleware (Django defers TemplateResponse
+        # rendering, but only until just after the view returns — well before
+        # outer middleware like this one runs). Mutating .data above changed
+        # the Python object but not the bytes already queued for the client,
+        # so the redacted tokens would otherwise still go out on the wire.
+        # Force a re-render so the body matches the redacted data.
+        if hasattr(response, 'accepted_renderer') and hasattr(response, 'render'):
+            response._is_rendered = False
+            response.render()
+            if response.has_header('Content-Length'):
+                response['Content-Length'] = str(len(response.content))
         return response
 
     @staticmethod
