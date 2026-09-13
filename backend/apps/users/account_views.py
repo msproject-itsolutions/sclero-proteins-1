@@ -1,8 +1,9 @@
-"""Self-service account security: email verification and email change."""
+"""Self-service account security: email verification, email change, password change."""
 import logging
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import validate_email
 from django.db import IntegrityError, transaction
@@ -18,7 +19,7 @@ from .email_tokens import (
     EmailLinkError, make_email_change_token, make_verify_email_token, read_email_change_token,
     read_verify_email_token,
 )
-from .sessions import revoke_sessions
+from .sessions import issue_tokens, record_device, revoke_sessions
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
@@ -184,3 +185,32 @@ class EmailChangeConfirmView(APIView):
             changes={'email': [old_email, user.email]},
         )
         return Response({'message': 'Your email address has been changed. Please sign in again.', 'email': user.email})
+
+
+class PasswordChangeView(APIView):
+    """Change the password, or set one on an account created without it.
+
+    Ends every other session; the caller receives a fresh one.
+    """
+    permission_classes = [IsAuthenticated]
+    throttle_scope = 'auth'
+
+    def post(self, request):
+        user = request.user
+        current = str(request.data.get('current_password') or '')
+        new_password = str(request.data.get('new_password') or '')
+        if user.has_usable_password() and not user.check_password(current):
+            return Response(
+                {'current_password': ['Your current password is not correct.']},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            validate_password(new_password, user)
+        except DjangoValidationError as exc:
+            return Response({'new_password': list(exc.messages)}, status=status.HTTP_400_BAD_REQUEST)
+        user.set_password(new_password)
+        user.save(update_fields=['password'])
+        revoke_sessions(user, reason='password_changed', actor=user)
+        record_device(request, user, only_current=True)
+        tokens = issue_tokens(user)
+        return Response({'message': 'Password updated. You have been signed out on other devices.', **tokens})

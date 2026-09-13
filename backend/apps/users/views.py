@@ -38,7 +38,10 @@ from .challenges import (
     challenge_response_data, enforce_passwordless_limit, issue_code_challenge, issue_magic_link, mask_email,
     requires_second_factor, resend_code, verify_code, verify_magic_token,
 )
-from .sessions import SESSION_ENDED_MESSAGE, VersionedTokenRefreshSerializer, revoke_sessions, start_session
+from .sessions import (
+    SESSION_ENDED_MESSAGE, VersionedTokenRefreshSerializer, issue_tokens, record_device, revoke_sessions,
+    start_session,
+)
 from apps.audit.context import client_ip_from_request
 from apps.audit.recorder import record_audit
 from apps.orders.models import Order
@@ -523,12 +526,8 @@ class AccountDeleteView(APIView):
             user.roles.clear()
             user.assigned_regions.clear()
 
-            from rest_framework_simplejwt.token_blacklist.models import (
-                BlacklistedToken,
-                OutstandingToken,
-            )
-            for token in OutstandingToken.objects.filter(user=user):
-                BlacklistedToken.objects.get_or_create(token=token)
+            LoginChallenge.objects.filter(Q(user=user) | Q(email__iexact=original_email)).delete()
+            revoke_sessions(user, reason='account_deleted', actor=user)
 
             record_audit(
                 'account.deleted',
@@ -1081,26 +1080,18 @@ class SupportTicketViewSet(viewsets.ModelViewSet):
 
 
 class TerminateDevicesView(APIView):
+    """Sign out every other device: revoke all tokens, then re-issue this one."""
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         user = request.user
-        current_session_id = request.data.get('session_id')
-        
-        devices = user.current_devices or []
-        if current_session_id:
-            user.current_devices = [d for d in devices if d.get('id') == current_session_id]
-        else:
-            user.current_devices = []
-            
-        user.save(update_fields=['current_devices'])
-        
-        from apps.audit.recorder import record_audit
-        record_audit('security.session_terminated', actor=user, summary=f'Terminated other active login sessions for {user.email}')
-        
+        revoke_sessions(user, reason='sign_out_everywhere', actor=user)
+        record_device(request, user, only_current=True)
+        tokens = issue_tokens(user)
         return Response({
-            "message": "Other active sessions terminated successfully.",
-            "current_devices": user.current_devices
+            'message': 'Signed out of all other devices.',
+            'current_devices': user.current_devices,
+            **tokens,
         })
 
 
@@ -1118,7 +1109,6 @@ class PasswordResetRequestView(APIView):
     def post(self, request):
         from datetime import timedelta
         from django.utils import timezone as dj_tz
-        from django.conf import settings
 
         email = (request.data.get('email') or '').strip().lower()
         if not email:
@@ -1133,8 +1123,7 @@ class PasswordResetRequestView(APIView):
 
             try:
                 from apps.orders.email_service import send_templated_email
-                site_url = (getattr(settings, 'SITE_URL', '') or '').rstrip('/')
-                reset_url = f"{site_url}/account/reset?token={token}"
+                reset_url = f"{public_link_base(request)}/account/reset?token={token}"
                 sent = send_templated_email(
                     'password_reset', None, user.email,
                     {
@@ -1196,6 +1185,7 @@ class PasswordResetConfirmView(APIView):
         user.password_reset_token_expires = None
         user.save(update_fields=['password', 'password_reset_token',
                                   'password_reset_token_expires'])
+        revoke_sessions(user, reason='password_reset', actor=user)
 
         try:
             from apps.audit.recorder import record_audit

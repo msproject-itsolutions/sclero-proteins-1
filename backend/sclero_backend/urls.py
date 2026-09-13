@@ -29,7 +29,8 @@ from apps.users.views import (
     PasswordResetRequestView, PasswordResetConfirmView,
 )
 from apps.users.account_views import (
-    EmailChangeConfirmView, EmailChangeRequestView, VerifyEmailConfirmView, VerifyEmailRequestView,
+    EmailChangeConfirmView, EmailChangeRequestView, PasswordChangeView, VerifyEmailConfirmView,
+    VerifyEmailRequestView,
 )
 from apps.users.totp import (
     TOTPSetupView, TOTPVerifyView, TOTPDisableView, TOTPStatusView,
@@ -163,7 +164,8 @@ urlpatterns = [
     path('api/auth/google/', GoogleLoginView.as_view(), name='auth_google'),
     path('api/auth/password/reset/request/', PasswordResetRequestView.as_view(), name='auth_password_reset_request'),
     path('api/auth/password/reset/confirm/', PasswordResetConfirmView.as_view(), name='auth_password_reset_confirm'),
-    
+    path('api/auth/password/change/', PasswordChangeView.as_view(), name='auth_password_change'),
+
     # Cart & Checkout
     path('api/cart/', CartViewSet.as_view({'get': 'retrieve'}), name='cart_retrieve'),
     path('api/cart/add/', CartViewSet.as_view({'post': 'add_item'}), name='cart_add'),

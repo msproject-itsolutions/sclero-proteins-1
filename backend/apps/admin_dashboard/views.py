@@ -13,6 +13,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 from apps.users.permissions import require_permission
+from apps.users.sessions import revoke_sessions
 from apps.regions.models import Region
 from apps.common.csv_safety import safe_writer
 from .models import FeatureToggle, SystemSetting, HeroBannerSlide, PaymentGateway, EmailTemplate, MarketingIntegration, ContentPage, BlogPost, ApprovalRequest, InstagramReelsConnection
@@ -1112,7 +1113,8 @@ class ApprovalRequestViewSet(viewsets.ModelViewSet):
             user_to_delete.is_active = False
             user_to_delete.set_unusable_password()
             user_to_delete.save()
-            
+            revoke_sessions(user_to_delete, reason='erasure_approved', actor=request.user)
+
             # Delete user addresses
             user_to_delete.addresses.all().delete()
             
