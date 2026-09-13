@@ -1,9 +1,11 @@
 from django.contrib.auth import get_user_model
+from django.test import TestCase
 from rest_framework.test import APITestCase
 
 from apps.audit.models import AuditLog
 from apps.regions.models import Region
 from apps.users.models import Role
+from apps.users.serializers import RoleSerializer
 from apps.users.sessions import issue_tokens
 
 User = get_user_model()
@@ -125,6 +127,36 @@ class StaffEditorTests(EditorTestCase):
             response = self.client.delete(f'{STAFF_URL}{self.manager.pk}/')
         self.assertEqual(response.status_code, 400)
 
+    def test_actor_cannot_change_their_own_email(self):
+        with self.assertLogs('django.request', 'WARNING'):
+            response = self.patch(self.manager, self.manager, {'email': 'attacker@example.com'})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('email', response.json())
+        self.manager.refresh_from_db()
+        self.assertEqual(self.manager.email, 'manager@example.com')
+
+    def test_resending_own_email_in_a_different_case_is_allowed(self):
+        self.manager.email = 'Manager@Example.com'
+        self.manager.save()
+        response = self.patch(self.manager, self.manager, {'email': 'MANAGER@EXAMPLE.COM'})
+        self.assertEqual(response.status_code, 200, response.data)
+
+    def test_actor_cannot_change_their_own_password(self):
+        with self.assertLogs('django.request', 'WARNING'):
+            response = self.patch(self.manager, self.manager, {'password': 'Brand-new-pass-99'})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('password', response.json())
+        self.assertTrue(self.manager.check_password(PASSWORD))
+
+    def test_another_admin_can_still_change_email_and_password(self):
+        response = self.patch(self.manager, self.member, {
+            'email': 'member-new@example.com', 'password': 'Brand-new-pass-77',
+        })
+        self.assertEqual(response.status_code, 200, response.data)
+        self.member.refresh_from_db()
+        self.assertEqual(self.member.email, 'member-new@example.com')
+        self.assertTrue(self.member.check_password('Brand-new-pass-77'))
+
 
 class RoleEditorTests(EditorTestCase):
     def test_permission_change_is_audited_and_ends_holder_sessions(self):
@@ -157,3 +189,12 @@ class RoleEditorTests(EditorTestCase):
         self.assertEqual(response.status_code, 400)
         self.client.force_authenticate(self.owner)
         self.assertEqual(self.client.post(ROLES_URL, payload, format='json').status_code, 201)
+
+
+class RoleSerializerGuardTests(TestCase):
+    def test_validate_permissions_fails_closed_without_a_request(self):
+        """A serializer built with no request context (no authenticated actor)
+        must not fail open and let rbac.manage through unchecked."""
+        serializer = RoleSerializer(data={'name': 'No context', 'permissions': ['rbac.manage']})
+        self.assertFalse(serializer.is_valid())
+        self.assertIn('permissions', serializer.errors)

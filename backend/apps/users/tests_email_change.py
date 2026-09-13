@@ -92,6 +92,17 @@ class EmailChangeTests(APITestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn('new_email', response.data)
 
+    def test_staff_email_change_is_locked_to_the_console(self):
+        staff = User.objects.create_user(email='staffer@example.com', password=PASSWORD, is_staff=True)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {issue_tokens(staff)["access"]}')
+        with self.assertLogs('django.request', 'WARNING'):
+            response = self.client.post(
+                '/api/auth/email-change/', {'new_email': 'attacker@example.com', 'password': PASSWORD}, format='json',
+            )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json().get('code'), 'staff_email_locked')
+        self.assertEqual(len(mail.outbox), 0)
+
     def test_passwordless_account_needs_no_password(self):
         passwordless = User.objects.create_user(email='codeonly@example.com', password=None)
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {issue_tokens(passwordless)["access"]}')

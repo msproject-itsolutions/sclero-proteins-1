@@ -161,10 +161,10 @@ class RoleSerializer(serializers.ModelSerializer):
         if invalid:
             raise serializers.ValidationError(f"Unknown permission keys: {invalid}")
         actor = _request_user(self)
-        if actor is not None and not actor.is_superuser:
+        if actor is None or not actor.is_superuser:
             current = set(self.instance.permissions or []) if self.instance is not None else set()
             if set(value) != current:
-                if self.instance is not None and actor.roles.filter(pk=self.instance.pk).exists():
+                if actor is not None and self.instance is not None and actor.roles.filter(pk=self.instance.pk).exists():
                     raise serializers.ValidationError('You cannot change the permissions of a role you hold.')
                 if 'rbac.manage' in value or 'rbac.manage' in current:
                     raise serializers.ValidationError('Only a superuser can change roles that manage staff access.')
@@ -173,6 +173,7 @@ class RoleSerializer(serializers.ModelSerializer):
 
 # Fields an administrator can never change on their own account.
 SELF_LOCKED_FIELDS = {
+    'email': 'email address',
     'roles': 'roles',
     'assigned_regions': 'regions',
     'verification_email': 'sign-in code email',
@@ -185,12 +186,16 @@ SESSION_ENDING_FIELDS = {'email', 'is_staff', 'roles', 'assigned_regions', 'veri
 def _current_value(user, field):
     if field in ('roles', 'assigned_regions'):
         return sorted(getattr(user, field).values_list('pk', flat=True))
+    if field == 'email':
+        return user.email.lower()
     return getattr(user, field)
 
 
 def _proposed_value(field, value):
     if field in ('roles', 'assigned_regions'):
         return sorted(item.pk for item in value)
+    if field == 'email':
+        return value.lower()
     return value
 
 
@@ -250,6 +255,8 @@ class StaffUserSerializer(serializers.ModelSerializer):
             for field, label in SELF_LOCKED_FIELDS.items():
                 if field in attrs and _proposed_value(field, attrs[field]) != _current_value(target, field):
                     errors[field] = f'You cannot change your own {label}.'
+            if attrs.get('password'):
+                errors['password'] = "Change your own password from your account's security settings."
         if 'roles' in attrs and not getattr(actor, 'is_superuser', False):
             held = set(target.roles.values_list('pk', flat=True)) if target is not None else set()
             if any(role_grants_admin(role) for role in attrs['roles'] if role.pk not in held):

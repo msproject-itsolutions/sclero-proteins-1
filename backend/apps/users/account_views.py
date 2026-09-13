@@ -19,6 +19,7 @@ from .email_tokens import (
     EmailLinkError, make_email_change_token, make_verify_email_token, read_email_change_token,
     read_verify_email_token,
 )
+from .permissions import is_staff_account
 from .sessions import issue_tokens, record_device, revoke_sessions
 
 User = get_user_model()
@@ -97,6 +98,14 @@ class EmailChangeRequestView(APIView):
 
     def post(self, request):
         user = request.user
+        if is_staff_account(user):
+            return Response(
+                {
+                    'detail': 'Staff email addresses are changed by an administrator in the staff console.',
+                    'code': 'staff_email_locked',
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
         new_email = str(request.data.get('new_email') or '').strip().lower()
         try:
             validate_email(new_email)
