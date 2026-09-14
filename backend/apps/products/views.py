@@ -334,6 +334,35 @@ class ProductReviewAdminViewSet(viewsets.ModelViewSet):
         return Response(self.get_serializer(review).data)
 
 
+class PublicFeaturedReviewsView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        reviews = ProductReview.objects.filter(is_approved=True).order_by('-is_featured', '-created_at')[:20]
+        ser = ProductReviewSerializer(reviews, many=True)
+        from django.db.models import Avg, Count
+        stats = ProductReview.objects.filter(is_approved=True).aggregate(
+            avg_rating=Avg('rating'),
+            total_count=Count('id'),
+        )
+        return Response({
+            'results': ser.data,
+            'average_rating': round(float(stats['avg_rating'] or 4.9), 1),
+            'total_reviews': stats['total_count'] or len(ser.data),
+        })
+
+    def post(self, request):
+        serializer = ProductReviewSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(is_approved=False, is_verified_purchase=False)
+            return Response({
+                "message": "Review submitted successfully! It will be visible once approved by an administrator.",
+                "review": serializer.data
+            }, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+
 # --- Admin ViewSets for Regional CRUD Operations --- #
 
 class AdminDashboardPagination(PageNumberPagination):

@@ -8,7 +8,8 @@ import {
   Heart, ArrowLeft, ArrowRight, ShieldCheck, Info,
   ShoppingCart, Plus, Minus,
   Sparkles, HeartHandshake, Leaf, Check, FlaskConical, BadgeCheck,
-  Rabbit, CandyOff, WheatOff
+  Rabbit, CandyOff, WheatOff,
+  ChevronLeft, ChevronRight, Maximize2, X, RotateCcw, ZoomIn, ZoomOut
 } from 'lucide-react';
 import StoreShell from '../../../components/StoreShell';
 import ProductCard from '../../../components/ProductCard';
@@ -70,6 +71,8 @@ export default function ProductDetailClient({ sku }) {
   const [wishlistLoading, setWishlistLoading] = useState(false);
   const [cartOpenTrigger, setCartOpenTrigger] = useState(null);
   const [checkoutOpenTrigger, setCheckoutOpenTrigger] = useState(null);
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  const [lightboxZoom, setLightboxZoom] = useState(1);
 
   // Recommended products state
   const [relatedProducts, setRelatedProducts] = useState([]);
@@ -245,8 +248,36 @@ export default function ProductDetailClient({ sku }) {
     }
   }, [product]);
 
-  const images = (product?.media || []).filter((m) => m.media_type === 'IMAGE');
+  const rawImages = (product?.media || []).filter((m) => m.media_type === 'IMAGE');
+  const images = rawImages.length > 0
+    ? rawImages
+    : product?.thumbnail
+    ? [{ id: 'thumb', file_url: product.thumbnail }]
+    : [];
   const videos = (product?.media || []).filter((m) => m.media_type === 'VIDEO');
+
+  const handlePrevImage = (e) => {
+    e?.stopPropagation?.();
+    if (images.length <= 1) return;
+    setActiveImage((prev) => (prev === 0 ? images.length - 1 : prev - 1));
+  };
+
+  const handleNextImage = (e) => {
+    e?.stopPropagation?.();
+    if (images.length <= 1) return;
+    setActiveImage((prev) => (prev === images.length - 1 ? 0 : prev + 1));
+  };
+
+  useEffect(() => {
+    if (!isLightboxOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') setIsLightboxOpen(false);
+      if (e.key === 'ArrowLeft') handlePrevImage();
+      if (e.key === 'ArrowRight') handleNextImage();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isLightboxOpen, images.length]);
 
   const displayPrice = selectedVariant
     ? selectedVariant.price ?? product?.price
@@ -391,20 +422,63 @@ export default function ProductDetailClient({ sku }) {
               
               {/* Product Gallery & Videos Column */}
               <div className="lg:col-span-6 space-y-4">
-                <div className="relative flex aspect-square items-center justify-center overflow-hidden rounded-lg border border-edge bg-surface-muted">
+                <div className="relative group/gallery flex aspect-square items-center justify-center overflow-hidden rounded-2xl border border-edge bg-surface-muted">
                   {images.length > 0 ? (
                     <img
                       src={images[activeImage]?.file_url}
                       alt={product.name}
-                      className="h-full w-full object-cover"
+                      onClick={() => {
+                        setIsLightboxOpen(true);
+                        setLightboxZoom(1);
+                      }}
+                      className="h-full w-full object-contain p-4 transition-transform duration-300 hover:scale-[1.03] cursor-zoom-in"
                     />
                   ) : (
                     <Info className="h-12 w-12 text-ink-subtle" />
                   )}
                   {discount > 0 && (
-                    <span className="absolute left-4 top-4 rounded-xs bg-surface-inverse px-3 py-1 text-xs font-medium uppercase tracking-wider text-white">
+                    <span className="absolute left-4 top-4 rounded-full bg-brand-gradient px-3 py-1 text-xs font-semibold uppercase tracking-wider text-white shadow-xs z-10">
                       Save {discount}%
                     </span>
+                  )}
+
+                  {images.length > 1 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handlePrevImage}
+                        aria-label="Previous image"
+                        className="absolute left-3 top-1/2 -translate-y-1/2 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/90 shadow-md text-ink-primary hover:bg-white hover:scale-105 active:scale-95 transition-all cursor-pointer border border-edge"
+                      >
+                        <ChevronLeft className="h-5 w-5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleNextImage}
+                        aria-label="Next image"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/90 shadow-md text-ink-primary hover:bg-white hover:scale-105 active:scale-95 transition-all cursor-pointer border border-edge"
+                      >
+                        <ChevronRight className="h-5 w-5" />
+                      </button>
+                      <span className="absolute bottom-4 left-4 z-10 rounded-full bg-black/60 backdrop-blur-sm px-2.5 py-1 text-[11px] font-semibold text-white">
+                        {activeImage + 1} / {images.length}
+                      </span>
+                    </>
+                  )}
+
+                  {images.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsLightboxOpen(true);
+                        setLightboxZoom(1);
+                      }}
+                      aria-label="Enlarge image"
+                      className="absolute bottom-4 right-4 z-10 flex items-center gap-1.5 rounded-full bg-white/90 backdrop-blur-sm px-3 py-1.5 text-xs font-semibold text-ink-primary shadow-xs hover:bg-white hover:shadow-card transition-all cursor-pointer border border-edge"
+                    >
+                      <Maximize2 className="h-3.5 w-3.5" />
+                      <span>Click to enlarge</span>
+                    </button>
                   )}
                 </div>
                 
@@ -900,6 +974,109 @@ export default function ProductDetailClient({ sku }) {
             </div>
           </section>
         </>
+      )}
+
+      {/* Click-to-Enlarge Lightbox Modal with Zoom */}
+      {isLightboxOpen && images.length > 0 && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Enlarged product image"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/92 backdrop-blur-md animate-fade-in select-none"
+          onClick={() => setIsLightboxOpen(false)}
+        >
+          {/* Top Control Bar */}
+          <div
+            className="absolute top-0 inset-x-0 z-20 flex items-center justify-between p-4 sm:px-6 bg-gradient-to-b from-black/80 to-transparent"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-sm font-semibold text-white/90">
+              {product?.name} &bull; <span className="text-white/60">{activeImage + 1} of {images.length}</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setLightboxZoom((z) => Math.max(0.5, Math.round((z - 0.25) * 100) / 100))}
+                title="Zoom out"
+                aria-label="Zoom out"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+              >
+                <ZoomOut className="h-4 w-4" />
+              </button>
+              <span className="text-xs font-semibold text-white/80 min-w-[3rem] text-center">
+                {Math.round(lightboxZoom * 100)}%
+              </span>
+              <button
+                type="button"
+                onClick={() => setLightboxZoom((z) => Math.min(3, Math.round((z + 0.25) * 100) / 100))}
+                title="Zoom in"
+                aria-label="Zoom in"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+              >
+                <ZoomIn className="h-4 w-4" />
+              </button>
+              {lightboxZoom !== 1 && (
+                <button
+                  type="button"
+                  onClick={() => setLightboxZoom(1)}
+                  title="Reset zoom"
+                  aria-label="Reset zoom"
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setIsLightboxOpen(false)}
+                title="Close (Esc)"
+                aria-label="Close"
+                className="ml-2 flex h-9 w-9 items-center justify-center rounded-full bg-white/20 hover:bg-white/30 text-white transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Navigation buttons inside Lightbox */}
+          {images.length > 1 && (
+            <>
+              <button
+                type="button"
+                onClick={handlePrevImage}
+                aria-label="Previous image"
+                className="absolute left-4 top-1/2 -translate-y-1/2 z-20 flex h-12 w-12 items-center justify-center rounded-full bg-white/15 hover:bg-white/25 text-white transition-all cursor-pointer backdrop-blur-sm"
+              >
+                <ChevronLeft className="h-6 w-6" />
+              </button>
+              <button
+                type="button"
+                onClick={handleNextImage}
+                aria-label="Next image"
+                className="absolute right-4 top-1/2 -translate-y-1/2 z-20 flex h-12 w-12 items-center justify-center rounded-full bg-white/15 hover:bg-white/25 text-white transition-all cursor-pointer backdrop-blur-sm"
+              >
+                <ChevronRight className="h-6 w-6" />
+              </button>
+            </>
+          )}
+
+          {/* Centered Image with Zoom */}
+          <div
+            className="relative flex items-center justify-center max-w-[90vw] max-h-[85vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={images[activeImage]?.file_url}
+              alt={product?.name}
+              style={{
+                transform: `scale(${lightboxZoom})`,
+                transition: 'transform 0.2s ease-out',
+              }}
+              className="max-h-[80vh] max-w-[85vw] object-contain rounded-lg shadow-2xl"
+            />
+          </div>
+        </div>
       )}
     </StoreShell>
   );

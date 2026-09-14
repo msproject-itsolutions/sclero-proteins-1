@@ -9,7 +9,11 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 
 from apps.users.permissions import require_permission
 from .models import BulkEnquiry, NewsletterSubscriber
-from .serializers import BulkEnquirySerializer, BulkEnquiryAdminSerializer
+from .serializers import (
+    BulkEnquirySerializer,
+    BulkEnquiryAdminSerializer,
+    NewsletterSubscriberSerializer,
+)
 from .tokens import email_from_unsubscribe_token
 
 
@@ -107,21 +111,37 @@ class NewsletterSubscribeView(views.APIView):
             validate_email(email)
         except DjangoValidationError:
             return Response({'error': 'A valid email is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        phone = (request.data.get('phone_number') or request.data.get('mobile') or request.data.get('phone') or '').strip()
+        if phone:
+            digits = ''.join(c for c in phone if c.isdigit())
+            if not 7 <= len(digits) <= 16:
+                return Response({'error': 'Please enter a valid mobile/phone number.'}, status=status.HTTP_400_BAD_REQUEST)
+
         region = (request.data.get('region') or '').upper()
         source = (request.data.get('source') or 'footer').strip()[:40] or 'footer'
         sub, created = NewsletterSubscriber.objects.get_or_create(
             email=email,
-            defaults={'region_code': region, 'source': source, 'is_active': True},
+            defaults={'region_code': region, 'phone_number': phone, 'source': source, 'is_active': True},
         )
+        updated_fields = []
         if not created and not sub.is_active:
             sub.is_active = True
             sub.unsubscribed_at = None
-            sub.save(update_fields=['is_active', 'unsubscribed_at'])
+            updated_fields.extend(['is_active', 'unsubscribed_at'])
+        if phone and sub.phone_number != phone:
+            sub.phone_number = phone
+            updated_fields.append('phone_number')
+        if region and not sub.region_code:
+            sub.region_code = region
+            updated_fields.append('region_code')
+        if updated_fields:
+            sub.save(update_fields=updated_fields)
+
         try:
             from apps.audit.recorder import record_audit
             record_audit('newsletter.subscribed', target_type='NewsletterSubscriber',
                          target_id=sub.pk, summary=email,
-                         changes={'region': region, 'source': source, 'created': created})
+                         changes={'region': region, 'phone': phone, 'source': source, 'created': created})
         except Exception:
             logger.exception('Could not audit newsletter subscription %s.', sub.pk)
         return Response({'message': 'Thanks for subscribing!', 'is_new': created},
@@ -137,3 +157,25 @@ class NewsletterSubscribeView(views.APIView):
         )
         # Same answer whether or not the address was subscribed.
         return Response({'message': 'You have been unsubscribed.'})
+
+
+class AdminNewsletterSubscriberViewSet(viewsets.ModelViewSet):
+    """Admin CRUD for newsletter subscribers."""
+    queryset = NewsletterSubscriber.objects.all().order_by('-created_at')
+    serializer_class = NewsletterSubscriberSerializer
+    permission_classes = [require_permission('enquiries.manage')]
+
+    def get_queryset(self):
+        qs = self.queryset
+        q = (self.request.query_params.get('q') or '').strip().lower()
+        if q:
+            from django.db.models import Q
+            qs = qs.filter(Q(email__icontains=q) | Q(phone_number__icontains=q))
+        region = self.request.query_params.get('region')
+        if region:
+            qs = qs.filter(region_code=region.upper())
+        active = self.request.query_params.get('is_active')
+        if active is not None and active != '':
+            qs = qs.filter(is_active=active.lower() in ('1', 'true', 'yes'))
+        return qs
+

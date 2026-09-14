@@ -23,7 +23,9 @@ import StoreShell from '../components/StoreShell';
 import HeroSection from '../components/HeroSection';
 import ProductCatalog from '../components/ProductCatalog';
 import QuizComponent from '../components/QuizComponent';
-import { postJson } from '../lib/api';
+import ReviewsSection from '../components/ReviewsSection';
+import CountryFlag from '../components/CountryFlag';
+import { getApiUrl, postJson } from '../lib/api';
 import { normalizeHomepageSettings } from '../lib/homepageContent';
 import { safePublicHref } from '../lib/safeUrl';
 import { firstApiError, validateEnquiry } from '../lib/formValidation';
@@ -46,9 +48,25 @@ function resolveIcon(iconName, fallback) {
 export default function HomePageClient({ initialBlogs = [], initialHomepageSettings }) {
   const currentRegion = useSelector((state) => state.region.currentRegion);
   const branding = useSelector((state) => state.region.branding);
-  const whatsappNumber = currentRegion === 'IN'
-    ? branding?.whatsappNumberIN
-    : branding?.whatsappNumberUK;
+  const [storeConfig, setStoreConfig] = useState(null);
+
+  React.useEffect(() => {
+    fetch(getApiUrl('/api/store-config/'))
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) setStoreConfig(data);
+      })
+      .catch(() => {});
+  }, []);
+
+  const whatsappConfig = storeConfig?.whatsapp_settings || {};
+  const activeWhatsappNumber = currentRegion === 'IN'
+    ? (whatsappConfig.phone_number_in || branding?.whatsappNumberIN || '+91 98200 00000')
+    : (whatsappConfig.phone_number_uk || branding?.whatsappNumberUK || '+44 7400 000000');
+  const whatsappPrefilled = encodeURIComponent(
+    whatsappConfig.prefilled_message || 'Hello Sclero Proteins team, I would like more information about your products.'
+  );
+  const isWhatsappEnabled = whatsappConfig.is_enabled !== false;
 
   const [quizOpen, setQuizOpen] = useState(false);
   const [inquiryName, setInquiryName] = useState('');
@@ -272,6 +290,62 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
       </section>
       )}
 
+      {/* Global Availability Section */}
+      {homepageSettings.globalAvailabilitySection?.enabled !== false && (
+      <section className="energy-white-section section bg-white border-b border-edge">
+        <div className="container-page">
+          <div className="reveal text-center max-w-2xl mx-auto">
+            <span className="kicker">{homepageSettings.globalAvailabilitySection?.kicker || 'Global Availability'}</span>
+            <h2 className="text-heading-1 mt-3 text-[#101871]">
+              {homepageSettings.globalAvailabilitySection?.title || 'Engineered in the UK. Delivered Worldwide.'}
+            </h2>
+            <p className="mt-4 text-body">
+              {homepageSettings.globalAvailabilitySection?.description}
+            </p>
+          </div>
+
+          <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            {(homepageSettings.globalAvailabilitySection?.countries || []).map((country) => (
+              <div
+                key={country.code}
+                className="premium-card reveal flex flex-col justify-between rounded-[24px] p-6 shadow-card hover:-translate-y-1 transition-all duration-200"
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-3 mb-4">
+                    <div className="flex items-center gap-2.5">
+                      <CountryFlag code={country.code} className="w-7 h-5 rounded-xs shadow-xs object-cover border border-edge" />
+                      <h3 className="font-bold text-base text-ink-primary">{country.name}</h3>
+                    </div>
+                    <span className="text-[10px] font-bold text-ink-accent uppercase tracking-wider bg-surface-muted px-2 py-0.5 rounded-full">
+                      {country.code}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 mt-4 pt-4 border-t border-edge">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-ink-muted">Delivery Speed</span>
+                      <span className="font-semibold text-ink-primary">{country.shippingTime}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-ink-muted">Fulfilment</span>
+                      <span className="font-semibold text-ink-secondary text-right truncate max-w-[140px]">{country.hub}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-6 pt-3 border-t border-edge">
+                  <span className="inline-flex w-full items-center justify-center gap-1.5 rounded-full bg-brand-success/10 py-1.5 px-3 text-[11px] font-semibold text-ink-success">
+                    <Check className="h-3 w-3" />
+                    <span>{country.badge || 'Duty-Free Delivery'}</span>
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+      )}
+
       {homepageSettings.comparisonSection.enabled !== false && (
       <section className="energy-tint-section section bg-surface-subtle">
         <div className="container-page">
@@ -414,6 +488,9 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
         </div>
       </section>
       )}
+
+      {/* Reviews & Trustpilot Section */}
+      <ReviewsSection trustpilotSettings={storeConfig?.trustpilot_settings} />
 
       {homepageSettings.faqSection.enabled !== false && (
       <section className="home-section-glow section border-y border-edge">
@@ -580,9 +657,9 @@ export default function HomePageClient({ initialBlogs = [], initialHomepageSetti
         </div>
       )}
 
-      {whatsappNumber && (
+      {isWhatsappEnabled && activeWhatsappNumber && (
       <a
-        href={`https://wa.me/${whatsappNumber.replace(/[^\d]/g, '')}`}
+        href={`https://wa.me/${activeWhatsappNumber.replace(/[^\d]/g, '')}?text=${whatsappPrefilled}`}
         target="_blank"
         rel="noreferrer"
         aria-label="Chat on WhatsApp"

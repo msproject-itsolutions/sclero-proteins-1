@@ -23,6 +23,7 @@ import CreateOrderPanel from '../../components/admin/CreateOrderPanel';
 import ShippingZonePanel from '../../components/admin/ShippingZonePanel';
 import MarketsPanel from '../../components/admin/MarketsPanel';
 import PasswordInput from '../../components/PasswordInput';
+import CountryFlag from '../../components/CountryFlag';
 
 // Hero banner upload sizes. These mirror the <picture> breakpoints and section
 // heights in components/HeroSection.jsx (640px / 1024px; 420/480/540px tall),
@@ -3439,7 +3440,7 @@ function GlossaryTab({ authFetch }) {
   }, [loadTerms]);
 
   const handleCreate = () => {
-    setEditTerm({ term: '', definition: '', category: '', image_url: '' });
+    setEditTerm({ term: '', definition: '', category: '', image_url: '', is_tooltip_enabled: true });
     setEditorOpen(true);
   };
 
@@ -3549,6 +3550,7 @@ function GlossaryTab({ authFetch }) {
                   <th className="px-5 py-3 w-1/4">Term / Word</th>
                   <th className="px-5 py-3 w-1/6">Category</th>
                   <th className="px-5 py-3 w-5/12">Definition</th>
+                  <th className="px-5 py-3 w-1/12 text-center">Tooltip</th>
                   <th className="px-5 py-3 w-1/12 text-center">Image</th>
                   <th className="px-5 py-3 w-1/12 text-right">Actions</th>
                 </tr>
@@ -3567,6 +3569,25 @@ function GlossaryTab({ authFetch }) {
                       )}
                     </td>
                     <td className="px-5 py-3.5 text-brand-muted max-w-xs truncate">{item.definition}</td>
+                    <td className="px-5 py-3.5 text-center">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          authFetch(`/api/admin/glossary/${item.id}/`, {
+                            method: 'PATCH',
+                            body: JSON.stringify({ is_tooltip_enabled: item.is_tooltip_enabled === false }),
+                          }).then(() => loadTerms());
+                        }}
+                        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition ${
+                          item.is_tooltip_enabled !== false
+                            ? 'bg-brand-success/10 text-ink-success hover:bg-brand-success/20'
+                            : 'bg-surface-muted text-ink-muted hover:bg-edge'
+                        }`}
+                        title="Click to toggle automated tooltip for this term"
+                      >
+                        {item.is_tooltip_enabled !== false ? 'Active' : 'Disabled'}
+                      </button>
+                    </td>
                     <td className="px-5 py-3.5 text-center">
                       {item.image_url ? (
                         <img
@@ -3647,6 +3668,21 @@ function GlossaryTab({ authFetch }) {
                   className="w-full rounded-sm border border-edge p-2.5"
                   required
                 />
+              </div>
+
+              <div className="rounded border border-edge bg-surface-muted/50 p-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editTerm.is_tooltip_enabled !== false}
+                    onChange={(e) => setEditTerm({ ...editTerm, is_tooltip_enabled: e.target.checked })}
+                    className="h-4 w-4 rounded border-edge text-ink-primary focus:ring-ink-primary"
+                  />
+                  <div>
+                    <span className="font-semibold text-ink-primary block text-[13px]">Enable Automated Hover Tooltip</span>
+                    <span className="text-[11px] text-brand-muted">When enabled, occurrences of this term in blogs and articles show an interactive explanation popup.</span>
+                  </div>
+                </label>
               </div>
 
               <div>
@@ -4396,6 +4432,43 @@ function GeneralSettingsTab({ authFetch }) {
   const [seoSaving, setSeoSaving] = useState(false);
   const [seoSaved, setSeoSaved] = useState(false);
 
+  const [clearingCache, setClearingCache] = useState(false);
+  const [cacheMessage, setCacheMessage] = useState('');
+  const [apiStatus, setApiStatus] = useState('checking');
+
+  const checkApiHealth = useCallback(() => {
+    setApiStatus('checking');
+    fetch(getApiUrl('/api/store-config/'))
+      .then((res) => {
+        if (res.ok) setApiStatus('online');
+        else setApiStatus('degraded');
+      })
+      .catch(() => setApiStatus('offline'));
+  }, []);
+
+  useEffect(() => {
+    checkApiHealth();
+  }, [checkApiHealth]);
+
+  const handleClearCache = async () => {
+    setClearingCache(true);
+    setCacheMessage('');
+    try {
+      const res = await authFetch('/api/admin/clear-cache/', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setCacheMessage(data.message || 'Cache cleared successfully.');
+        checkApiHealth();
+      } else {
+        setCacheMessage(data.error || 'Failed to clear cache.');
+      }
+    } catch (err) {
+      setCacheMessage('Network error while clearing cache.');
+    } finally {
+      setClearingCache(false);
+    }
+  };
+
   useEffect(() => {
     authFetch('/api/admin/tax-settings/')
       .then((r) => (r.ok ? r.json() : null))
@@ -4764,6 +4837,53 @@ function GeneralSettingsTab({ authFetch }) {
         </div>
       </div>
 
+      {/* Cache & System Health */}
+      <div className="bg-white rounded-lg border border-edge p-5 space-y-4">
+        <div className="flex items-center justify-between border-b border-edge-subtle pb-3">
+          <div>
+            <h3 className="text-sm font-semibold text-ink-primary uppercase">Performance &amp; Cache Synchronization</h3>
+            <p className="text-brand-muted mt-0.5">Flush Redis data caches, URL resolvers, and force live storefront data synchronization.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
+              apiStatus === 'online' ? 'bg-brand-success/10 text-ink-success' :
+              apiStatus === 'degraded' ? 'bg-amber-50 text-amber-700' :
+              apiStatus === 'offline' ? 'bg-rose-50 text-rose-700' : 'bg-surface-muted text-ink-muted'
+            }`}>
+              <span className={`h-2 w-2 rounded-full ${
+                apiStatus === 'online' ? 'bg-ink-success' :
+                apiStatus === 'degraded' ? 'bg-amber-500' :
+                apiStatus === 'offline' ? 'bg-rose-500' : 'bg-ink-muted animate-pulse'
+              }`} />
+              API: {apiStatus.toUpperCase()}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-md border border-edge bg-surface-muted/40">
+          <div>
+            <h4 className="text-sm font-semibold text-ink-primary">Clear Redis &amp; Application Caches</h4>
+            <p className="text-xs text-brand-muted mt-0.5">
+              Purges all cached database queries, dynamic page payloads, and policy pages so customers immediately see newly saved edits.
+            </p>
+            {cacheMessage && (
+              <p className="mt-2 text-xs font-semibold text-ink-success bg-brand-success/10 border border-brand-success/20 px-2.5 py-1 rounded inline-block">
+                {cacheMessage}
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={handleClearCache}
+            disabled={clearingCache}
+            className="btn-primary px-4 py-2 uppercase font-semibold text-xs whitespace-nowrap flex items-center gap-1.5 self-start sm:self-center"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${clearingCache ? 'animate-spin' : ''}`} />
+            {clearingCache ? 'Clearing...' : 'Clear Cache & Sync Data'}
+          </button>
+        </div>
+      </div>
+
     </div>
   );
 }
@@ -4789,6 +4909,7 @@ function HomepageSettingsTab({ authFetch }) {
     { key: 'productShowcase', label: 'Product Showcase' },
     { key: 'quizSection', label: 'Quiz Section' },
     { key: 'chooseSection', label: 'Why Choose Us' },
+    { key: 'globalAvailabilitySection', label: 'Global Availability' },
     { key: 'comparisonSection', label: 'Comparison' },
     { key: 'ingredientsSection', label: 'Ingredients' },
     { key: 'conversionSection', label: 'Conversion Block' },
@@ -5182,6 +5303,35 @@ function HomepageSettingsTab({ authFetch }) {
                       <InputField label="Icon name" value={item.icon} onChange={(value) => updateArrayItem('chooseSection', 'cards', index, 'icon', value)} />
                     </div>
                     <TextAreaField label="Description" value={item.description} onChange={(value) => updateArrayItem('chooseSection', 'cards', index, 'description', value)} rows={2} />
+                  </div>
+                ))}
+              </div>
+            </ArrayCard>
+          </div>
+        );
+      case 'globalAvailabilitySection':
+        return (
+          <div className="space-y-4">
+            <ToggleField checked={settings.globalAvailabilitySection?.enabled !== false} onChange={(value) => updateSectionField('globalAvailabilitySection', 'enabled', value)} label="Show Global Availability section" description="Display international shipping hubs and transit guarantees on the homepage." />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <InputField label="Kicker" value={settings.globalAvailabilitySection?.kicker || ''} onChange={(value) => updateSectionField('globalAvailabilitySection', 'kicker', value)} />
+              <InputField label="Headline" value={settings.globalAvailabilitySection?.title || ''} onChange={(value) => updateSectionField('globalAvailabilitySection', 'title', value)} />
+            </div>
+            <TextAreaField label="Description" value={settings.globalAvailabilitySection?.description || ''} onChange={(value) => updateSectionField('globalAvailabilitySection', 'description', value)} />
+            <ArrayCard title="Distribution Hubs" subtitle="Manage global hubs (UK, India, EU, US)." onAdd={() => addArrayItem('globalAvailabilitySection', 'hubs', { region: 'US', name: 'Americas Hub', speed: '3-5 business days', badge: 'Active', flagCode: 'US' })}>
+              <div className="space-y-3">
+                {(settings.globalAvailabilitySection?.hubs || []).map((hub, index) => (
+                  <div key={`${hub.name}-${index}`} className="rounded-lg border border-edge bg-surface-muted p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[13px] font-semibold uppercase text-ink-accent">Hub {index + 1}: {hub.name}</p>
+                      <button type="button" onClick={() => removeArrayItem('globalAvailabilitySection', 'hubs', index)} className="text-[12px] font-semibold uppercase text-red-600">Remove</button>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-4">
+                      <InputField label="Region Code" value={hub.region} onChange={(value) => updateArrayItem('globalAvailabilitySection', 'hubs', index, 'region', value)} />
+                      <InputField label="Hub Name" value={hub.name} onChange={(value) => updateArrayItem('globalAvailabilitySection', 'hubs', index, 'name', value)} />
+                      <InputField label="Transit Speed" value={hub.speed} onChange={(value) => updateArrayItem('globalAvailabilitySection', 'hubs', index, 'speed', value)} />
+                      <InputField label="Status Badge" value={hub.badge} onChange={(value) => updateArrayItem('globalAvailabilitySection', 'hubs', index, 'badge', value)} />
+                    </div>
                   </div>
                 ))}
               </div>
@@ -5790,6 +5940,17 @@ function ReviewsTab({ authFetch }) {
   const [editReview, setEditReview] = useState(null);
   const [reviewEditorOpen, setReviewEditorOpen] = useState(false);
 
+  // Trustpilot Settings state
+  const [tpConfig, setTpConfig] = useState({
+    rating_score: 4.8,
+    reviews_count: 1200,
+    rating_text: 'Excellent',
+    trustpilot_url: 'https://www.trustpilot.com/review/scleroproteins.co.uk',
+    is_enabled: true,
+  });
+  const [savingTp, setSavingTp] = useState(false);
+  const [tpNotice, setTpNotice] = useState('');
+
   const load = useCallback(() => {
     setLoading(true);
     Promise.all([
@@ -5800,14 +5961,43 @@ function ReviewsTab({ authFetch }) {
       authFetch('/api/admin/products/')
         .then((r) => r.ok ? r.json() : [])
         .catch(() => []),
-    ]).then(([revList, replyData, prodList]) => {
+      authFetch('/api/admin/settings/TRUSTPILOT_SETTINGS/')
+        .then((r) => r.ok ? r.json().then(d => d.value) : null)
+        .catch(() => null),
+    ]).then(([revList, replyData, prodList, tpData]) => {
       setReviews(Array.isArray(revList) ? revList : revList.results || []);
       setReplies(replyData || {});
       setProducts(Array.isArray(prodList) ? prodList : prodList.results || []);
+      if (tpData && typeof tpData === 'object') {
+        setTpConfig((prev) => ({ ...prev, ...tpData }));
+      }
     }).finally(() => setLoading(false));
   }, [authFetch]);
 
   useEffect(() => { load(); }, [load]);
+
+  const saveTrustpilotSettings = () => {
+    setSavingTp(true);
+    setTpNotice('');
+    authFetch('/api/admin/settings/TRUSTPILOT_SETTINGS/', {
+      method: 'PUT',
+      body: JSON.stringify({ key: 'TRUSTPILOT_SETTINGS', value: tpConfig })
+    })
+      .then((r) => {
+        if (r.status === 404) {
+          return authFetch('/api/admin/settings/', {
+            method: 'POST',
+            body: JSON.stringify({ key: 'TRUSTPILOT_SETTINGS', value: tpConfig, description: 'Trustpilot integration settings' })
+          });
+        }
+        return r;
+      })
+      .then(() => {
+        setTpNotice('Trustpilot settings saved successfully.');
+        setTimeout(() => setTpNotice(''), 4000);
+      })
+      .finally(() => setSavingTp(false));
+  };
 
   const approve = (id) => {
     authFetch(`/api/admin/reviews/${id}/approve/`, { method: 'POST' }).then(() => load());
@@ -5851,17 +6041,23 @@ function ReviewsTab({ authFetch }) {
   };
 
   const handleSaveReview = () => {
-    if (!editReview.product || !editReview.user_name.trim() || !editReview.user_email.trim() || !editReview.comment.trim()) {
-      alert("Please fill in all required fields.");
+    if (!editReview.user_name?.trim() || !editReview.user_email?.trim() || !editReview.comment?.trim()) {
+      alert("Please fill in customer name, email, and review comment.");
       return;
     }
     const isEdit = !!editReview.id;
     const url = isEdit ? `/api/admin/reviews/${editReview.id}/` : `/api/admin/reviews/`;
     const method = isEdit ? 'PUT' : 'POST';
+    const payload = {
+      ...editReview,
+      product: editReview.product || null,
+      review_title: editReview.review_title || '',
+      source: editReview.source || 'Website',
+    };
 
     authFetch(url, {
       method,
-      body: JSON.stringify(editReview)
+      body: JSON.stringify(payload)
     })
       .then(async (r) => {
         if (r.ok) {
@@ -5878,7 +6074,85 @@ function ReviewsTab({ authFetch }) {
   if (loading) return <p className="text-sm text-brand-muted">Loading reviews moderation panel...</p>;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {/* Trustpilot Configuration Card */}
+      <div className="bg-white rounded-lg border border-edge p-5 space-y-4">
+        <div className="flex items-center justify-between border-b border-edge-subtle pb-3">
+          <div>
+            <h3 className="text-sm font-semibold text-ink-primary uppercase">Trustpilot Score &amp; Badge Settings</h3>
+            <p className="text-brand-muted mt-0.5">Control the live Trustpilot star rating badge shown on the storefront homepage and reviews section.</p>
+          </div>
+          <button
+            type="button"
+            onClick={saveTrustpilotSettings}
+            disabled={savingTp}
+            className="btn-primary px-4 py-2 uppercase font-semibold text-xs"
+          >
+            {savingTp ? 'Saving...' : 'Save Trustpilot'}
+          </button>
+        </div>
+
+        {tpNotice && (
+          <p className="text-xs font-semibold text-ink-success bg-brand-success/10 border border-brand-success/20 p-2 rounded">
+            {tpNotice}
+          </p>
+        )}
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <label className="block text-xs font-semibold text-ink-primary mb-1">Trustpilot Score</label>
+            <input
+              type="number"
+              step="0.1"
+              min="1"
+              max="5"
+              value={tpConfig.rating_score || 4.8}
+              onChange={(e) => setTpConfig({ ...tpConfig, rating_score: parseFloat(e.target.value) || 0 })}
+              className="w-full rounded border border-edge p-2 bg-surface text-sm font-semibold"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-ink-primary mb-1">Review Count</label>
+            <input
+              type="number"
+              value={tpConfig.reviews_count || 1200}
+              onChange={(e) => setTpConfig({ ...tpConfig, reviews_count: parseInt(e.target.value) || 0 })}
+              className="w-full rounded border border-edge p-2 bg-surface text-sm font-semibold"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-ink-primary mb-1">Rating Headline</label>
+            <input
+              type="text"
+              value={tpConfig.rating_text || 'Excellent'}
+              onChange={(e) => setTpConfig({ ...tpConfig, rating_text: e.target.value })}
+              className="w-full rounded border border-edge p-2 bg-surface text-sm font-semibold"
+            />
+          </div>
+          <div className="flex items-center pt-5">
+            <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-ink-primary">
+              <input
+                type="checkbox"
+                checked={tpConfig.is_enabled !== false}
+                onChange={(e) => setTpConfig({ ...tpConfig, is_enabled: e.target.checked })}
+                className="h-4 w-4 rounded border-edge"
+              />
+              Show Badge on Storefront
+            </label>
+          </div>
+          <div className="sm:col-span-2 lg:col-span-4">
+            <label className="block text-xs font-semibold text-ink-primary mb-1">Trustpilot Profile URL</label>
+            <input
+              type="url"
+              value={tpConfig.trustpilot_url || ''}
+              onChange={(e) => setTpConfig({ ...tpConfig, trustpilot_url: e.target.value })}
+              placeholder="https://www.trustpilot.com/review/scleroproteins.co.uk"
+              className="w-full rounded border border-edge p-2 bg-surface text-sm font-semibold"
+            />
+          </div>
+        </div>
+      </div>
+
       <div className="flex justify-between items-center bg-white p-4 rounded-md border border-edge">
         <p className="text-sm text-brand-muted">{reviews.length} total customer reviews pending or moderated</p>
         <button onClick={() => {
@@ -6040,6 +6314,31 @@ function ReviewsTab({ authFetch }) {
                       {r} Stars
                     </option>
                   ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="font-semibold text-ink-primary block mb-1">Review Title / Headline</label>
+                <input
+                  type="text"
+                  value={editReview.review_title || ''}
+                  onChange={(e) => setEditReview({ ...editReview, review_title: e.target.value })}
+                  placeholder="e.g. Life changing relief for joint flexibility"
+                  className="w-full rounded-sm border border-edge p-2.5 font-semibold text-ink-primary"
+                />
+              </div>
+
+              <div>
+                <label className="font-semibold text-ink-primary block mb-1">Review Source</label>
+                <select
+                  value={editReview.source || 'Website'}
+                  onChange={(e) => setEditReview({ ...editReview, source: e.target.value })}
+                  className="w-full rounded-sm border border-edge p-2.5 bg-white font-semibold text-ink-primary"
+                >
+                  <option value="Website">Website</option>
+                  <option value="Trustpilot">Trustpilot</option>
+                  <option value="Google">Google Reviews</option>
+                  <option value="Clinical">Clinical Partner</option>
                 </select>
               </div>
 
@@ -7659,6 +7958,198 @@ function OrdersSection({ authFetch, initialTab = 'all' }) {
   );
 }
 
+function NewsletterSubscribersTab({ authFetch }) {
+  const [subscribers, setSubscribers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [regionFilter, setRegionFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+
+  const loadSubscribers = useCallback(() => {
+    setLoading(true);
+    authFetch('/api/admin/newsletter-subscribers/')
+      .then((r) => r.ok ? r.json() : [])
+      .then((data) => {
+        setSubscribers(Array.isArray(data) ? data : data.results || []);
+      })
+      .catch(() => alert('Failed to load newsletter subscribers.'))
+      .finally(() => setLoading(false));
+  }, [authFetch]);
+
+  useEffect(() => {
+    loadSubscribers();
+  }, [loadSubscribers]);
+
+  const handleDelete = (id) => {
+    if (confirm('Are you sure you want to permanently delete this newsletter subscriber?')) {
+      authFetch(`/api/admin/newsletter-subscribers/${id}/`, { method: 'DELETE' })
+        .then((r) => {
+          if (r.ok) {
+            loadSubscribers();
+          } else {
+            alert('Failed to delete subscriber.');
+          }
+        });
+    }
+  };
+
+  const filtered = subscribers.filter((sub) => {
+    const term = search.toLowerCase();
+    const matchesSearch = (sub.email || '').toLowerCase().includes(term) ||
+      (sub.phone_number || '').toLowerCase().includes(term);
+    const matchesRegion = regionFilter === 'ALL' || sub.region === regionFilter;
+    const matchesStatus = statusFilter === 'ALL' ||
+      (statusFilter === 'ACTIVE' ? sub.is_active : !sub.is_active);
+    return matchesSearch && matchesRegion && matchesStatus;
+  });
+
+  const exportCSV = () => {
+    const headers = ['Email', 'Phone', 'Region', 'Active', 'Source', 'Subscribed Date'];
+    const rows = filtered.map((s) => [
+      csvCell(s.email),
+      csvCell(s.phone_number || ''),
+      csvCell(s.region || ''),
+      csvCell(s.is_active ? 'Yes' : 'No'),
+      csvCell(s.source || ''),
+      csvCell(s.created_at || ''),
+    ]);
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `newsletter_subscribers_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const activeCount = subscribers.filter((s) => s.is_active).length;
+  const inCount = subscribers.filter((s) => s.region === 'IN').length;
+  const ukCount = subscribers.filter((s) => s.region === 'UK').length;
+
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-4 sm:grid-cols-4">
+        <div className="rounded-lg border border-edge bg-white p-4 shadow-card">
+          <p className="text-xs uppercase font-semibold text-brand-muted">Total Subscribers</p>
+          <p className="mt-1 text-2xl font-bold text-ink-primary">{subscribers.length}</p>
+        </div>
+        <div className="rounded-lg border border-edge bg-white p-4 shadow-card">
+          <p className="text-xs uppercase font-semibold text-brand-muted">Active</p>
+          <p className="mt-1 text-2xl font-bold text-ink-success">{activeCount}</p>
+        </div>
+        <div className="rounded-lg border border-edge bg-white p-4 shadow-card">
+          <p className="text-xs uppercase font-semibold text-brand-muted">UK Subscribers</p>
+          <p className="mt-1 text-2xl font-bold text-ink-accent">{ukCount}</p>
+        </div>
+        <div className="rounded-lg border border-edge bg-white p-4 shadow-card">
+          <p className="text-xs uppercase font-semibold text-brand-muted">India Subscribers</p>
+          <p className="mt-1 text-2xl font-bold text-ink-accent">{inCount}</p>
+        </div>
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-3 sm:items-center justify-between">
+        <div className="flex flex-wrap gap-2 flex-1">
+          <div className="relative max-w-xs flex-1">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-brand-muted" />
+            <input
+              placeholder="Search email or phone..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 border border-edge rounded-md text-sm placeholder:text-brand-muted focus:outline-none focus:border-ink-primary bg-white shadow-card"
+            />
+          </div>
+          <select
+            value={regionFilter}
+            onChange={(e) => setRegionFilter(e.target.value)}
+            className="border border-edge rounded-md text-sm px-3 py-2 bg-white text-ink-primary shadow-card focus:outline-none"
+          >
+            <option value="ALL">All Regions</option>
+            <option value="UK">UK</option>
+            <option value="IN">India</option>
+          </select>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="border border-edge rounded-md text-sm px-3 py-2 bg-white text-ink-primary shadow-card focus:outline-none"
+          >
+            <option value="ALL">All Statuses</option>
+            <option value="ACTIVE">Active</option>
+            <option value="INACTIVE">Unsubscribed</option>
+          </select>
+        </div>
+        <button
+          type="button"
+          onClick={exportCSV}
+          className="inline-flex items-center gap-1.5 rounded-sm border border-edge bg-white px-3.5 py-2 text-xs font-semibold uppercase text-ink-primary shadow-card hover:bg-surface-muted transition"
+        >
+          <Download className="h-3.5 w-3.5" /> Export CSV ({filtered.length})
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center items-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-brand-muted" />
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="bg-white border border-edge rounded-lg p-10 text-center shadow-card">
+          <Mail className="h-9 w-9 text-brand-muted mx-auto mb-2" />
+          <h3 className="text-sm font-semibold text-ink-primary">No subscribers found</h3>
+          <p className="text-sm text-brand-muted mt-1">Subscribers from the storefront footer will appear here.</p>
+        </div>
+      ) : (
+        <div className="bg-white border border-edge rounded-lg overflow-hidden shadow-card">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm border-collapse">
+              <thead>
+                <tr className="border-b border-edge bg-surface-muted/50 text-brand-muted font-semibold uppercase text-[12px]">
+                  <th className="px-5 py-3">Subscriber Email</th>
+                  <th className="px-5 py-3">Mobile / Phone</th>
+                  <th className="px-5 py-3">Region</th>
+                  <th className="px-5 py-3">Status</th>
+                  <th className="px-5 py-3">Subscribed Date</th>
+                  <th className="px-5 py-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-edge-subtle">
+                {filtered.map((item) => (
+                  <tr key={item.id} className="hover:bg-surface-muted/30">
+                    <td className="px-5 py-3.5 font-semibold text-ink-primary">{item.email}</td>
+                    <td className="px-5 py-3.5 font-mono text-xs text-ink-secondary">{item.phone_number || '—'}</td>
+                    <td className="px-5 py-3.5">
+                      <span className="inline-flex items-center gap-1 rounded bg-surface-muted px-2 py-0.5 text-xs font-semibold text-ink-primary">
+                        <CountryFlag code={item.region || 'UK'} className="h-3 w-3.5 rounded-xs" />
+                        {item.region || 'UK'}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider ${
+                        item.is_active ? 'bg-brand-success/10 text-ink-success' : 'bg-surface-muted text-ink-muted'
+                      }`}>
+                        {item.is_active ? 'Active' : 'Unsubscribed'}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3.5 text-xs text-ink-secondary">{formatDateTime(item.created_at)}</td>
+                    <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(item.id)}
+                        className="text-ink-danger hover:text-red-700 text-xs font-semibold inline-flex items-center gap-1"
+                      >
+                        <Trash2 className="h-3 w-3" /> Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CustomersSection({ authFetch }) {
   const [tab, setTab] = useState('all');
   return (
@@ -7670,11 +8161,13 @@ function CustomersSection({ authFetch }) {
           { key: 'all', label: 'Customers' },
           { key: 'segments', label: 'Segments' },
           { key: 'reviews', label: 'Reviews' },
+          { key: 'newsletter', label: 'Newsletter Subscribers' },
         ]}
       />
       {tab === 'all' && <CustomersTab authFetch={authFetch} />}
       {tab === 'segments' && <SegmentsTab authFetch={authFetch} />}
       {tab === 'reviews' && <ReviewsTab authFetch={authFetch} />}
+      {tab === 'newsletter' && <NewsletterSubscribersTab authFetch={authFetch} />}
     </div>
   );
 }

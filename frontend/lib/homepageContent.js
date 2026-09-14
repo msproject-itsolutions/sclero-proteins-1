@@ -160,24 +160,61 @@ export const DEFAULT_HOMEPAGE_SETTINGS = {
   chooseSection: {
     enabled: true,
     kicker: 'Why Choose Us',
-    title: 'A shopping experience built to turn interest into confident purchases.',
+    title: 'Clinically Proven BJC® Bone & Joint Formulations',
     description:
-      'Every part of the site is designed to help customers understand the benefits faster, compare products more confidently, and move to checkout with less hesitation.',
+      'Backed by clinical research and bio-mineral extraction, our flagship BJC® formulations deliver targeted cartilage protection and sustained joint mobility.',
     cards: [
       {
-        title: 'Science-led formulas',
-        description: 'Products presented with clear benefits, practical explanations, and a more trustworthy buying journey.',
+        title: 'Patented BJC® Bio-Mineral Matrix',
+        description: 'Naturally occurring synergistic matrix of collagen types I, V and X, chondroitin, glucosamine, and hyaluronic acid for maximum cellular absorption.',
         icon: 'FlaskConical',
       },
       {
-        title: 'Transparent labels',
-        description: 'Simple product information helps customers compare options quickly and make better decisions.',
+        title: 'Clinically Documented Mobility',
+        description: 'Noticeable reduction in morning stiffness and joint discomfort within 7 to 14 days of daily supplementation.',
         icon: 'ShieldCheck',
       },
       {
-        title: 'Everyday wellness support',
-        description: 'Premium routines for joints, collagen, recovery, and daily support in one polished storefront.',
+        title: 'Non-Invasive Cartilage Defence',
+        description: 'Safeguards synovial fluid viscosity and extracellular chondrocyte structures against oxidative wear.',
         icon: 'HeartHandshake',
+      },
+    ],
+  },
+  globalAvailabilitySection: {
+    enabled: true,
+    kicker: 'Global Availability',
+    title: 'Engineered in the UK. Delivered Worldwide.',
+    description:
+      'Dedicated regional fulfilment centers ensure rapid shipping, seamless customs clearance, and duty-free deliveries.',
+    countries: [
+      {
+        code: 'UK',
+        name: 'United Kingdom',
+        shippingTime: '1–2 Business Days',
+        badge: 'Domestic Next-Day Dispatch',
+        hub: 'London & Oxford Hubs',
+      },
+      {
+        code: 'IN',
+        name: 'India',
+        shippingTime: '2–4 Business Days',
+        badge: 'Express Air Courier',
+        hub: 'Mumbai & Bangalore Hubs',
+      },
+      {
+        code: 'EU',
+        name: 'Europe & EEA',
+        shippingTime: '3–5 Business Days',
+        badge: 'EU-Cleared Delivery',
+        hub: 'Rotterdam Gateway Hub',
+      },
+      {
+        code: 'US',
+        name: 'United States & Canada',
+        shippingTime: '3–6 Business Days',
+        badge: 'Priority International Air',
+        hub: 'Global Air Express',
       },
     ],
   },

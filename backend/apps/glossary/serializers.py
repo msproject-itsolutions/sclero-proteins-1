@@ -4,7 +4,7 @@ from .models import GlossaryTerm, GeneralFAQ
 class GlossaryTermSerializer(serializers.ModelSerializer):
     class Meta:
         model = GlossaryTerm
-        fields = ['id', 'term', 'internal_code', 'definition', 'category', 'image_url', 'created_at', 'updated_at']
+        fields = ['id', 'term', 'internal_code', 'definition', 'category', 'image_url', 'is_tooltip_enabled', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
 
     def validate_term(self, value):

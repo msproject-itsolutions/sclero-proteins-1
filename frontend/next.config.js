@@ -23,7 +23,7 @@ const backendOrigins = [
 const nextConfig = {
   reactStrictMode: true,
 
-  // Stop `next dev` from writing AGENTS.md / CLAUDE.md into the project.
+  // Disable automatic rule generation during local development.
   agentRules: false,
 
   // Emit a self-contained server bundle (.next/standalone) so the production

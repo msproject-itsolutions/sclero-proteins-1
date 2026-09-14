@@ -16,6 +16,7 @@ from apps.products.views import (
     ProductViewSet, ProductReviewAdminViewSet,
     ProductAdminViewSet, CategoryAdminViewSet, ProductMediaAdminViewSet,
     ProductLandingPageViewSet, BundleAdminViewSet, MediaUploadView,
+    PublicFeaturedReviewsView,
 )
 from apps.users.views import (
     RegisterView, UserProfileView, UserAddressViewSet, UserErasureRequestView,
@@ -51,9 +52,13 @@ from apps.admin_dashboard.views import (
     CronJobRunViewSet, PublishedPolicyPagesView,
     PublishedBlogPostListView, PublishedBlogPostDetailView, PublicSiteSettingView,
     StoreConfigView, TaxSettingsAdminView, SmtpTestView, InstagramReelsView, InstagramReelsConnectionAdminView,
+    ClearCacheAdminView,
 )
 from apps.audit.views import AuditLogViewSet
-from apps.enquiries.views import BulkEnquiryCreateView, BulkEnquiryAdminViewSet, NewsletterSubscribeView
+from apps.enquiries.views import (
+    BulkEnquiryCreateView, BulkEnquiryAdminViewSet, NewsletterSubscribeView,
+    AdminNewsletterSubscriberViewSet,
+)
 from apps.inventory.views import StockLevelAdminViewSet, StockTransferAdminViewSet
 from apps.fraud.views import RiskAssessmentAdminViewSet
 from apps.push_notifications.views import PushCampaignViewSet, PushConfigurationView, PushSubscriptionView
@@ -73,6 +78,7 @@ router.register(r'admin/reviews', ProductReviewAdminViewSet, basename='admin-rev
 router.register(r'admin/audit-logs', AuditLogViewSet, basename='audit-log')
 router.register(r'enquiries', BulkEnquiryCreateView, basename='enquiry')
 router.register(r'admin/enquiries', BulkEnquiryAdminViewSet, basename='admin-enquiry')
+router.register(r'admin/newsletter-subscribers', AdminNewsletterSubscriberViewSet, basename='admin-newsletter-subscriber')
 router.register(r'wishlist', WishlistViewSet, basename='wishlist')
 router.register(r'wishlists', WishlistGroupViewSet, basename='wishlists')
 
@@ -122,6 +128,7 @@ urlpatterns = [
     path('api/geo/', geo_detect, name='geo_detect'),
     path('api/store-config/', StoreConfigView.as_view(), name='store_config'),
     path('api/instagram/reels/', InstagramReelsView.as_view(), name='instagram_reels'),
+    path('api/reviews/featured/', PublicFeaturedReviewsView.as_view(), name='featured_reviews'),
     path('api/shipping/lookup/', PostcodeLookupView.as_view(), name='shipping_lookup'),
     path('api/shipping/calculate/', ShippingCalculateView.as_view(), name='shipping_calculate'),
     path('api/admin/tax-settings/', TaxSettingsAdminView.as_view(), name='admin_tax_settings'),
@@ -131,6 +138,7 @@ urlpatterns = [
     path('api/push/config/', PushConfigurationView.as_view(), name='push_config'),
     path('api/push/subscriptions/', PushSubscriptionView.as_view(), name='push_subscriptions'),
     path('api/wishlists/shared/<str:share_token>/', PublicWishlistView.as_view(), name='shared-wishlist'),
+    path('api/admin/clear-cache/', ClearCacheAdminView.as_view(), name='admin_clear_cache'),
     path('api/admin/upload-media/', MediaUploadView.as_view(), name='admin_upload_media'),
     
     # Custom Reports & Analytics

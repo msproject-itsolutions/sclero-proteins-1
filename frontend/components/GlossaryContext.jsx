@@ -4,6 +4,8 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { usePathname } from 'next/navigation';
 import { getApiUrl } from '../lib/api';
 
+import Link from 'next/link';
+
 const GlossaryContext = createContext(null);
 const MOBILE_MEDIA_QUERY = '(max-width: 767px)';
 
@@ -56,16 +58,25 @@ function GlossaryDetails({ activeTooltip, mobile, onClose }) {
           />
         </div>
       )}
-      {!mobile && !activeTooltip.pinned && (
-        <p className="mt-3 border-t border-edge-subtle pt-2 text-[10px] font-semibold uppercase tracking-wider text-ink-muted">
-          Click the term to pin this definition
-        </p>
-      )}
-      {!mobile && activeTooltip.pinned && (
-        <p className="mt-3 border-t border-edge-subtle pt-2 text-[10px] font-semibold uppercase tracking-wider text-brand-accent">
-          Pinned definition
-        </p>
-      )}
+      <div className="mt-3 flex items-center justify-between border-t border-edge-subtle pt-2">
+        <Link
+          href="/glossary"
+          onClick={onClose}
+          className="text-xs font-semibold text-[#101871] hover:underline"
+        >
+          Learn more in glossary →
+        </Link>
+        {!mobile && !activeTooltip.pinned && (
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-muted">
+            Click to pin
+          </span>
+        )}
+        {!mobile && activeTooltip.pinned && (
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-brand-accent">
+            Pinned
+          </span>
+        )}
+      </div>
     </>
   );
 }
@@ -186,7 +197,8 @@ export default function GlossaryProvider({ children }) {
     const containers = document.querySelectorAll('[data-glossary-scan]');
     if (!containers.length) return;
 
-    const escapedTerms = terms
+    const activeTerms = terms.filter((term) => term.is_tooltip_enabled !== false);
+    const escapedTerms = activeTerms
       .map((term) => term.term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
       .sort((left, right) => right.length - left.length);
     if (!escapedTerms.length) return;

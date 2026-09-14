@@ -49,7 +49,7 @@ export default function AboutPage() {
                   We built <EggOText text="Sclero" /> to make wellness shopping feel more <em className="text-italic-accent">clear, trustworthy, and human</em>.
                 </h1>
                 <p className="mx-auto mt-5 max-w-2xl text-[16px] leading-[1.85] text-ink-secondary">
-                  Sclero Proteins was shaped around a simple idea: people deserve better guidance when choosing products for collagen support, joint care, and everyday wellness. Instead of creating more noise, we want to create more clarity.
+                  Sclero Proteins is shaped around a simple idea: people deserve better guidance when choosing products for collagen support, joint care, and everyday wellness. Instead of creating more noise, we want to create more clarity.
                 </p>
                 <p className="mx-auto mt-4 max-w-2xl text-[16px] leading-[1.85] text-ink-secondary">
                   That means cleaner presentation, easier product discovery, and a shopping experience that helps customers feel confident from the first visit through to checkout.

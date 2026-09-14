@@ -1,7 +1,18 @@
-from rest_framework import serializers
 import re
+from rest_framework import serializers
 
-from .models import BulkEnquiry
+from .models import BulkEnquiry, NewsletterSubscriber
+
+
+class NewsletterSubscriberSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = NewsletterSubscriber
+        fields = [
+            'id', 'email', 'phone_number', 'region_code', 'is_active',
+            'is_confirmed', 'source', 'created_at', 'unsubscribed_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'unsubscribed_at']
+
 
 
 PHONE_PATTERN = re.compile(r'^[+\d][\d\s().-]*$')

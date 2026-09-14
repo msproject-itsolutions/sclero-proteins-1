@@ -60,9 +60,13 @@ class ProductMediaSerializer(serializers.ModelSerializer):
         return normalize_media_url(obj.file_url)
 
 class ProductReviewSerializer(serializers.ModelSerializer):
+    product_sku = serializers.CharField(source='product.sku', read_only=True)
+    product_name = serializers.CharField(source='product.name', read_only=True)
+
     class Meta:
         model = ProductReview
-        fields = ['id', 'user_name', 'user_email', 'rating', 'comment',
+        fields = ['id', 'product', 'product_sku', 'product_name', 'user_name', 'user_email',
+                  'review_title', 'rating', 'comment', 'source',
                   'is_verified_purchase', 'review_media_urls', 'created_at']
         # email collected for verified-purchase check but never shown publicly;
         # verified flag + approval are decided server-side.
@@ -78,9 +82,10 @@ class ProductReviewAdminSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductReview
         fields = ['id', 'product', 'product_sku', 'product_name', 'user_name', 'user_email',
-                  'rating', 'comment', 'is_verified_purchase', 'is_approved', 'is_featured',
-                  'review_media_urls', 'created_at']
+                  'review_title', 'rating', 'comment', 'source', 'is_verified_purchase',
+                  'is_approved', 'is_featured', 'review_media_urls', 'created_at']
         read_only_fields = ['created_at']
+
 
 class ProductListSerializer(serializers.ModelSerializer):
     price = serializers.SerializerMethodField()

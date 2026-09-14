@@ -81,6 +81,21 @@ class StoreConfigView(APIView):
         if setting_seo and isinstance(setting_seo.value, dict):
             seo_settings = setting_seo.value
 
+        whatsapp_settings = {}
+        setting_whatsapp = SystemSetting.objects.filter(key='WHATSAPP_SETTINGS').first()
+        if setting_whatsapp and isinstance(setting_whatsapp.value, dict):
+            whatsapp_settings = setting_whatsapp.value
+
+        trustpilot_settings = {}
+        setting_tp = SystemSetting.objects.filter(key='TRUSTPILOT_SETTINGS').first()
+        if setting_tp and isinstance(setting_tp.value, dict):
+            trustpilot_settings = setting_tp.value
+
+        homepage_settings = {}
+        setting_hp = SystemSetting.objects.filter(key='HOMEPAGE_SETTINGS').first()
+        if setting_hp and isinstance(setting_hp.value, dict):
+            homepage_settings = setting_hp.value
+
         return Response({
             'tax_mode': get_store_tax_mode(),
             'guest_checkout_enabled': get_guest_checkout_enabled(),
@@ -88,6 +103,9 @@ class StoreConfigView(APIView):
             'company_info': company_info,
             'social_links': social_links,
             'seo_settings': seo_settings,
+            'whatsapp_settings': whatsapp_settings,
+            'trustpilot_settings': trustpilot_settings,
+            'homepage_settings': homepage_settings,
         })
 
 
@@ -102,6 +120,23 @@ class TaxSettingsAdminView(APIView):
     def put(self, request):
         mode = set_store_tax_mode(request.data.get('tax_mode'))
         return Response({'tax_mode': mode})
+
+
+class ClearCacheAdminView(APIView):
+    """Admin endpoint to flush application, template, URL, and Redis caches.
+    Gated by 'settings.manage'."""
+    permission_classes = [require_permission('settings.manage')]
+
+    def post(self, request):
+        from django.urls import clear_url_caches
+        cache.clear()
+        clear_url_caches()
+        return Response({
+            'status': 'ok',
+            'message': 'Application, URL, and Redis caches cleared successfully.',
+            'timestamp': timezone.now().isoformat(),
+        })
+
 
 
 class EmailTemplateViewSet(viewsets.ModelViewSet):
@@ -514,16 +549,24 @@ class MarketingIntegrationViewSet(viewsets.ModelViewSet):
 
 
 class ContentPageViewSet(viewsets.ModelViewSet):
-    """Read-only page records while the CMS publishing workflow is disabled."""
+    """Admin CRUD for content and policy pages."""
     queryset = ContentPage.objects.all().order_by('-created_at')
     serializer_class = ContentPageSerializer
     permission_classes = [require_permission('settings.manage')]
-    http_method_names = ['get', 'head', 'options']
+
     def get_queryset(self):
         qs = self.queryset
         q = self.request.query_params.get('q')
         if q:
             qs = qs.filter(Q(title__icontains=q) | Q(slug__icontains=q))
+        page_type = self.request.query_params.get('page_type')
+        if page_type:
+            qs = qs.filter(page_type=page_type)
+        is_policy = self.request.query_params.get('is_policy')
+        if is_policy in ('1', 'true', 'yes'):
+            qs = qs.filter(slug__startswith=POLICY_SLUG_PREFIX)
+        elif is_policy in ('0', 'false', 'no'):
+            qs = qs.exclude(slug__startswith=POLICY_SLUG_PREFIX)
         return qs
 
 

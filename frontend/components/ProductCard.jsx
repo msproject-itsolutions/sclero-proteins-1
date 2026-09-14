@@ -194,9 +194,26 @@ export default function ProductCard({
     }
   };
 
+  const handleCardClick = (e) => {
+    if (e.target.closest('button') || e.target.closest('a')) {
+      return;
+    }
+    if (onViewDetails) {
+      onViewDetails(product.sku);
+    } else {
+      window.location.href = `/products/${product.sku}`;
+    }
+  };
+
   if (variant === 'compact') {
     return (
-      <div className="reveal group gradient-ring relative flex flex-col justify-between overflow-hidden rounded-[24px] border border-edge bg-white p-4 shadow-card transition-all duration-300 hover:-translate-y-1.5 hover:shadow-elevated">
+      <div
+        onClick={handleCardClick}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === 'Enter') handleCardClick(e); }}
+        className="reveal group gradient-ring relative flex flex-col justify-between overflow-hidden rounded-[24px] border border-edge bg-white p-4 shadow-card transition-all duration-300 hover:-translate-y-1.5 hover:shadow-elevated cursor-pointer"
+      >
         <div className="relative mb-3 flex h-40 w-full items-center justify-center overflow-hidden rounded-[18px] bg-surface-muted">
           {thumbnail ? (
             <img
@@ -252,7 +269,10 @@ export default function ProductCard({
 
         <div className="mt-4 flex gap-2">
           <button
-            onClick={() => onAddToCart(product)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddToCart(product);
+            }}
             disabled={stock === 0 || unavailable}
             className="btn-primary flex-1 py-2.5 text-xs disabled:opacity-50"
           >
@@ -272,7 +292,13 @@ export default function ProductCard({
   }
 
   return (
-    <div className="reveal group gradient-ring relative flex flex-col overflow-hidden rounded-[26px] border border-edge bg-white shadow-card transition-all duration-300 hover:-translate-y-1.5 hover:shadow-elevated">
+    <div
+      onClick={handleCardClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter') handleCardClick(e); }}
+      className="reveal group gradient-ring relative flex flex-col overflow-hidden rounded-[26px] border border-edge bg-white shadow-card transition-all duration-300 hover:-translate-y-1.5 hover:shadow-elevated cursor-pointer"
+    >
       <div className="absolute right-4 top-4 z-10 flex flex-col items-end gap-2">
         {discountPercent > 0 && (
           <span className="inline-flex items-center rounded-full bg-white/95 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-accent shadow-card">
@@ -385,7 +411,10 @@ export default function ProductCard({
         <div className="mt-4 flex flex-col gap-2 pt-2">
           <button
             type="button"
-            onClick={() => onAddToCart(product)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddToCart(product);
+            }}
             disabled={stock === 0 || unavailable}
             className="btn-primary w-full py-2.5 text-xs font-semibold rounded-lg disabled:opacity-50 cursor-pointer shadow-xs"
           >
@@ -393,7 +422,14 @@ export default function ProductCard({
           </button>
           <button
             type="button"
-            onClick={() => onViewDetails(product.sku)}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onViewDetails) {
+                onViewDetails(product.sku);
+              } else {
+                window.location.href = `/products/${product.sku}`;
+              }
+            }}
             className="btn-ghost w-full py-2 text-xs font-semibold rounded-lg cursor-pointer"
           >
             View details

@@ -49,6 +49,8 @@ class NewsletterSubscriber(models.Model):
     email = models.EmailField(unique=True, db_index=True)
     region_code = models.CharField(max_length=8, blank=True, default='',
                                    help_text='Detected region at signup (IN/UK).')
+    phone_number = models.CharField(max_length=32, blank=True, default='',
+                                    help_text='Subscriber mobile/phone number.')
     is_active = models.BooleanField(default=True, db_index=True)
     is_confirmed = models.BooleanField(default=False, help_text='Double opt-in confirmation status.')
     source = models.CharField(max_length=40, blank=True, default='footer',

@@ -144,6 +144,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'apps.users.middleware.AuthCookieMiddleware',
     'apps.audit.context.AuditContextMiddleware',
+    'apps.common.middleware.NoCacheApiMiddleware',
 ]
 
 # WhiteNoise serves Django's own static files (admin, DRF) straight from the app

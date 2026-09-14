@@ -930,6 +930,18 @@ export default function KnowledgeHub() {
     }
   }, [activeKey]);
 
+  const handleScrollToTopics = () => {
+    if (typeof window !== 'undefined') {
+      if (window.innerWidth < 1024) {
+        setMobileMenuOpen(true);
+      }
+      const target = document.getElementById('knowledge-hub-directory') || document.getElementById('main-reader-panel');
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+  };
+
   return (
     <StoreShell>
       <title>Sclero Knowledge Hub | Collagen, Calcium, Soil &amp; Turf Science</title>
@@ -947,13 +959,27 @@ export default function KnowledgeHub() {
             Explore structured guides to collagen biology, eggshell calcium, soil health, turf management and the science behind resilient living systems.
           </p>
           <div className="mt-5 flex items-center justify-center gap-3 text-[10px] font-bold uppercase tracking-wider text-ink-muted">
-            <span className="rounded-full border border-edge bg-surface px-3 py-1.5">{TOPIC_COUNT} topics</span>
-            <span className="rounded-full border border-edge bg-surface px-3 py-1.5">{COLLECTION_COUNT} collections</span>
+            <button
+              type="button"
+              onClick={handleScrollToTopics}
+              className="rounded-full border border-edge bg-white hover:border-edge-focus hover:text-ink-primary hover:shadow-xs px-4 py-1.5 transition-all cursor-pointer inline-flex items-center gap-1.5"
+            >
+              <BookOpen className="h-3 w-3 text-[#C89838]" />
+              <span>{TOPIC_COUNT} Topics</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleScrollToTopics}
+              className="rounded-full border border-edge bg-white hover:border-edge-focus hover:text-ink-primary hover:shadow-xs px-4 py-1.5 transition-all cursor-pointer inline-flex items-center gap-1.5"
+            >
+              <Brain className="h-3 w-3 text-brand-accent" />
+              <span>{COLLECTION_COUNT} Collections</span>
+            </button>
           </div>
         </div>
       </div>
 
-      <div className="container-page py-10 md:py-14">
+      <div id="knowledge-hub-directory" className="container-page py-10 md:py-14">
         {/* Mobile Filter & Selector Header (Tablet / Mobile Only) */}
         <div className="lg:hidden bg-surface border border-edge rounded-lg p-4 mb-6 shadow-sm">
           <button

@@ -131,14 +131,16 @@ class ProductMedia(models.Model):
 
 
 class ProductReview(models.Model):
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="reviews")
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="reviews", null=True, blank=True)
     user_email = models.EmailField(db_index=True)
     user_name = models.CharField(max_length=255)
+    review_title = models.CharField(max_length=255, blank=True, default='')
     rating = models.PositiveIntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])
     comment = models.TextField()
     is_verified_purchase = models.BooleanField(default=False)
     is_approved = models.BooleanField(default=False, db_index=True)
     is_featured = models.BooleanField(default=False, db_index=True)
+    source = models.CharField(max_length=50, blank=True, default='DIRECT', help_text="e.g. DIRECT, TRUSTPILOT, GOOGLE")
     review_media_urls = models.JSONField(default=list, blank=True, help_text="List of review image/video URLs")
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -148,10 +150,12 @@ class ProductReview(models.Model):
             models.Index(fields=['product', 'is_approved']),
             models.Index(fields=['product', 'is_featured', 'is_approved']),
             models.Index(fields=['is_approved', 'created_at']),
+            models.Index(fields=['is_featured', 'is_approved', 'created_at']),
         ]
 
     def __str__(self):
-        return f"{self.rating} stars on {self.product.name} by {self.user_email}"
+        target = self.product.name if self.product else "Brand / Store"
+        return f"{self.rating} stars on {target} by {self.user_name or self.user_email}"
 
 
 class Bundle(models.Model):

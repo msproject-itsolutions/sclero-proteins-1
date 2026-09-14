@@ -19,11 +19,20 @@ import { fetchCart } from '../store/cartSlice';
 import { isProdHost, crossDomainUrl } from '../lib/region';
 import { safePublicHref } from '../lib/safeUrl';
 import { firstApiError, isValidEmail } from '../lib/formValidation';
+import CountryFlag from './CountryFlag';
 import FooterCredit from './FooterCredit';
 
 const COUNTRIES = [
   { code: 'UK', name: 'United Kingdom' },
   { code: 'IN', name: 'India' },
+];
+
+const DIAL_CODES = [
+  { code: 'UK', dial: '+44' },
+  { code: 'IN', dial: '+91' },
+  { code: 'US', dial: '+1' },
+  { code: 'EU', dial: '+49' },
+  { code: 'AE', dial: '+971' },
 ];
 
 export default function Footer() {
@@ -38,15 +47,29 @@ export default function Footer() {
     : (branding?.emailUK || companyInfo.support || companyInfo.email);
 
   const [email, setEmail] = useState('');
+  const [dialCode, setDialCode] = useState(currentRegion === 'IN' ? '+91' : '+44');
+  const [phone, setPhone] = useState('');
   const [status, setStatus] = useState('idle');
   const [errorMsg, setErrorMsg] = useState('');
   const [footerSettings, setFooterSettings] = useState(null);
+  const [storeConfig, setStoreConfig] = useState(null);
+
+  useEffect(() => {
+    setDialCode(currentRegion === 'IN' ? '+91' : '+44');
+  }, [currentRegion]);
 
   useEffect(() => {
     fetch(getApiUrl('/api/site-settings/FOOTER_SETTINGS/'))
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.value && typeof data.value === 'object') setFooterSettings(data.value);
+      })
+      .catch(() => {});
+
+    fetch(getApiUrl('/api/store-config/'))
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) setStoreConfig(data);
       })
       .catch(() => {});
   }, []);
@@ -56,22 +79,26 @@ export default function Footer() {
     const cleanedEmail = email.trim().toLowerCase();
     if (!isValidEmail(cleanedEmail)) {
       setStatus('error');
-      setErrorMsg('Please enter a valid email.');
+      setErrorMsg('Please enter a valid email address.');
       return;
     }
 
     setStatus('pending');
     setErrorMsg('');
 
+    const fullPhone = phone.trim() ? `${dialCode} ${phone.trim()}` : '';
+
     try {
       const { response, data } = await postJson('/api/newsletter/subscribe/', {
         email: cleanedEmail,
+        phone_number: fullPhone,
         region: currentRegion,
         source: 'footer',
       });
       if (!response.ok) throw new Error(firstApiError(data, 'Could not subscribe. Please try again.'));
       setStatus('success');
       setEmail('');
+      setPhone('');
     } catch (error) {
       setStatus('error');
       setErrorMsg(error.message || 'Could not subscribe. Please try again.');
@@ -127,12 +154,13 @@ export default function Footer() {
       .filter((item) => item.href);
   };
 
+  const activeSocials = storeConfig?.social_links || socialLinks;
   const socials = [
-    { icon: Instagram, label: 'Instagram', href: socialLinks.instagram || 'https://www.instagram.com/scleroproteins/' },
-    { icon: Facebook, label: 'Facebook', href: socialLinks.facebook },
-    { icon: Twitter, label: 'X (Twitter)', href: socialLinks.twitter || socialLinks.x },
-    { icon: Linkedin, label: 'LinkedIn', href: socialLinks.linkedin },
-    { icon: Youtube, label: 'YouTube', href: socialLinks.youtube },
+    { icon: Instagram, label: 'Instagram', href: activeSocials.instagram || 'https://www.instagram.com/scleroproteins/' },
+    { icon: Facebook, label: 'Facebook', href: activeSocials.facebook },
+    { icon: Twitter, label: 'X (Twitter)', href: activeSocials.twitter || activeSocials.x },
+    { icon: Linkedin, label: 'LinkedIn', href: activeSocials.linkedin },
+    { icon: Youtube, label: 'YouTube', href: activeSocials.youtube },
   ].filter((social) => /^https?:\/\//i.test(social.href || ''));
 
   const LinkColumn = ({ title, links }) => (
@@ -162,31 +190,53 @@ export default function Footer() {
 
             {status === 'success' ? (
               <div className="rounded-[18px] border border-white/[0.14] bg-white/10 px-4 py-3 text-sm font-semibold text-white">
-                You&apos;re subscribed. Check your inbox for the next update.
+                Thank you for subscribing! Check your email for a confirmation.
               </div>
             ) : (
               <form onSubmit={handleSubscribe} className="space-y-3">
-                <div className="flex flex-col gap-3 sm:flex-row">
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Your email address"
+                  autoComplete="email"
+                  required
+                  aria-label="Email address"
+                  className="w-full rounded-full border border-white/[0.18] bg-white/[0.08] px-4 py-2.5 text-sm text-white caret-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
+                  style={{ WebkitTextFillColor: '#ffffff' }}
+                />
+                <div className="flex gap-2">
+                  <select
+                    value={dialCode}
+                    onChange={(e) => setDialCode(e.target.value)}
+                    aria-label="Country dial code"
+                    className="rounded-full border border-white/[0.18] bg-[#160E55] px-3 py-2.5 text-xs text-white focus:border-white/40 focus:outline-none"
+                  >
+                    {DIAL_CODES.map((dc) => (
+                      <option key={dc.code} value={dc.dial} className="bg-[#101871] text-white">
+                        {dc.code} ({dc.dial})
+                      </option>
+                    ))}
+                  </select>
                   <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@example.com"
-                    autoComplete="email"
-                    required
-                    aria-label="Email address"
-                    className="flex-1 rounded-full border border-white/[0.18] bg-white/[0.08] px-4 py-3 text-sm text-white caret-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="Phone number (optional)"
+                    autoComplete="tel"
+                    aria-label="Phone number"
+                    className="flex-1 rounded-full border border-white/[0.18] bg-white/[0.08] px-4 py-2.5 text-sm text-white caret-white placeholder:text-white/40 focus:border-white/40 focus:outline-none"
                     style={{ WebkitTextFillColor: '#ffffff' }}
                   />
-                  <button
-                    type="submit"
-                    disabled={status === 'pending'}
-                    className="btn-primary px-5 py-3 text-[13px]"
-                  >
-                    <Send className="h-4 w-4" />
-                    {status === 'pending' ? 'Subscribing...' : 'Subscribe'}
-                  </button>
                 </div>
+                <button
+                  type="submit"
+                  disabled={status === 'pending'}
+                  className="btn-primary w-full py-2.5 text-[13px]"
+                >
+                  <Send className="h-4 w-4" />
+                  {status === 'pending' ? 'Subscribing...' : 'Subscribe'}
+                </button>
                 {status === 'error' && errorMsg && (
                   <p className="text-xs text-rose-200">{errorMsg}</p>
                 )}
@@ -208,7 +258,7 @@ export default function Footer() {
                     key={social.label}
                     href={social.href}
                     target="_blank"
-                    rel="noreferrer"
+                    rel="noopener noreferrer"
                     aria-label={social.label}
                     className="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 text-white/[0.78] transition-colors hover:border-white/35 hover:text-white"
                   >
@@ -238,12 +288,13 @@ export default function Footer() {
                   key={country.code}
                   type="button"
                   onClick={() => applyRegion(country)}
-                  className={`rounded-full border px-4 py-2 text-xs font-semibold transition-colors ${
+                  className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold transition-colors ${
                     currentRegion === country.code
                       ? 'border-transparent bg-white text-[#101871]'
                       : 'border-white/15 bg-white/5 text-white/80 hover:border-white/35'
                   }`}
                 >
+                  <CountryFlag code={country.code} className="h-3.5 w-4 rounded-xs" />
                   {country.name}
                 </button>
               ))}

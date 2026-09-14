@@ -14,6 +14,7 @@ import { firstApiError, isValidEmail } from '../lib/formValidation';
 import {
   ChevronDown,
   Globe,
+  Loader2,
   Menu,
   Search,
   Settings,
@@ -23,6 +24,7 @@ import {
   X,
 } from 'lucide-react';
 import { LogoLockup } from './Logo';
+import CountryFlag from './CountryFlag';
 
 const COUNTRIES = [
   {
@@ -70,6 +72,7 @@ function normalizeNavLinks(inputLinks) {
     if (lowerLabel === 'products') nextLink.label = 'Shop';
     if (lowerLabel === 'knowledge hub') nextLink.label = 'Learn';
     if (lowerLabel === 'about us' || lowerLabel === 'our story') nextLink.label = 'Our Story';
+    if (lowerLabel === 'insights' || lowerUrl.includes('/blog')) nextLink.label = 'Blogs';
     if (
       lowerLabel.includes('wholesale') ||
       lowerUrl.includes('/bulk') ||
@@ -112,6 +115,11 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
   const [showShopMenu, setShowShopMenu] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [liveSearchResults, setLiveSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+  const searchContainerRef = useRef(null);
+  const mobileSearchContainerRef = useRef(null);
   const [mounted, setMounted] = useState(false);
 
   const [showClearCartModal, setShowClearCartModal] = useState(false);
@@ -122,6 +130,55 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
   const [optInSuccess, setOptInSuccess] = useState(false);
   const [optInLoading, setOptInLoading] = useState(false);
   const [optInError, setOptInError] = useState('');
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (
+        searchContainerRef.current &&
+        !searchContainerRef.current.contains(e.target) &&
+        mobileSearchContainerRef.current &&
+        !mobileSearchContainerRef.current.contains(e.target)
+      ) {
+        setShowSearchDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (!searchTerm || searchTerm.trim().length < 2) {
+      setLiveSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setIsSearching(true);
+      const url = getApiUrl(
+        `/api/products/?search=${encodeURIComponent(searchTerm.trim())}${
+          currentRegion ? `&region=${currentRegion}` : ''
+        }`
+      );
+      fetch(url)
+        .then((res) => (res.ok ? res.json() : []))
+        .then((data) => {
+          const list = Array.isArray(data) ? data : (data.results || []);
+          setLiveSearchResults(list.slice(0, 5));
+          setShowSearchDropdown(true);
+        })
+        .catch(() => setLiveSearchResults([]))
+        .finally(() => setIsSearching(false));
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm, currentRegion]);
+
+  const handleLogoClick = (e) => {
+    if (pathname === '/') {
+      e.preventDefault();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -230,7 +287,7 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
     { label: 'Shop', url: '/products', mega_menu: true },
     { label: 'Our Story', url: '/about' },
     { label: 'Learn', url: '/knowledge-hub' },
-    { label: 'Insights', url: '/blog' },
+    { label: 'Blogs', url: '/blog' },
     { label: 'Contact', url: '/contact' },
   ];
 
@@ -263,7 +320,12 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
     <nav className="energy-navbar sticky top-0 z-40 w-full border-b border-edge/80 bg-white/95 shadow-[0_10px_30px_-24px_rgba(16,24,113,0.55)] backdrop-blur-xl">
       <div className="mx-auto flex h-[92px] max-w-container items-center justify-between gap-3 px-3 sm:px-5 lg:px-4">
         <div className="flex min-w-0 items-center gap-5 lg:gap-7 xl:gap-9">
-          <Link href="/" aria-label="Sclero Proteins home" className="shrink-0">
+          <Link
+            href="/"
+            onClick={handleLogoClick}
+            aria-label="Sclero Proteins home"
+            className="shrink-0"
+          >
             <LogoLockup
               assetSrc={headerLogoSrc}
               showMarkWithAsset
@@ -340,18 +402,88 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
         </div>
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-          <form onSubmit={submitSearch} className="relative hidden xl:block">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted" />
-            <input
-              type="text"
-              aria-label="Search products"
-              autoComplete="off"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search"
-              className="w-32 rounded-full border border-edge bg-surface-muted py-2.5 pl-9 pr-4 text-xs text-ink-primary focus:border-edge-focus focus:bg-white focus:outline-none 2xl:w-40"
-            />
-          </form>
+          <div ref={searchContainerRef} className="relative hidden xl:block">
+            <form onSubmit={submitSearch} className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-muted" />
+              <input
+                type="text"
+                aria-label="Search products"
+                autoComplete="off"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                onFocus={() => {
+                  if (liveSearchResults.length > 0) setShowSearchDropdown(true);
+                }}
+                placeholder="Search products..."
+                className="w-36 rounded-full border border-edge bg-surface-muted py-2.5 pl-9 pr-8 text-xs text-ink-primary focus:w-64 focus:border-edge-focus focus:bg-white focus:outline-none transition-all 2xl:w-44 2xl:focus:w-72"
+              />
+              {isSearching && (
+                <Loader2 className="absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-ink-muted" />
+              )}
+            </form>
+
+            {showSearchDropdown && searchTerm.trim().length >= 2 && (
+              <div className="absolute right-0 top-full mt-2 w-80 rounded-2xl border border-edge bg-white p-3 shadow-elevated z-50 animate-fade-in">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-ink-muted mb-2 px-2 flex justify-between items-center">
+                  <span>Product Suggestions</span>
+                  {liveSearchResults.length > 0 && <span>{liveSearchResults.length} found</span>}
+                </div>
+
+                {isSearching && liveSearchResults.length === 0 ? (
+                  <div className="py-6 text-center text-xs text-ink-muted flex items-center justify-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-ink-accent" /> Searching products...
+                  </div>
+                ) : liveSearchResults.length > 0 ? (
+                  <div className="space-y-1 max-h-72 overflow-y-auto">
+                    {liveSearchResults.map((item) => {
+                      const thumb = item.thumbnail || item.media?.find((m) => m.media_type === 'IMAGE')?.file_url || item.media?.[0]?.file_url;
+                      const price = item.promotional_price || item.price;
+                      return (
+                        <Link
+                          key={item.id || item.sku}
+                          href={`/products/${item.sku}`}
+                          onClick={() => {
+                            setShowSearchDropdown(false);
+                            setSearchTerm('');
+                          }}
+                          className="flex items-center gap-3 p-2 rounded-xl hover:bg-surface-muted transition-colors group"
+                        >
+                          <div className="h-10 w-10 shrink-0 rounded-lg bg-surface-muted border border-edge overflow-hidden flex items-center justify-center">
+                            {thumb ? (
+                              <img src={thumb} alt={item.name} className="h-full w-full object-cover group-hover:scale-105 transition-transform" />
+                            ) : (
+                              <Sparkles className="h-4 w-4 text-ink-muted" />
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-semibold text-ink-primary truncate group-hover:text-ink-accent transition-colors">
+                              {item.name}
+                            </p>
+                            <p className="text-[11px] font-bold text-ink-secondary">
+                              {price ? `£${parseFloat(price).toFixed(2)}` : 'In stock'}
+                            </p>
+                          </div>
+                        </Link>
+                      );
+                    })}
+                    <div className="pt-2 border-t border-edge mt-2">
+                      <button
+                        type="button"
+                        onClick={submitSearch}
+                        className="w-full text-center py-1.5 text-xs font-semibold text-ink-accent hover:underline cursor-pointer"
+                      >
+                        View all results for &ldquo;{searchTerm}&rdquo; &rarr;
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="py-6 text-center text-xs text-ink-muted">
+                    No products matching &ldquo;{searchTerm}&rdquo;
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           <div className="relative hidden md:block">
             <button
@@ -361,7 +493,7 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
               aria-expanded={showDropdown}
               className="inline-flex items-center gap-2 rounded-full border border-edge bg-white px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-primary transition-colors hover:border-edge-focus"
             >
-              <Globe className="h-3.5 w-3.5 text-ink-muted" />
+              <CountryFlag code={currentRegion} className="w-4 h-3 rounded-xs shadow-xs object-cover" />
               <span>{mounted ? formatRegionDisplay(currentRegion) : 'United Kingdom'}</span>
               <ChevronDown className="h-3.5 w-3.5 text-ink-muted" />
             </button>
@@ -377,8 +509,8 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
                       currentRegion === country.code ? 'text-ink-accent' : 'text-ink-primary'
                     }`}
                   >
-                    <span>
-                      {country.code === 'IN' ? '🇮🇳 ' : '🇬🇧 '}
+                    <span className="inline-flex items-center gap-2">
+                      <CountryFlag code={country.code} className="w-4 h-3 rounded-xs shadow-xs object-cover" />
                       {country.name}
                     </span>
                     <span className="text-[10px] text-ink-subtle">
@@ -457,7 +589,15 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
 
           <nav aria-label="Mobile navigation" className="fixed left-0 top-0 flex h-dvh w-[min(92vw,24rem)] max-w-full flex-col overflow-y-auto bg-white shadow-overlay animate-drawer-in-left">
             <div className="flex items-center justify-between border-b border-edge px-5 py-4 pt-[max(1rem,env(safe-area-inset-top))]">
-              <Link href="/" ref={firstMobileLinkRef} onClick={closeMobile} aria-label="Sclero Proteins home">
+              <Link
+                href="/"
+                ref={firstMobileLinkRef}
+                onClick={(e) => {
+                  handleLogoClick(e);
+                  closeMobile();
+                }}
+                aria-label="Sclero Proteins home"
+              >
                 <LogoLockup
                   assetSrc={headerLogoSrc}
                   showMarkWithAsset
@@ -475,20 +615,94 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
               </button>
             </div>
 
-            <form onSubmit={submitSearch} className="border-b border-edge px-5 py-4">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" />
-                <input
-                  type="search"
-                  aria-label="Search products"
-                  autoComplete="off"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search products"
-                  className="w-full rounded-full border border-edge bg-surface-muted py-3 pl-10 pr-4 text-sm text-ink-primary focus:border-edge-focus focus:bg-white focus:outline-none"
-                />
-              </div>
-            </form>
+            <div ref={mobileSearchContainerRef} className="border-b border-edge px-5 py-4 relative">
+              <form onSubmit={submitSearch}>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" />
+                  <input
+                    type="search"
+                    aria-label="Search products"
+                    autoComplete="off"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onFocus={() => {
+                      if (liveSearchResults.length > 0) setShowSearchDropdown(true);
+                    }}
+                    placeholder="Search products..."
+                    className="w-full rounded-full border border-edge bg-surface-muted py-3 pl-10 pr-9 text-sm text-ink-primary focus:border-edge-focus focus:bg-white focus:outline-none"
+                  />
+                  {isSearching && (
+                    <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-ink-muted" />
+                  )}
+                </div>
+              </form>
+
+              {showSearchDropdown && searchTerm.trim().length >= 2 && (
+                <div className="mt-2 w-full rounded-2xl border border-edge bg-white p-3 shadow-elevated z-50 animate-fade-in">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-ink-muted mb-2 px-2 flex justify-between items-center">
+                    <span>Suggestions</span>
+                    {liveSearchResults.length > 0 && <span>{liveSearchResults.length} found</span>}
+                  </div>
+
+                  {isSearching && liveSearchResults.length === 0 ? (
+                    <div className="py-4 text-center text-xs text-ink-muted flex items-center justify-center gap-2">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-ink-accent" /> Searching...
+                    </div>
+                  ) : liveSearchResults.length > 0 ? (
+                    <div className="space-y-1 max-h-60 overflow-y-auto">
+                      {liveSearchResults.map((item) => {
+                        const thumb = item.thumbnail || item.media?.find((m) => m.media_type === 'IMAGE')?.file_url || item.media?.[0]?.file_url;
+                        const price = item.promotional_price || item.price;
+                        return (
+                          <Link
+                            key={item.id || item.sku}
+                            href={`/products/${item.sku}`}
+                            onClick={() => {
+                              setShowSearchDropdown(false);
+                              setSearchTerm('');
+                              closeMobile();
+                            }}
+                            className="flex items-center gap-3 p-2 rounded-xl hover:bg-surface-muted transition-colors"
+                          >
+                            <div className="h-9 w-9 shrink-0 rounded-lg bg-surface-muted border border-edge overflow-hidden flex items-center justify-center">
+                              {thumb ? (
+                                <img src={thumb} alt={item.name} className="h-full w-full object-cover" />
+                              ) : (
+                                <Sparkles className="h-4 w-4 text-ink-muted" />
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-semibold text-ink-primary truncate">
+                                {item.name}
+                              </p>
+                              <p className="text-[10px] font-bold text-ink-secondary">
+                                {price ? `£${parseFloat(price).toFixed(2)}` : 'In stock'}
+                              </p>
+                            </div>
+                          </Link>
+                        );
+                      })}
+                      <div className="pt-2 border-t border-edge mt-1">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            submitSearch(e);
+                            closeMobile();
+                          }}
+                          className="w-full text-center py-1 text-xs font-semibold text-ink-accent hover:underline cursor-pointer"
+                        >
+                          View all results &rarr;
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="py-3 text-center text-xs text-ink-muted">
+                      No matching products
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             <div className="border-b border-edge px-5 py-4">
               <h4 className="kicker mb-3">Country</h4>
@@ -498,13 +712,14 @@ export default function Navbar({ onOpenCart, onOpenAdmin }) {
                     key={country.code}
                     type="button"
                     onClick={() => handleCountrySwitch(country)}
-                    className={`flex items-center justify-center gap-1.5 rounded-full border px-2.5 py-2.5 text-xs font-semibold transition-colors ${
+                    className={`flex items-center justify-center gap-2 rounded-full border px-2.5 py-2.5 text-xs font-semibold transition-colors ${
                       currentRegion === country.code
                         ? 'border-transparent bg-brand-gradient text-white shadow-card'
                         : 'border-edge bg-white text-ink-secondary hover:border-edge-focus'
                     }`}
                   >
-                    {country.code === 'IN' ? '🇮🇳' : '🇬🇧'} <span>{country.name}</span>
+                    <CountryFlag code={country.code} className="w-4 h-3 rounded-xs shadow-xs object-cover" />
+                    <span>{country.name}</span>
                   </button>
                 ))}
               </div>

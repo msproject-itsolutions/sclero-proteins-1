@@ -27,6 +27,11 @@ class GlossaryTerm(models.Model):
         default='', 
         help_text="Optional illustrative image url."
     )
+    is_tooltip_enabled = models.BooleanField(
+        default=True,
+        db_index=True,
+        help_text="Whether this term should trigger automated tooltips on the storefront."
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
